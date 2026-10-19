@@ -6,7 +6,7 @@ Read this first. It explains what the game is, how it's built and what to keep i
 
 Salon Noir is a private browser casino: first-person 3D blackjack and European roulette. It's made for the owner and friends to play at home. **Play chips only, no real money, not a public product.**
 
-Tables (see `v28/core/lobby.mjs`):
+Tables (see `src/core/lobby.mjs`):
 
 | Game | Table | Status |
 |---|---|---|
@@ -16,7 +16,7 @@ Tables (see `v28/core/lobby.mjs`):
 | Roulette | European (single zero, racetrack, call bets) | Live |
 | Roulette | Lightning / Mega Lightning | **Not built yet**, shown as "Opening soon" |
 
-History: the project began as "Velvet Blackjack", was renamed "Spader", and is now "Salon Noir". Old names still show up in comments and in a localStorage key (`spader.balance`), on purpose.
+History: the code folder was called `v28` (its 28th version) until it was renamed `src`. The project began as "Velvet Blackjack", was renamed "Spader", and is now "Salon Noir". Old names still show up in comments and in a localStorage key (`spader.balance`), on purpose.
 
 ## How to run it
 
@@ -26,28 +26,30 @@ Plain HTML + ES modules, **no build step, no npm, no framework**. Browsers block
 python3 -m http.server 8000     # then open http://localhost:8000
 ```
 
-`index.html` is the entry point. It loads `v28/fonts.css`, `v28/app.css` and `v28/game.mjs`.
+`index.html` is the entry point. It loads `src/fonts.css`, `src/app.css` and `src/game.mjs`.
 
 ## Tech
 
-- **3D:** three.js (vendored in `v28/vendor/three.module.min.js`), custom scenes in centimetres
-- **Audio:** Web Audio API, four buses (table, dealer voice, room, music) in `v28/sound.mjs`
-- **Motion/UI:** anime.js, Torph, canvas-confetti, web-haptics, cuelume, all vendored in `v28/vendor/`
-- **State:** one shared chip balance in localStorage (`v28/core/wallet.mjs`, key `salonnoir.balance`, starts at 1,000)
+- **3D:** three.js (vendored in `src/vendor/three.module.min.js`), custom scenes in centimetres
+- **Audio:** Web Audio API, four buses (table, dealer voice, room, music) in `src/sound.mjs`
+- **Motion/UI:** anime.js, Torph, canvas-confetti, web-haptics, cuelume, all vendored in `src/vendor/`
+- **State:** one shared chip balance in localStorage (`src/core/wallet.mjs`, key `salonnoir.balance`, starts at 1,000)
 - **Targets:** desktop browsers and iPhone Safari. Phone performance matters (graphics presets, battery saver, reduced motion).
 
 ## File map
 
 ```
 index.html                 Page shell: top bar, stage canvas, dock (bets/decisions), settings sheet, lobby
-v28/                       Current version of the code (the folder name is the version)
+README.md, CREDITS.md      Front page and full credits
+docs/screenshots/          Screenshots used by the README
+src/                       All code, styles, fonts, sounds and libraries
   game.mjs                 Main controller: wires engine ↔ table view ↔ controls; also launches roulette
   engine.mjs               Blackjack rules engine (8 decks, S17, hole card, 3:2, ten-card Charlie). No DOM.
   sidebets.mjs             Side-bet evaluation and paytables. No DOM.
   players.mjs              AI players at the table (bankrolls, styles, basic strategy). No DOM.
   sound.mjs                All audio
   ui-kit.mjs, ui-motion.mjs  Buttons, toasts, springs, morphing numbers
-  app.css, fonts.css       All styling; fonts self-hosted in v28/fonts/
+  app.css, fonts.css       All styling; fonts self-hosted in src/fonts/
   core/
     brand.mjs              Name, spade/keyhole logo SVG, wordmark
     lobby.mjs              Front-room lobby and table picker
@@ -79,15 +81,15 @@ assets/
 
 1. **Rules engines have no DOM.** `engine.mjs`, `sidebets.mjs`, `players.mjs` and `roulette/rules.mjs` are pure logic. The scene only reads state; the controller tells the view what happened.
 2. **One wallet** for every game. Never give a game its own balance.
-3. **Everything is self-hosted.** No CDNs, no external requests. New libraries go in `v28/vendor/` with their licence file.
+3. **Everything is self-hosted.** No CDNs, no external requests. New libraries go in `src/vendor/` with their licence file.
 4. **Units are centimetres** in every 3D scene.
-5. **Credit new assets** in the Credits section of `index.html` (and `v28/sounds/CREDITS.txt` for sounds).
+5. **Credit new assets** in three places: the Credits section of `index.html` (shown in the game), `CREDITS.md`, and `src/sounds/CREDITS.txt` for sounds.
 
 ## Look and feel (don't drift from this)
 
 - Dark, private, upscale salon: near-black (`#0c0c0d`), brass/gold accents (`#c9a45c`, `#e2c483`), ivory, a little red
 - Type: **Bodoni Moda** (wordmark, display), **Cinzel** (felt lettering), **Inter** (UI and numbers), **Barlow Condensed** (card indices, chip values)
-- Logo: a brass spade with a lit keyhole (`v28/core/brand.mjs`)
+- Logo: a brass spade with a lit keyhole (`src/core/brand.mjs`)
 - Feels physical: real dealer pace, chip sounds placed left/right, haptics on phone, confetti only for big moments
 
 ## Assets you can't see

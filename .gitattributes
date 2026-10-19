@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.webp binary
+*.jpg binary
+*.png binary
+*.wav binary
+*.mp3 binary
+*.woff2 binary
+src/vendor/** linguist-vendored
+*.min.js linguist-vendored
