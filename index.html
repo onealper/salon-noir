@@ -1,0 +1,127 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Salon Noir</title>
+<style>/* The host page resets to a light scheme and a 14px body; the table is built on a dark 16px base. */
+:root{color-scheme:dark}body{font:500 16px/1.35 Inter,system-ui,sans-serif;background:#0c0c0d;margin:0}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0c0c0d">
+<meta name="description" content="Salon Noir: a private casino. First-person blackjack and European roulette in 3D. Play chips only.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23141416'/%3E%3Cg transform='translate%289 8%29 scale%28.82%29'%3E%3Cpath fill='%23d4b06a' d='M50 5C61 21 91 36 90 60C89 75 74 81 61 72C59 70.5 57 68.5 55.5 66.5C56.5 77 60.5 86 69 93H31C39.5 86 43.5 77 44.5 66.5C43 68.5 41 70.5 39 72C26 81 11 75 10 60C9 36 39 21 50 5Z'/%3E%3Cpath fill='%23141416' d='M55.4 50.6A9 9 0 1 0 44.6 50.6L41.8 66H58.2Z'/%3E%3Cpath fill='%23ffc766' d='M54.1 50.2A7.3 7.3 0 1 0 45.9 50.2L43.6 64.4H56.4Z'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="./v28/fonts.css">
+<link rel="stylesheet" href="./v28/app.css">
+<script type="module" src="./v28/game.mjs"></script>
+
+<main class="app">
+  <header class="top">
+    <div class="top-blur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <button class="brand" id="brandBtn" aria-label="Salon Noir lobby"><span class="mark" id="brandMark"></span><span class="word"><span class="wordmark"><span>Salon</span> <i>Noir</i></span><small id="tableName">BLACKJACK</small></span></button>
+    <div class="bank wallet" role="group" aria-label="Your chips">
+      <span class="coin" aria-hidden="true"></span>
+      <div class="w-seg"><span class="k">Balance</span><output id="balance">1,000</output></div>
+      <i class="w-rule" aria-hidden="true"></i>
+      <div class="w-seg play"><span class="k">In play</span><output id="bet">0</output></div>
+    </div>
+    <div class="shoe-meter" id="shoeMeter"><span class="shoe-gauge" id="shoeGauge"></span><span class="shoe-words"><b>Shoe</b><span id="shoeText">416 cards</span></span></div>
+    <div class="tools">
+      <button class="icon" id="sound" aria-label="Sound" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4 6 8H3v8h3l5 4V4Z"/><path class="waves" d="M15 8.5c2.4 2 2.4 5 0 7m3-10c4.4 3.6 4.4 9.4 0 13"/><path class="slash" d="m15.5 9 5.5 6m0-6-5.5 6"/></svg></button>
+      <button class="icon" id="settings" aria-label="Settings, rules and paytables"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.6"/><circle cx="15" cy="17" r="2.6"/></svg></button>
+    </div>
+  </header>
+
+  <section class="stage" id="stage" aria-label="Blackjack table">
+    <canvas id="table" aria-hidden="true"></canvas>
+    <div class="overlay" id="overlay"></div>
+    <div class="lightning" id="lightning" hidden aria-label="Lightning multipliers"><div class="lb-row"></div></div>
+    <p class="hint" id="hint" aria-live="polite"></p>
+    <ol class="feed" id="feed" aria-label="Side-bet results"></ol>
+    <div class="banner" id="banner" role="status" hidden></div>
+  </section>
+
+  <footer class="dock">
+    <div class="betting">
+      <div class="tray" id="tray">
+        <button class="tray-toggle" id="trayToggle" aria-expanded="true" aria-controls="tiles"><span>Side bets</span><span class="sum"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
+        <div class="tiles" id="tiles" role="group" aria-label="Side bets"></div>
+      </div>
+      <div class="chips" id="chips" role="radiogroup" aria-label="Chip value"></div>
+      <div class="bet-actions">
+        <button class="pill" id="undo" aria-keyshortcuts="U"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><span class="label">Undo</span></button>
+        <button class="pill" id="clear" aria-keyshortcuts="C"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="label">Clear</span></button>
+        <button class="pill" id="rebet" aria-keyshortcuts="R"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg><span class="label">Rebet</span></button>
+        <button class="pill" id="x2" aria-keyshortcuts="X"><span class="glyph">×2</span><span class="label">Double bets</span></button>
+        <button class="pill gold deal" id="deal" aria-keyshortcuts="Space"><span class="label">Deal</span></button>
+      </div>
+    </div>
+    <div class="insure" id="insurance" role="group" aria-labelledby="insTitle" hidden>
+      <div class="ins-copy"><span class="ins-ace" aria-hidden="true"><b>A</b><i></i></span><div><h2 id="insTitle">Insurance?</h2><p></p></div></div>
+      <div class="row">
+        <button class="pill ins-btn" id="ins-no"><span class="label">No insurance</span><kbd>N</kbd></button>
+        <button class="pill gold ins-btn" id="ins-yes"><span class="label">Insure</span><kbd>Y</kbd></button>
+      </div>
+    </div>
+    <div class="decisions" role="group" aria-label="Your move">
+      <button class="act" id="act-split" data-act="split" aria-keyshortcuts="P"><span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-6M12 14 6 6M12 14l6-8M6 6v4M6 6h4M18 6v4M18 6h-4"/></svg></span><span class="label">Split</span><kbd>P</kbd><span class="why"></span></button>
+      <button class="act" id="act-double" data-act="double" aria-keyshortcuts="D"><span class="disc"><span class="glyph">×2</span></span><span class="label">Double</span><kbd>D</kbd><span class="why"></span></button>
+      <button class="act big hit" id="act-hit" data-act="hit" aria-keyshortcuts="H"><span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="label">Hit</span><kbd>H</kbd><span class="why"></span></button>
+      <button class="act big stand" id="act-stand" data-act="stand" aria-keyshortcuts="S"><span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></span><span class="label">Stand</span><kbd>S</kbd><span class="why"></span></button>
+    </div>
+  </footer>
+
+  <dialog class="sheet" id="settingsDialog" aria-labelledby="setTitle">
+    <header><h2 id="setTitle">Table settings</h2><button class="icon" id="closeSettings" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div class="opts">
+      <label class="opt"><span>Sound</span><input type="checkbox" id="optSound" role="switch"></label>
+      <label class="opt"><span>Volume</span><input type="range" id="volume" min="0" max="1" step=".05"></label>
+      <label class="opt sub"><span>Table sounds</span><input type="range" id="mixTable" min="0" max="1" step=".05"></label>
+      <label class="opt sub"><span>Dealer's voice</span><input type="range" id="mixVoice" min="0" max="1" step=".05"></label>
+      <label class="opt sub"><span>Music</span><input type="range" id="mixMusic" min="0" max="1" step=".05"></label>
+      <label class="opt bj-only"><span>Side bets</span><input type="checkbox" id="optSides" role="switch"></label>
+      <label class="opt"><span>Graphics<small id="gfxNote"></small></span><select id="optGfx"><option value="auto">Auto</option><option value="high">Sharp</option><option value="phone">Balanced</option><option value="saver">Battery saver</option></select></label>
+      <label class="opt"><span>Other players<small id="playersNote"></small></span><select id="optPlayers"><option value="4">Full table · 4</option><option value="3">3 others</option><option value="2">2 others</option><option value="1">1 other</option><option value="0">Just you</option></select></label>
+      <label class="opt bj-only"><span>Dealer<small id="dealerNote"></small></span><select id="optDealer"><option value="rotate">New dealer each shoe</option><option value="james">James · classic</option><option value="marco">Marco · brisk</option><option value="elena">Elena · smooth</option><option value="sofia">Sofia · turns at the spot</option></select></label>
+      <label class="opt haptics-opt"><span>Haptics<small>Taps you feel on the phone</small></span><input type="checkbox" id="optHaptics" role="switch"></label>
+      <label class="opt"><span>Fast play</span><input type="checkbox" id="optFast" role="switch"></label>
+      <label class="opt"><span>Reduce motion</span><input type="checkbox" id="optReduced" role="switch"></label>
+    </div>
+    <details open class="bj-only"><summary>Rules<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
+      <ul class="rules">
+        <li>Eight decks. The cut card sits at 75%; the shoe is replaced after the hand it comes out in.</li>
+        <li>Dealer stands on all 17s. Blackjack pays 3 to 2.</li>
+        <li>Dealer takes a hole card and checks it for blackjack with an ace or a ten up, so doubles and splits never lose to a dealer blackjack.</li>
+        <li>Insurance with an ace up costs half your bet and pays 2 to 1. With your blackjack it is offered as even money.</li>
+        <li>Double on any first two cards, also after a split. One split per hand; split aces take one card each. 21 after a split pays 1 to 1.</li>
+        <li>Ten cards without busting wins (ten-card Charlie).</li>
+        <li>Main bet 1–1,000. Side bets ride with a main bet and settle as soon as they are decided. While Buster is bet, the dealer always plays the hand out.</li>
+      </ul>
+      <h4 class="mode-rules-title" id="modeRulesTitle" hidden></h4>
+      <ul class="rules" id="modeRules" hidden></ul>
+    </div></details>
+    <details class="bj-only"><summary>Side-bet paytables<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body"><div id="paytables" class="paytables"></div></div></details>
+    <details open class="rl-only"><summary>Roulette rules<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
+      <ul class="rules">
+        <li>European wheel, single zero: 37 pockets. Every bet loses on zero unless it covers zero.</li>
+        <li>Straight up 35:1 · split 17:1 · street and 0/1/2, 0/2/3 11:1 · corner and first four (0–3) 8:1 · six line 5:1 · column and dozen 2:1 · red, black, odd, even, 1–18, 19–36 1:1.</li>
+        <li>Racetrack call bets, a chip for each unit: Voisins du zéro 9 (0/2/3 ×2, 4/7, 12/15, 18/21, 19/22, 32/35, 25/29 corner ×2) · Tiers 6 splits (5/8, 10/11, 13/16, 23/24, 27/30, 33/36) · Orphelins 5 (1, 6/9, 14/17, 17/20, 31/34) · Jeu zéro 4 (0/3, 12/15, 32/35, 26) · neighbours: a number and 1–4 either side.</li>
+        <li>Limits per spot: straight 100, split 200, street 300, corner 400, six line 600, column and dozen 1,500, even money 3,000. Table maximum 10,000.</li>
+        <li>The house edge is 2.7% on every bet. Each spin is independent; the statistics only show what has come out.</li>
+      </ul>
+    </div></details>
+    <details><summary>Keys<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
+      <dl class="keys"><dt>1–7</dt><dd>Pick a chip</dd><dt>Space</dt><dd>Deal or spin; hurry the ball</dd><dt class="rl-only">T · S</dt><dd class="rl-only">Racetrack, statistics</dd><dt>U · C · R · X</dt><dd>Undo, clear, rebet, double bets</dd><dt>H · S · D · P</dt><dd>Hit, stand, double, split</dd><dt>Y · N</dt><dd>Insurance</dd><dt>Hold or right-click a bet</dt><dd>Take a chip off it</dd></dl>
+    </div></details>
+    <details><summary>Credits<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
+      <ul class="credits">
+        <li>Music: "Bossa Antigua" and "Lobby Time" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0.</li>
+        <li>"Thunderstorm" by RHumphries, freesound.org, CC BY 3.0. Spark and lightning sounds from /tg/station 13 and Space Station 14, CC BY-SA 3.0.</li>
+        <li>Roulette sounds from matiasvallejosdev/casino-roulette-game, CC BY-SA 4.0.</li>
+        <li>Card and chip sounds: Casino Audio by Kenney (kenney.nl) and "Card Game sounds" by haeldb, CC0. Room recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0.</li>
+        <li>Dealer voices, room, cheers, stings and menu sounds made with ElevenLabs.</li>
+        <li>Wheel and table veneers and the tall salon picture generated for Salon Noir. Roulette rules after the New Jersey, Singapore and Monte-Carlo rule filings; wheel after TCS John Huxley and Cammegh specifications; ball physics after Small &amp; Tse (2012).</li>
+        <li>3D by three.js (MIT). Fonts: Bodoni Moda, Cinzel, Inter, Barlow Condensed (SIL Open Font License). Chip-select thock: a wood knock from Kenney's Impact Sounds with a Kenney clay-chip click (both CC0).</li>
+      </ul>
+    </div></details>
+    <footer><button class="pill" id="resetBalance"><span class="label">Hold to reset balance</span></button><small>Play chips only. No real money.</small></footer>
+  </dialog>
+  <div class="lobby" id="lobby" role="dialog" aria-modal="true" aria-label="Salon Noir lobby" hidden></div>
+</main>
+
+</body></html>
