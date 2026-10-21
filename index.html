@@ -7,27 +7,76 @@
 <meta name="description" content="Salon Noir: a private casino. First-person blackjack and European roulette in 3D. Play chips only.">
 <title>Salon Noir</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23141416'/%3E%3Cg transform='translate%289 8%29 scale%28.82%29'%3E%3Cpath fill='%23d4b06a' d='M50 5C61 21 91 36 90 60C89 75 74 81 61 72C59 70.5 57 68.5 55.5 66.5C56.5 77 60.5 86 69 93H31C39.5 86 43.5 77 44.5 66.5C43 68.5 41 70.5 39 72C26 81 11 75 10 60C9 36 39 21 50 5Z'/%3E%3Cpath fill='%23141416' d='M55.4 50.6A9 9 0 1 0 44.6 50.6L41.8 66H58.2Z'/%3E%3Cpath fill='%23ffc766' d='M54.1 50.2A7.3 7.3 0 1 0 45.9 50.2L43.6 64.4H56.4Z'/%3E%3C/g%3E%3C/svg%3E">
+<!-- the home-screen app: its icon, full screen under a see-through status bar (the app keeps the safe areas) -->
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Salon Noir">
+<script>
+  // Offline play (sw.js). A service worker needs https or localhost, so the game served to a phone at
+  // http://<ip>:8000 runs without one; ?nosw also runs without one, and removes one installed before.
+  if ('serviceWorker' in navigator && isSecureContext) {
+    if (/[?&]nosw\b/.test(location.search)) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    else addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
+</script>
 <link rel="stylesheet" href="./src/fonts.css">
+<!-- the faces the splash and the lobby show first, fetched with the page rather than once the styles ask (the
+     wordmark's Bodoni waits for its font, so it would otherwise come in late) -->
+<link rel="preload" as="font" type="font/woff2" crossorigin href="./src/fonts/bodoni-moda-latin-500-normal.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="./src/fonts/bodoni-moda-latin-600-italic.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="./src/fonts/inter-latin-500-normal.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="./src/fonts/inter-latin-600-normal.woff2">
 <link rel="stylesheet" href="./src/app.css">
 <style>
-  /* Base the game was tuned on: phone safe areas, a hard [hidden], dark page. */
-  :root { color-scheme: dark; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* Base the game was tuned on: a hard [hidden], dark page (the safe areas are kept by the app itself, in app.css). */
+  :root { color-scheme: dark; box-sizing: border-box; }
   [hidden]:not([hidden=until-found i]) { display: none !important; }
   img { max-width: 100%; }
   body { margin: 0; font: 500 16px/1.35 Inter, system-ui, sans-serif; background: #0c0c0d; }
 </style>
-<script type="module" src="./src/game.mjs"></script>
+<script type="module" src="./src/app.mjs"></script>
+<!-- fetched alongside the game rather than after it: three.js and the table art the first frame needs -->
+<link rel="modulepreload" href="./src/vendor/three.module.min.js">
+<link rel="preload" as="image" href="./assets/table/back.webp"><link rel="preload" as="image" href="./assets/table/felt.webp"><link rel="preload" as="image" href="./assets/table/leather.webp"><link rel="preload" as="image" href="./assets/table/room.webp">
 </head>
 <body>
+<!-- The splash: here before any script, so the page is never just black while the salon loads (about 4 MB the first
+     time). If it can't open (no WebGL, a file that didn't arrive, an old browser) it turns into a message and a Retry. -->
+<div class="splash" id="splash" role="status" aria-live="polite">
+  <svg viewBox="0 0 100 100" aria-hidden="true"><path fill="#d4b06a" d="M50 5C61 21 91 36 90 60C89 75 74 81 61 72C59 70.5 57 68.5 55.5 66.5C56.5 77 60.5 86 69 93H31C39.5 86 43.5 77 44.5 66.5C43 68.5 41 70.5 39 72C26 81 11 75 10 60C9 36 39 21 50 5Z"/><path fill="#141416" d="M55.4 50.6A9 9 0 1 0 44.6 50.6L41.8 66H58.2Z"/><path class="keylight" fill="#ffc766" d="M54.1 50.2A7.3 7.3 0 1 0 45.9 50.2L43.6 64.4H56.4Z"/></svg>
+  <div class="splash-word">Salon <i>Noir</i></div>
+  <p class="splash-wait">Setting the table…</p>
+  <div class="splash-fail"><p><b>The salon couldn’t open.</b></p><p class="splash-why"></p><button class="pill gold" type="button" onclick="location.reload()"><span class="label">Retry</span></button></div>
+</div>
+<script>
+  // Before the game's own code: watch the start, and turn the splash into a message if it fails. Anything that goes
+  // wrong after the game is up is the game's to handle (window.done marks it up).
+  (() => {
+    const splash = document.getElementById('splash');
+    const fail = why => { if (window.done || splash.classList.contains('failed')) return; splash.querySelector('.splash-why').textContent = why; splash.classList.add('failed'); };
+    const said = e => String(e?.message ?? e ?? '');
+    const gl = (() => { try { const c = document.createElement('canvas'), x = c.getContext('webgl2') || c.getContext('webgl'); x?.getExtension('WEBGL_lose_context')?.loseContext(); return !!x; } catch { return false; } })();
+    if (!('noModule' in HTMLScriptElement.prototype)) fail('This browser is too old for the salon. Open it in a current Safari, Chrome, Edge or Firefox.');
+    else if (!gl) fail('This browser can’t draw the 3D tables: WebGL is switched off or not available here. Try Safari or Chrome, and turn off Lockdown Mode or battery-saving graphics settings if they are on.');
+    addEventListener('error', e => {
+      if (e.target && e.target !== window && e.target.tagName === 'SCRIPT') fail('A part of the game didn’t load. Check the connection and retry.');   // a script file that failed to arrive
+      else if (e.message && !/ResizeObserver loop|^Script error\.?$/.test(e.message)) fail(/WebGL/i.test(said(e.error ?? e.message)) ? 'The 3D table couldn’t start: WebGL is not available. Try Safari or Chrome.' : `Something went wrong while setting the table: ${said(e.error ?? e.message)}`);
+    }, true);
+    addEventListener('unhandledrejection', e => { if (e.reason instanceof Error) fail(`Something went wrong while setting the table: ${said(e.reason)}`); });
+    setTimeout(() => { if (!window.done && !splash.classList.contains('failed')) splash.querySelector('.splash-wait').textContent = 'Still setting the table… a slow connection takes a while the first time.'; }, 12000);
+  })();
+</script>
 <main class="app">
   <header class="top">
-    <div class="top-blur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="top-blur" aria-hidden="true"><i></i><i></i><i></i></div>
     <button class="brand" id="brandBtn" aria-label="Salon Noir lobby"><span class="mark" id="brandMark"></span><span class="word"><span class="wordmark"><span>Salon</span> <i>Noir</i></span><small id="tableName">BLACKJACK</small></span></button>
     <div class="bank wallet" role="group" aria-label="Your chips">
       <span class="coin" aria-hidden="true"></span>
       <div class="w-seg"><span class="k">Balance</span><output id="balance">1,000</output></div>
       <i class="w-rule" aria-hidden="true"></i>
       <div class="w-seg play"><span class="k">In play</span><output id="bet">0</output></div>
+      <i class="w-rule visit" aria-hidden="true"></i>
+      <div class="w-seg visit"><span class="k">This visit</span><output id="session">±0</output></div>
     </div>
     <div class="shoe-meter" id="shoeMeter"><span class="shoe-gauge" id="shoeGauge"></span><span class="shoe-words"><b>Shoe</b><span id="shoeText">416 cards</span></span></div>
     <div class="tools">
@@ -40,7 +89,7 @@
     <canvas id="table" aria-hidden="true"></canvas>
     <div class="overlay" id="overlay"></div>
     <div class="lightning" id="lightning" hidden aria-label="Lightning multipliers"><div class="lb-row"></div></div>
-    <p class="hint" id="hint" aria-live="polite"></p>
+    <p class="hint" id="hint" aria-live="polite"><span></span></p>
     <ol class="feed" id="feed" aria-label="Side-bet results"></ol>
     <div class="banner" id="banner" role="status" hidden></div>
   </section>
@@ -49,14 +98,15 @@
     <div class="betting">
       <div class="tray" id="tray">
         <button class="tray-toggle" id="trayToggle" aria-expanded="true" aria-controls="tiles"><span>Side bets</span><span class="sum"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
+        <button class="tray-info" id="sideInfo" type="button" aria-label="How the side bets work: paytables and terms"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg></button>
         <div class="tiles" id="tiles" role="group" aria-label="Side bets"></div>
       </div>
       <div class="chips" id="chips" role="radiogroup" aria-label="Chip value"></div>
       <div class="bet-actions">
-        <button class="pill" id="undo" aria-keyshortcuts="U"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><span class="label">Undo</span></button>
-        <button class="pill" id="clear" aria-keyshortcuts="C"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="label">Clear</span></button>
-        <button class="pill" id="rebet" aria-keyshortcuts="R"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg><span class="label">Rebet</span></button>
-        <button class="pill" id="x2" aria-keyshortcuts="X"><span class="glyph">×2</span><span class="label">Double bets</span></button>
+        <button class="pill" id="undo" aria-keyshortcuts="U" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><span class="label">Undo</span></button>
+        <button class="pill" id="clear" aria-keyshortcuts="C" aria-label="Clear bets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="label">Clear</span></button>
+        <button class="pill" id="rebet" aria-keyshortcuts="R" aria-label="Rebet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg><span class="label">Rebet</span></button>
+        <button class="pill" id="x2" aria-keyshortcuts="X" aria-label="Double bets"><span class="glyph">×2</span><span class="label">Double bets</span></button>
         <button class="pill gold deal" id="deal" aria-keyshortcuts="Space"><span class="label">Deal</span></button>
       </div>
     </div>
@@ -90,16 +140,19 @@
       <label class="opt haptics-opt"><span>Haptics<small>Taps you feel on the phone</small></span><input type="checkbox" id="optHaptics" role="switch"></label>
       <label class="opt"><span>Fast play</span><input type="checkbox" id="optFast" role="switch"></label>
       <label class="opt"><span>Reduce motion</span><input type="checkbox" id="optReduced" role="switch"></label>
+      <label class="opt"><span>Flashing effects<small>Lightning strikes: soft keeps them under 3 a second</small></span><select id="optFlash"><option value="full">Full</option><option value="soft">Soft</option><option value="off">Off</option></select></label>
     </div>
+    <details class="book-sec"><summary><span>Last hands</span><span class="book-net">This visit <b id="bookNet">±0</b></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body"><ol class="book" id="book" aria-label="Your last hands and spins, newest first"></ol></div></details>
     <details open class="bj-only"><summary>Rules<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
       <ul class="rules">
         <li>Eight decks. The cut card sits at 75%; the shoe is replaced after the hand it comes out in.</li>
         <li>Dealer stands on all 17s. Blackjack pays 3 to 2.</li>
         <li>Dealer takes a hole card and checks it for blackjack with an ace or a ten up, so doubles and splits never lose to a dealer blackjack.</li>
-        <li>Insurance with an ace up costs half your bet and pays 2 to 1. With your blackjack it is offered as even money.</li>
-        <li>Double on any first two cards, also after a split. One split per hand; split aces take one card each. 21 after a split pays 1 to 1.</li>
+        <li>Insurance with an ace up costs half your bet and pays 2 to 1. With your blackjack you are offered even money instead: your bet is paid 1 to 1 at once, before the dealer looks, and it needs no chips.</li>
+        <li>Double on any first two cards, also after a split. One split per hand (the Free Bet table resplits to four hands); split aces take one card each. 21 after a split pays 1 to 1.</li>
         <li>Ten cards without busting wins (ten-card Charlie).</li>
         <li>Main bet 1–1,000. Side bets ride with a main bet and settle as soon as they are decided. While Buster is bet, the dealer always plays the hand out.</li>
+        <li>If the page closes or reloads during a hand, the hand is finished for you when you come back, as live tables do for a dropped seat: you stand, insurance is declined and the dealer plays out, from a fresh shuffle of the cards not yet seen.</li>
       </ul>
       <h4 class="mode-rules-title" id="modeRulesTitle" hidden></h4>
       <ul class="rules" id="modeRules" hidden></ul>
@@ -107,11 +160,12 @@
     <details class="bj-only"><summary>Side-bet paytables<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body"><div id="paytables" class="paytables"></div></div></details>
     <details open class="rl-only"><summary>Roulette rules<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
       <ul class="rules">
-        <li>European wheel, single zero: 37 pockets. Every bet loses on zero unless it covers zero.</li>
+        <li>European wheel, single zero: 37 pockets. La partage: on zero, red, black, odd, even, 1–18 and 19–36 lose only half, and the other half comes back. Every other bet loses on zero unless it covers zero.</li>
         <li>Straight up 35:1 · split 17:1 · street and 0/1/2, 0/2/3 11:1 · corner and first four (0–3) 8:1 · six line 5:1 · column and dozen 2:1 · red, black, odd, even, 1–18, 19–36 1:1.</li>
         <li>Racetrack call bets, a chip for each unit: Voisins du zéro 9 (0/2/3 ×2, 4/7, 12/15, 18/21, 19/22, 32/35, 25/29 corner ×2) · Tiers 6 splits (5/8, 10/11, 13/16, 23/24, 27/30, 33/36) · Orphelins 5 (1, 6/9, 14/17, 17/20, 31/34) · Jeu zéro 4 (0/3, 12/15, 32/35, 26) · neighbours: a number and 1–4 either side.</li>
         <li>Limits per spot: straight 100, split 200, street 300, corner 400, six line 600, column and dozen 1,500, even money 3,000. Table maximum 10,000.</li>
-        <li>The house edge is 2.7% on every bet. Each spin is independent; the statistics only show what has come out.</li>
+        <li>The house edge is 1.35% on the even-money bets (they return 98.65%, with la partage) and 2.7% on every other bet (97.3%). Each spin is independent; the statistics only show what has come out.</li>
+        <li>Bets are settled the moment they close. If the page closes or reloads during a spin, its number still counts and any win is in your balance when you come back.</li>
       </ul>
     </div></details>
     <details><summary>Keys<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
@@ -119,13 +173,15 @@
     </div></details>
     <details><summary>Credits<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
       <ul class="credits">
-        <li>Music: "Bossa Antigua" and "Lobby Time" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0.</li>
-        <li>"Thunderstorm" by RHumphries, freesound.org, CC BY 3.0. Spark and lightning sounds from /tg/station 13 and Space Station 14, CC BY-SA 3.0.</li>
-        <li>Roulette sounds from matiasvallejosdev/casino-roulette-game, CC BY-SA 4.0.</li>
-        <li>Card and chip sounds: Casino Audio by Kenney (kenney.nl) and "Card Game sounds" by haeldb, CC0. Room recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0.</li>
-        <li>Dealer voices, room, cheers, stings and menu sounds made with ElevenLabs.</li>
-        <li>Wheel and table veneers and the tall salon picture generated for Salon Noir. Roulette rules after the New Jersey, Singapore and Monte-Carlo rule filings; wheel after TCS John Huxley and Cammegh specifications; ball physics after Small &amp; Tse (2012).</li>
-        <li>3D by three.js (MIT). Fonts: Bodoni Moda, Cinzel, Inter, Barlow Condensed (SIL Open Font License). Chip-select thock: a wood knock from Kenney's Impact Sounds with a Kenney clay-chip click (both CC0).</li>
+        <li>Music: "Bossa Antigua", "Lobby Time" and the roulette table's music by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0.</li>
+        <li>Thunder from "Thunderstorm" by RHumphries, freesound.org, CC BY 3.0. Spark and lightning sounds from /tg/station 13 and Space Station 14, CC BY-SA 3.0.</li>
+        <li>Roulette ball clicks from matiasvallejosdev/casino-roulette-game, CC BY-SA 4.0. Our edits of CC BY-SA sounds stay CC BY-SA.</li>
+        <li>Card and chip sounds: Casino Audio by Kenney (kenney.nl) and "Card Game sounds" by haeldb, CC0. Chip-select thock: a wood knock from Kenney's Impact Sounds with a Kenney clay-chip click (both CC0). The room: recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0.</li>
+        <li>Dealer voices, cheers, stings and menu sounds made for Salon Noir with ElevenLabs. Every sound, file by file: src/sounds/CREDITS.txt.</li>
+        <li>Licences: CC BY 4.0 creativecommons.org/licenses/by/4.0 · CC BY 3.0 creativecommons.org/licenses/by/3.0 · CC BY-SA 3.0 creativecommons.org/licenses/by-sa/3.0 · CC BY-SA 4.0 creativecommons.org/licenses/by-sa/4.0 · CC0 creativecommons.org/publicdomain/zero/1.0</li>
+        <li>Code: three.js (MIT), anime.js (MIT), canvas-confetti (ISC), Torph, web-haptics and cuelume (MIT); buttons and motion ported from Magic UI (MIT) and Kinetics. Fonts: Bodoni Moda, Cinzel, Inter, Barlow Condensed (SIL Open Font License).</li>
+        <li>Court cards, ace of spades, card back, felt, leather, room, wood veneer and the tall salon picture generated for Salon Noir. Classic court cards (the fallback) © 2018 Howard Yeh, MIT.</li>
+        <li>Blackjack and side bets after Nevada's All Bets Blackjack filing and New Jersey's 21+3 definitions. Roulette rules after the New Jersey, Singapore and Monte-Carlo rule filings; wheel after TCS John Huxley and Cammegh specifications; ball physics after Small &amp; Tse (2012).</li>
       </ul>
     </div></details>
     <footer><button class="pill" id="resetBalance"><span class="label">Hold to reset balance</span></button><small>Play chips only. No real money.</small></footer>

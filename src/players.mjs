@@ -9,19 +9,21 @@ export const SEAT_COUNT = 5, YOU = 2;
 
 // Basic strategy for eight decks, dealer stands on soft 17, double after split (the house rules).
 // Returns 'hit' | 'stand' | 'double' | 'split'. `canDouble`, `canSplit` narrow what is allowed.
-export function basicStrategy(cards, up, { canDouble = true, canSplit = true } = {}) {
+// `freebet`: the Free Bet table's own chart (below); `free`: the hand rides on a free-bet marker alone.
+export function basicStrategy(cards, up, { canDouble = true, canSplit = true, freebet = false, free = false } = {}) {
   const d = up.rank === 'A' ? 11 : isTen(up) ? 10 : Number(up.rank), t = total(cards);
   if (canSplit && cards.length === 2 && cards[0].rank === cards[1].rank) {
     const r = cards[0].rank === 'A' ? 11 : isTen(cards[0]) ? 10 : Number(cards[0].rank);
-    const split = { 11: true, 10: false, 9: d !== 7 && d < 10, 8: true, 7: d <= 7, 6: d <= 6, 5: false, 4: d === 5 || d === 6, 3: d <= 7, 2: d <= 7 }[r];
+    // at Free Bet every pair but fives is split (free, so it always gains); tens are never split
+    const split = freebet ? r !== 5 && r !== 10 : { 11: true, 10: false, 9: d !== 7 && d < 10, 8: true, 7: d <= 7, 6: d <= 6, 5: false, 4: d === 5 || d === 6, 3: d <= 7, 2: d <= 7 }[r];
     if (split) return 'split';
   }
   const dbl = act => canDouble && cards.length === 2 ? 'double' : act;
+  if (freebet) return freeBetPlay(t, d, dbl, free);
   if (t.soft && t.value <= 21) {
     const v = t.value;
-    if (v >= 20) return 'stand';
-    if (v === 19) return d === 6 ? dbl('stand') : 'stand';
-    if (v === 18) return d <= 6 ? dbl('stand') : d <= 8 ? 'stand' : 'hit';
+    if (v >= 19) return 'stand';   // soft 19 doubles against a 6 only where the dealer hits soft 17
+    if (v === 18) return d >= 3 && d <= 6 ? dbl('stand') : d <= 8 ? 'stand' : 'hit';
     if (v === 17) return d >= 3 && d <= 6 ? dbl('hit') : 'hit';
     if (v >= 15) return d >= 4 && d <= 6 ? dbl('hit') : 'hit';
     return d >= 5 && d <= 6 ? dbl('hit') : 'hit';
@@ -30,10 +32,27 @@ export function basicStrategy(cards, up, { canDouble = true, canSplit = true } =
   if (v >= 17) return 'stand';
   if (v >= 13) return d <= 6 ? 'stand' : 'hit';
   if (v === 12) return d >= 4 && d <= 6 ? 'stand' : 'hit';
-  if (v === 11) return dbl('hit');
+  if (v === 11) return d <= 10 ? dbl('hit') : 'hit';   // against an ace only a dealer hitting soft 17 makes it a double
   if (v === 10) return d <= 9 ? dbl('hit') : 'hit';
   if (v === 9) return d >= 3 && d <= 6 ? dbl('hit') : 'hit';
   return 'hit';
+}
+// Free Bet: the same shoe and dealer, but a dealer 22 pushes, so a dealer bust is worth less: stiffs are stood on
+// less, paid soft doubles rarely pay, and a hard 9-11 is always doubled (free). Worked out for these rules (S17, 22
+// pushes) by exact infinite-deck analysis. A hand on a marker alone costs nothing to lose, so it is played for the
+// best chance to win (`free`).
+function freeBetPlay({ value: v, soft }, d, dbl, free) {
+  if (soft && v <= 21) {
+    if (v >= 19) return free && (d === 6 || v === 19 && d === 5) ? dbl('stand') : 'stand';
+    if (v === 18) return d === 5 || d === 6 || free && d === 4 ? dbl('stand') : d >= 9 || free && (d === 2 || d === 8) ? 'hit' : 'stand';
+    if (v === 17) return d === 6 ? dbl('hit') : 'hit';
+    return 'hit';
+  }
+  if (v >= 17) return free && v === 17 && (d >= 7 && d <= 9 || d === 11) ? 'hit' : 'stand';
+  if (v >= 15) return d <= 6 ? 'stand' : 'hit';
+  if (v >= 13) return d >= 3 && d <= 6 ? 'stand' : 'hit';
+  if (v === 12) return free && (d === 5 || d === 6) ? 'stand' : 'hit';
+  return v >= 9 ? dbl('hit') : 'hit';
 }
 
 // Ways of playing. `think` is how long they take over a decision (ms), `sway` how often they
@@ -93,6 +112,9 @@ export class Player {
   }
   wantsInsurance() { return this.rng() < this.style.insure && this.bankroll >= this.stake / 2; }
   insure() { this.insurance = this.stake / 2; this.bankroll -= this.insurance; return this.insurance; }
+  // With a blackjack against an ace, the same appetite takes even money: paid 1 to 1 at once, no chips needed.
+  wantsEvenMoney() { return this.rng() < this.style.insure; }
+  evenMoney() { const h = this.hands[0]; h.evenMoney = h.done = true; this.bankroll += h.stake * 2; return h.stake; }
   settleInsurance(dealerBJ) { const paid = dealerBJ ? this.insurance * 3 : 0; this.bankroll += paid; const r = { stake: this.insurance, payout: paid }; this.insurance = 0; return r; }
   // ---- playing ----
   get hand() { return this.hands[this.at]; }
@@ -100,14 +122,17 @@ export class Player {
   get standing() { return this.hands.some(h => { const v = total(h.cards).value; return h.cards.length && v <= 21 && !(natural(h.cards) && !h.fromSplit) && h.cards.length < 10; }); }
   // Free Bet: a double on a hard 9-11 and a split of any pair but tens cost nothing.
   get freeDouble() { const h = this.hand, t = total(h.cards); return this.mode === 'freebet' && h.cards.length === 2 && !h.splitAces && !t.soft && t.value >= 9 && t.value <= 11; }
-  get freeSplit() { const h = this.hand; return this.mode === 'freebet' && this.hands.length === 1 && h.cards.length === 2 && h.cards[0].rank === h.cards[1].rank && !isTen(h.cards[0]); }
+  // A pair that can still be split: one split, or at Free Bet up to four hands (aces too).
+  get canResplit() { const c = this.hand.cards; return c.length === 2 && c[0].rank === c[1].rank && this.hands.length < (this.mode === 'freebet' ? 4 : 2); }
+  get freeSplit() { return this.mode === 'freebet' && this.canResplit && !isTen(this.hand.cards[0]); }
   decide(up) {
     const h = this.hand, free = this.freeDouble, canDouble = this.style.doubles && h.cards.length === 2 && !h.splitAces && (free || this.bankroll >= h.base);
-    const canSplit = this.style.splits && this.hands.length === 1 && h.cards.length === 2 && h.cards[0].rank === h.cards[1].rank && (this.freeSplit || this.bankroll >= h.stake);
+    const canSplit = this.style.splits && this.canResplit && (this.freeSplit || this.bankroll >= h.base);
+    if (h.splitAces) return canSplit ? 'split' : 'stand';   // a split ace takes one card; another ace may split again
     // anything free is taken (a free split of fives would throw away a free double on ten)
     if (this.freeSplit && this.style.splits && h.cards[0].rank !== '5') return 'split';
     if (free && canDouble) return 'double';
-    let act = basicStrategy(h.cards, up, { canDouble, canSplit });
+    let act = basicStrategy(h.cards, up, { canDouble, canSplit, freebet: this.mode === 'freebet', free: !h.stake });
     if (act === 'split') return act;
     const v = total(h.cards).value, soft = total(h.cards).soft;
     if (this.style.careful && !soft && v >= 12) act = 'stand';
@@ -115,10 +140,11 @@ export class Player {
     return act;
   }
   double() { const h = this.hand; if (this.freeDouble) { h.free += h.base; h.freeDoubled = true; } else { this.bankroll -= h.base; h.stake += h.base; } h.doubled = true; }
-  // One split, as the house allows: two hands of one card each, the same stake on the second.
+  // A split, as the house allows: the hand in play becomes two of one card each (at `at` and `at + 1`), the first
+  // keeping its stake (or marker), the same stake again on the second - or, when free, a marker.
   split() {
-    const [a, b] = this.hand.cards, stake = this.hand.stake, aces = a.rank === 'A', free = this.freeSplit; if (!free) this.bankroll -= stake;
-    this.hands = [{ cards: [a], stake, base: stake, free: 0, fromSplit: true, splitAces: aces, done: false }, { cards: [b], stake: free ? 0 : stake, base: stake, free: free ? stake : 0, fromSplit: true, splitAces: aces, done: false }]; this.at = 0;
+    const h = this.hand, [a, b] = h.cards, aces = a.rank === 'A', free = this.freeSplit; if (!free) this.bankroll -= h.base;
+    this.hands.splice(this.at, 1, { cards: [a], stake: h.stake, base: h.base, free: h.free, fromSplit: true, splitAces: aces, done: false }, { cards: [b], stake: free ? 0 : h.base, base: h.base, free: free ? h.base : 0, fromSplit: true, splitAces: aces, done: false });
     return free;
   }
   // ---- settling (same rules as yours: 3:2 blackjack, ten-card Charlie) ----
@@ -131,14 +157,16 @@ export class Player {
     const out = this.hands.map(h => {
       const p = total(h.cards).value, pb = natural(h.cards) && !h.fromSplit, charlie = h.cards.length >= 10 && p <= 21;
       let payout = 0, kind = 'loss';
-      if (pb && db) { payout = h.stake; kind = 'push'; }
+      if (h.evenMoney) { payout = h.stake * 2; kind = 'win'; }   // paid already, at the offer
+      else if (pb && db) { payout = h.stake; kind = 'push'; }
       else if (db) kind = 'loss';
       else if (pb) { payout = h.stake * 2.5; kind = 'blackjack'; }
       else if (p > 21) kind = 'loss';
       else if (push22 && !charlie) { payout = h.stake; kind = 'push'; }
       else if (charlie || d > 21 || p > d) { payout = h.stake * 2 + h.free; kind = 'win'; }
       else if (p === d) { payout = h.stake; kind = 'push'; }
-      this.bankroll += payout; return { payout, net: payout - h.stake, kind, total: p, stake: h.stake, free: h.free };
+      if (!h.evenMoney) this.bankroll += payout;
+      return { payout, net: payout - h.stake, kind, total: p, stake: h.stake, free: h.free, evenMoney: !!h.evenMoney };
     });
     this.rounds++;
     let net = out.reduce((s, r) => s + r.net, 0);
@@ -146,7 +174,7 @@ export class Player {
       const won = out.some(r => r.kind === 'win' || r.kind === 'blackjack'), pushed = out.every(r => r.kind === 'push'), f = {};
       if (this.pending && won) { f.bonus = { m: this.pending.m, amount: this.pending.fee * this.pending.m }; this.bankroll += f.bonus.amount; net += f.bonus.amount; this.pending = null; }
       else if (this.pending && !pushed) { f.lost = this.pending; this.pending = null; }
-      for (const r of out) if (r.kind === 'win' || r.kind === 'blackjack') { const b = bucketOf(r), m = board[b]; if (!f.earned || m > f.earned.m) f.earned = { m, bucket: b, fee: this.fee }; }
+      for (const r of out) if ((r.kind === 'win' || r.kind === 'blackjack') && !r.evenMoney) { const b = bucketOf(r), m = board[b]; if (!f.earned || m > f.earned.m) f.earned = { m, bucket: b, fee: this.fee }; }
       if (f.earned) this.pending = f.earned;
       this.flash = f;
     }
@@ -156,7 +184,7 @@ export class Player {
     return out;
   }
   // A voided round gives back what is still on the felt.
-  refund() { const back = this.fee + this.hands.reduce((s, h) => s + h.stake, 0) + Object.values(this.side).reduce((s, v) => s + v, 0) + this.insurance; this.bankroll += back; this.clear(); return back; }
+  refund() { const back = this.fee + this.hands.reduce((s, h) => s + (h.evenMoney ? 0 : h.stake), 0) + Object.values(this.side).reduce((s, v) => s + v, 0) + this.insurance; this.bankroll += back; this.clear(); return back; }
   // After a shoe, some people move on; anyone short of a bet leaves at once.
   get leaving() { return !this.wantsToPlay() || this.bankroll < this.base; }
 }
@@ -177,6 +205,16 @@ export class Seating {
       if (k === YOU) continue;
       if (!want.has(k) && this.seats[k]) { changes.push({ seat: k, left: this.seats[k] }); this.seats[k] = null; }
       if (want.has(k) && !this.seats[k]) { const p = this.newcomer(); this.seats[k] = p; changes.push({ seat: k, joined: p }); }
+    }
+    return changes;
+  }
+  // Between hands: anyone short of their bet gets up at once and someone new takes the seat, so a
+  // seat never sits idle for the rest of the shoe.
+  replaceLeaving() {
+    const changes = [];
+    for (let k = 0; k < SEAT_COUNT; k++) {
+      const p = this.seats[k]; if (!p || k === YOU || !p.leaving) continue;
+      const q = this.newcomer(); q.mode = p.mode; this.seats[k] = q; changes.push({ seat: k, left: p, joined: q });
     }
     return changes;
   }

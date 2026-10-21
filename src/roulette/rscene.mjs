@@ -4,9 +4,9 @@
 // upright phone you sit at the foot (+x), looking up the table at the wheel. The layout is painted for
 // whichever seat you have, cells shaped for the screen, numbers facing you.
 import * as THREE from '../vendor/three.module.min.js';
-import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { artImage, CHIP_H, CHIP_R } from '../scene/textures.mjs';
-import { chipGeometry, chipMaterials, QUALITY, detectQuality, setChipDetail } from '../scene/world.mjs';
+import { chipGeometry, chipMaterials, setChipDetail, swapChipGeometry } from '../scene/world.mjs';
+import { createStage, QUALITY, detectQuality, leatherMaterial, brassMaterial, fitFov } from '../scene/stage.mjs';
 import { SPOTS, colorOf, rowOf, colOf, REDS, WHEEL as WHEEL_ORDER } from './rules.mjs';
 import { createWheel } from './wheel3d.mjs';
 import { GEO } from './physics.mjs';
@@ -25,20 +25,16 @@ const ART = {};
 export function preloadRouletteArt() {
   const load = (k, src) => new Promise(r => { const i = new Image(); i.onload = () => { ART[k] = i; r(); }; i.onerror = () => r(); i.src = src; });
   const fonts = document.fonts ? Promise.all(['700 80px "Barlow Condensed"', '700 80px Cinzel', '700 40px Inter'].map(f => document.fonts.load(f).catch(() => {}))) : Promise.resolve();
-  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('walnut', './assets/roulette/walnut.webp'), load('roomTall', './assets/roulette/room-tall.webp'), fonts]);
+  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('roomTall', './assets/roulette/room-tall.webp'), fonts]);
 }
 
 export function createRouletteScene(canvas, { quality = detectQuality() } = {}) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  let ratioCap = quality.ratio; const ratio = () => Math.min(devicePixelRatio || 1, ratioCap);
-  renderer.setPixelRatio(ratio()); setChipDetail(quality.chipSegments);
-  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = quality.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-  const maxTex = renderer.capabilities.maxTextureSize, aniso = renderer.capabilities.getMaxAnisotropy();
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#0b0a09');
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture; scene.environmentIntensity = .5;
-  const camera = new THREE.PerspectiveCamera(40, 1, 1, 1400);
+  // the renderer, its loop and frame watcher, the scene and the camera (scene/stage.mjs: the same as the blackjack table's);
+  // a lost and restored context makes the wheel's studio light again too (the rest re-uploads by itself)
+  const st = createStage(canvas, { quality, background: '#0b0a09', environment: .5, fov: 40, far: 1400, lights: () => [keyW, keyL],
+    restored: () => { const old = studioEnv; studioEnv = studio(); wheel.group.traverse(o => { if (o.material?.envMap === old) o.material.envMap = studioEnv; }); } });
+  const { renderer, scene, camera, tickers, requestRender, maxTex, aniso } = st;
+  setChipDetail(quality.chipSegments);
 
   // ---- light: one pendant over the wheel and one over the layout, a cool fill, warm room glow -------------
   const keyW = new THREE.SpotLight('#fff1dc', 5200, 0, .62, .8, 1.6); keyW.castShadow = true;
@@ -63,7 +59,8 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     }
     return c;
   };
-  const roomTex = roomImg ? texOf(feather(roomImg)) : null, tallTex = ART.roomTall ? texOf(feather(ART.roomTall)) : null;
+  // each is feathered when its seat first needs it (a phone that stays upright never builds the wide one)
+  let roomTex, tallTex; const room = () => roomTex ??= roomImg ? texOf(feather(roomImg)) : null, tall = () => tallTex ??= ART.roomTall ? texOf(feather(ART.roomTall)) : null;
   backdrop.material.transparent = true; backdrop.material.depthWrite = false;
   scene.add(backdrop);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: '#0b0a09', roughness: 1 }));
@@ -73,18 +70,21 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const table = new THREE.Group(); scene.add(table);
   const woodTex = (img, rx, ry, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
   const walnut = new THREE.MeshPhysicalMaterial({ color: ART.veneer ? '#d9c2b0' : '#1c120c', map: woodTex(ART.veneer, 4, 1, Math.PI / 2), roughness: .4, clearcoat: .9, clearcoatRoughness: .1 });   // the table: Macassar ebony, its stripes along the length
-  const leather = new THREE.MeshPhysicalMaterial({ color: '#141312', roughness: .58, clearcoat: .35, clearcoatRoughness: .45, sheen: .4, sheenColor: new THREE.Color('#3a3530') });
+  const leather = leatherMaterial();
   const grain = artImage('table:leather'); if (grain) { const t = new THREE.Texture(grain); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(24, 2); t.needsUpdate = true; leather.bumpMap = t; leather.bumpScale = 1.8; }
-  const brass = new THREE.MeshStandardMaterial({ color: '#b98f45', metalness: 1, roughness: .28 });
+  const brass = brassMaterial();
   // the wheel's own studio light, for its reflections: a ring light overhead and two soft boxes in a dark room
-  const studioEnv = (() => {
+  // (rendered once; the generator and the little studio are freed straight after)
+  const studio = () => {
     const e = new THREE.Scene(); e.background = new THREE.Color('#030303');
     const lamp = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c), side: THREE.DoubleSide });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(5.5, .22, 12, 96), lamp('#fff3e0').clone()); ring.material.color.multiplyScalar(3); ring.rotation.x = Math.PI / 2; ring.position.y = 4.2; e.add(ring);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(5.5, .22, 12, 96), lamp('#fff3e0')); ring.material.color.multiplyScalar(3); ring.rotation.x = Math.PI / 2; ring.position.y = 4.2; e.add(ring);
     for (const [x, z, w] of [[-9, 3, 3], [8, -4, 2.6]]) { const b = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.1), lamp('#d8cfc2')); b.material.color.multiplyScalar(.9); b.position.set(x, 3.2, z); b.lookAt(0, 0, 0); e.add(b); }
     const warm = new THREE.Mesh(new THREE.PlaneGeometry(10, .6), lamp('#ff9f4a')); warm.material.color.multiplyScalar(.35); warm.position.set(0, .8, 9); warm.lookAt(0, 0, 0); e.add(warm);
-    return pmrem.fromScene(e, .02).texture;
-  })();
+    const pmrem = new THREE.PMREMGenerator(renderer), env = pmrem.fromScene(e, .02).texture;
+    pmrem.dispose(); e.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); return env;
+  };
+  let studioEnv = studio();
   const wheel = createWheel(THREE, { aniso, env: studioEnv, glow: '#ffb85a' }); table.add(wheel.group);   // black lacquer, a warm gold ring light
   const feltMat = new THREE.MeshStandardMaterial({ roughness: .96, metalness: 0 });
   const felt = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), feltMat); felt.rotation.x = -Math.PI / 2; felt.receiveShadow = true; table.add(felt);
@@ -158,7 +158,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // (each with a thin cream keyline so it reads under low light), the French diamonds for red and black, and the racetrack
   // printed on the croupier's side. Text faces your seat.
   function paintLayout() {
-    const R = L.rect, W = R.x1 - R.x0, D = R.z1 - R.z0, ppc = Math.min(24, Math.floor(Math.min(maxTex, 4096) / Math.max(W, D)));
+    const R = L.rect, W = R.x1 - R.x0, D = R.z1 - R.z0, ppc = Math.min(24, Math.floor(Math.min(maxTex, quality.felt) / Math.max(W, D)));   // as sharp as the preset's cloth
     const c = document.createElement('canvas'); c.width = Math.round(W * ppc); c.height = Math.round(D * ppc); const g = c.getContext('2d');
     const px = x => (x - R.x0) * ppc, pz = z => (z - R.z0) * ppc;
     g.fillStyle = '#17533a'; g.fillRect(0, 0, c.width, c.height);
@@ -227,14 +227,19 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; return t;
   }
+  // the cloth for the seat: the old one's texture and canvas are freed (width 0 lets its pixels go now)
+  function repaintLayout() { const old = feltMat.map; feltMat.map = paintLayout(); feltMat.needsUpdate = !old; if (old) { old.dispose(); old.image.width = 0; } requestRender(false); }
+  // A rebuild (the phone turned) frees the last body's shapes and its own materials; the shared ones stay.
+  const keep = new Set([walnut, leather, brass, feltMat]);
+  function clearGroup(g) { g.traverse(o => { if (o === g) return; o.geometry?.dispose(); for (const m of [o.material ?? []].flat()) if (!keep.has(m) && ![...floatMats.values()].includes(m)) m.dispose(); }); g.clear(); }
   function buildTable(orient) {
     L = geometry(orient); const R = L.rect;
-    feltMat.map?.dispose(); feltMat.map = paintLayout(); feltMat.needsUpdate = true;
+    repaintLayout();
     felt.scale.set(R.x1 - R.x0, R.z1 - R.z0, 1); felt.position.set((R.x0 + R.x1) / 2, 0, (R.z0 + R.z1) / 2);
     wheel.group.position.set(L.wheelX, WHEEL_Y, (L.zFar + L.zNear) / 2);   // the bowl stands on the head of the table
     // body, after a TCS John Huxley table: a Macassar top with the wheel sunk in a well at the head, the croupier's
     // chip tray cut in beside it, a padded leather armrest round the players' side and the foot, a dark base
-    body.clear();
+    clearGroup(body);
     const cz = (L.zFar + L.zNear) / 2, wx = L.wheelX;
     const x0T = wx - 50, x1T = R.x1 + 24, z1T = R.z1 + 25, z0T = Math.min(R.z0 - 6, cz - 46 - 34);
     const tray = { x0: wx - 30, x1: wx + 26, z0: cz - 46 - 30, z1: cz - 46 - 7 };
@@ -295,7 +300,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     { const mid = (L.X(-1) + L.xEnd) / 2, cz2 = (L.zFar + L.zNear) / 2; keyL.position.set(mid, 175, cz2 + 26); keyL.target.position.set(mid, 0, cz2); }
     glow.position.set(L.wheelX - 120, 70, -40);
     // highlight tiles: one per number and per outside box
-    hi.clear(); tiles.clear();
+    clearGroup(hi); tiles.clear();
     const tile = (key, u0, v0, u1, v1) => {
       const w = Math.abs(L.X(u1) - L.X(u0)), d = Math.abs(L.Z(v1) - L.Z(v0)), m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: '#ffd98a', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
       m.rotation.x = -Math.PI / 2; m.position.set((L.X(u0) + L.X(u1)) / 2, .06, (L.Z(v0) + L.Z(v1)) / 2); m.visible = false; hi.add(m); tiles.set(key, m);
@@ -311,16 +316,16 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   }
   const tiles = new Map(), relayout = new Set();
   function placeBackdrop() {
-    const tall = L.orient === 'port' && tallTex, t = tall ? tallTex : roomTex; if (!t) return;
+    const isTall = L.orient === 'port' && !!tall(), t = isTall ? tall() : room(); if (!t) return;
     backdrop.material.map = t; backdrop.material.needsUpdate = true;
-    const img = t.image, H = tall ? 600 : 420, W = H * img.width / img.height; backdrop.scale.set(W, H, 1);
-    if (tall) { backdrop.position.set(L.wheelX - 190, -30 + H * .12, 0); backdrop.rotation.set(0, Math.PI / 2, 0); }     // behind the wheel, seen from the foot
+    const img = t.image, H = isTall ? 600 : 420, W = H * img.width / img.height; backdrop.scale.set(W, H, 1);
+    if (isTall) { backdrop.position.set(L.wheelX - 190, -30 + H * .12, 0); backdrop.rotation.set(0, Math.PI / 2, 0); }     // behind the wheel, seen from the foot
     else { backdrop.position.set(L.xEnd * .2, -20 - H / 2 + .45 * H + 30, L.zFar - 170); backdrop.rotation.set(0, 0, 0); }
   }
   // Light up numbers or boxes: keys are numbers or outside ids; `level` 0-1.
   function highlight(keys, { level = .32, color = '#ffd98a' } = {}) {
     for (const [k, m] of tiles) { const on = keys.includes(k); m.visible = on; if (on) { m.material.opacity = level; m.material.color.set(color); } }
-    requestRender();
+    requestRender(false);   // glowing tiles cast nothing
   }
 
   // ---- chips and the dolly ------------------------------------------------------------------------------------------
@@ -333,7 +338,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     g.lineWidth = 18; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.beginPath(); g.arc(128, 128, 116, a - .16, a + .16); g.stroke(); }
     const face = new THREE.CanvasTexture(c); face.colorSpace = THREE.SRGBColorSpace;
     const side = new THREE.MeshStandardMaterial({ color, roughness: .5 }), top = new THREE.MeshStandardMaterial({ map: face, roughness: .45 });
-    const mats = [side, top, top]; wheelChipMats.set(color, mats); return mats;
+    const mats = [side, top]; wheelChipMats.set(color, mats); return mats;   // rim, both faces
   }
   const chipMesh = v => { const m = new THREE.Mesh(chipGeometry(), typeof v === 'number' ? chipMaterials(v) : wheelChipMaterials(v)); m.castShadow = m.receiveShadow = true; m.scale.setScalar(.92); chipsG.add(m); return m; };
   const dolly = new THREE.Group(); dolly.visible = false; table.add(dolly);
@@ -344,14 +349,14 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     for (const m of [base, body2, capM]) { m.castShadow = true; dolly.add(m); } }
 
   // ---- camera: shots and moves -----------------------------------------------------------------------------------------
-  const view = { w: 1, h: 1, top: 0 }, v3 = new THREE.Vector3();
+  const view = Object.assign(st.view, { top: 0 }), v3 = new THREE.Vector3();
   const pose = (pos, look, fov) => { const m = new THREE.Matrix4().lookAt(pos, look, new THREE.Vector3(0, 1, 0)); return { pos: pos.clone(), quat: new THREE.Quaternion().setFromRotationMatrix(m), fov, look: look.clone() }; };
   // the narrowest lens from `pos` looking at `look` that keeps every point inside the picture
   function fit(pos, look, pts, mx = .94, my = .92) {
     const p = pose(pos, look, 40); camera.position.copy(p.pos); camera.quaternion.copy(p.quat); camera.updateMatrixWorld();
     const ok = fov => { camera.fov = fov; camera.updateProjectionMatrix(); return pts.every(q => { v3.copy(q).project(camera); return Math.abs(v3.x) < mx && Math.abs(v3.y) < my && v3.z < 1; }); };
-    if (!ok(75)) return null; let lo = 12, hi2 = 75; while (hi2 - lo > .2) { const m = (lo + hi2) / 2; if (ok(m)) hi2 = m; else lo = m; }
-    p.fov = hi2; return p;
+    const fov = fitFov(ok, 12, 75, .2); if (fov == null) return null;
+    p.fov = fov; return p;
   }
   const shots = {};
   const wheelCentre = () => wheel.group.position.clone();
@@ -406,12 +411,11 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     shots.push = portrait ? overhead(37, -6, 118) : around(10, 96, 37, -6, .92, .92, -6);
     for (const k of ['seat', 'wheel', 'push']) shots[k].name = k;
   }
-  const px2 = new THREE.Vector3();
   function cellPx(p) { camera.position.copy(p.pos); camera.quaternion.copy(p.quat); camera.fov = p.fov; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
     const a = new THREE.Vector3(L.X(5), 0, L.Z(1.5)).project(camera), b = new THREE.Vector3(L.X(6), 0, L.Z(1.5)).project(camera), c = new THREE.Vector3(L.X(5.5), 0, L.Z(1)).project(camera), d = new THREE.Vector3(L.X(5.5), 0, L.Z(2)).project(camera);
-    void px2; return Math.min(Math.hypot((a.x - b.x) * view.w, (a.y - b.y) * view.h), Math.hypot((c.x - d.x) * view.w, (c.y - d.y) * view.h)) / 2; }
+    return Math.min(Math.hypot((a.x - b.x) * view.w, (a.y - b.y) * view.h), Math.hypot((c.x - d.x) * view.w, (c.y - d.y) * view.h)) / 2; }
   let current = null;
-  function setPose(p) { camera.position.copy(p.pos); camera.quaternion.copy(p.quat); camera.fov = p.fov; camera.updateProjectionMatrix(); camera.updateMatrixWorld(); current = p; requestRender(); }
+  function setPose(p) { camera.position.copy(p.pos); camera.quaternion.copy(p.quat); camera.fov = p.fov; camera.updateProjectionMatrix(); camera.updateMatrixWorld(); current = p; requestRender(false); }
   // a camera move: position, turn and lens together, eased
   let moveJob = 0;
   function move(to, ms = 1100, easing = t => t < .5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2) {
@@ -425,11 +429,11 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
         camera.position.lerpVectors(from.pos, to.pos, e); camera.quaternion.slerpQuaternions(from.quat, to.quat, e); camera.fov = from.fov + (to.fov - from.fov) * e; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
         if (k >= 1) { tickers.delete(f); current = to; done(); }
       };
-      tickers.add(f); requestRender();
+      f.still = true; tickers.add(f); requestRender(false);   // only the camera moves: the shadows stand
     });
   }
   function frame(w, h, top = 0) {
-    renderer.setPixelRatio(ratio()); renderer.setSize(w, h, false);
+    st.size(w, h);
     const vh = Math.max(1, h - top); view.w = w; view.h = vh; view.top = top;
     camera.clearViewOffset(); camera.aspect = w / vh;
     const orient = w / vh < .9 ? 'port' : 'land';
@@ -450,55 +454,39 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     else { const r = 300; camera.position.set(cx + Math.sin(a) * r, 185 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); camera.lookAt(cx + Math.sin(a) * 36, -30, wc.z - 14); camera.fov = 36; }
     camera.up.set(0, 1, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   }
-  const showTick = now => placeShowcase(now);
+  // a slow drift: 30 frames a second, asked for by the orbit itself, and the camera alone moves
+  let shown = 0;
+  const showTick = now => { if (now - shown < 31) return; shown = now; placeShowcase(now); requestRender(false); };
+  showTick.lazy = showTick.still = true;
   const showcase = {
     get on() { return show.on; },
-    start(still = false) { show.on = true; moveJob++; if (still) placeShowcase(9000); else tickers.add(showTick); requestRender(); },
+    start(still = false) { show.on = true; moveJob++; if (still) placeShowcase(9000); else tickers.add(showTick); requestRender(false); },
     async stop(ms = 1300) { if (!show.on) return; tickers.delete(showTick); show.on = false; const s = { ...shots.seat, name: 'seat' }; await move(s, ms); setPose(s); },
   };
 
-  // ---- render loop (drawn only when something changes) and the frame-time watcher ----------------------------
-  let dirty = true, running = false; const tickers = new Set();
-  function requestRender() { dirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
-  let last = 0, late = 0, frames = 0, base = 1e9, good = 0;
-  function watch(t) {
-    if (!last || !tickers.size) { last = t; return; }
-    const dt = t - last; last = t; if (dt > 250) return;
-    frames++; base = Math.min(base * 1.002, dt); if (dt > base * 1.7) late++;
-    if (frames < 90) return;
-    const floorR = Math.max(1, quality.ratio - 1);
-    if (late > 45 && ratioCap > floorR) { ratioCap = Math.max(floorR, ratioCap - .25); good = 0; resize(); }
-    else if (late < 5 && ratioCap < quality.ratio && ++good >= 3) { ratioCap = Math.min(quality.ratio, ratioCap + .25); good = 0; resize(); }
-    frames = late = 0;
-  }
-  const resize = () => { renderer.setPixelRatio(ratio()); renderer.setSize(view.w, view.h, false); requestRender(); };
-  let paused = false;
-  let loops = 0;
-  function loop(t) {
-    loops++; running = false; if (paused) return;
-    watch(t); if (!tickers.size) last = 0;
-    const active = tickers.size > 0;
-    for (const f of tickers) { try { f(t); } catch (e) { tickers.delete(f); console.error('roulette ticker', e); } }   // one bad ticker must not stop the table
-    if (dirty || active) { dirty = false; renderer.render(scene, camera); }
-    if ((tickers.size || dirty) && !running) { running = true; requestAnimationFrame(loop); }
-  }
-  function project(p) { v3.copy(p).project(camera); return { x: (v3.x + 1) / 2 * view.w, y: (1 - v3.y) / 2 * view.h, behind: v3.z > 1 }; }
+  // (drawn only when something changes, as at the blackjack table: see scene/stage.mjs for `still`, `lazy` and requestRender(false))
+  const project = p => st.project(p.x, p.y, p.z);
   const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   // the spot under a point on the screen (CSS pixels within the canvas)
   function pick(x, y) {
     ray.setFromCamera({ x: x / view.w * 2 - 1, y: -(y / view.h) * 2 + 1 }, camera);
     const p = ray.ray.intersectPlane(plane, new THREE.Vector3()); return p ? spotAt(p.x, p.z) : null;
   }
-  function setQuality(q) { quality = q; ratioCap = q.ratio; resize(); for (const k of [keyW, keyL]) { k.shadow.mapSize.set(q.shadow, q.shadow); k.shadow.map?.dispose(); k.shadow.map = null; } renderer.shadowMap.type = q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap; renderer.shadowMap.needsUpdate = true; requestRender(); }
+  // a preset applies at once: pixels and shadows (the stage), the cloth and the chips
+  function setQuality(q) {
+    const was = quality; quality = q; st.setQuality(q);
+    if (q.felt !== was.felt && L) repaintLayout();
+    setChipDetail(q.chipSegments); swapChipGeometry(scene); requestRender();
+  }
 
   return {
     THREE, renderer, scene, camera, wheel, table, tickers, requestRender, frame, project, pick, highlight, anchor, chipMesh, dolly, chipsG,
     shots, move, setPose, showcase, relayout, setQuality,
-    get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return renderer.getPixelRatio(); },
+    get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },
     wheelToWorld(p) { return new THREE.Vector3(p[0], p[1], p[2]).add(wheel.group.position); },
-    pause(on) { paused = on; if (!on) requestRender(); },
-    get debug() { return { loops, running, paused, dirty, tickers: tickers.size }; },
+    pause: st.pause,
+    get debug() { return st.debug; },
     GEO,
   };
 }

@@ -1,0 +1,23 @@
+Salon Noir
+Copyright (c) 2026 onealper (https://github.com/onealper). All rights reserved.
+
+The source code, page markup, styles and other original material in this repository
+are the copyright holder's own work. No licence is granted to copy, modify, distribute
+or publish them, in whole or in part, without the copyright holder's written permission.
+That the repository can be read or played does not grant any of those rights.
+
+Scope. This notice covers only the copyright holder's own work. Third-party material in
+this repository keeps its own licence, which the paragraph above does not change:
+
+  - Code libraries in src/vendor/ (three.js, anime.js, canvas-confetti, Torph,
+    web-haptics, cuelume): MIT or ISC. Versions, sources and local changes are in
+    src/vendor/README.md; each licence file sits beside its library.
+  - Interface pieces ported from Magic UI: MIT (src/vendor/MAGICUI-LICENSE.md).
+  - Fonts in src/fonts/: SIL Open Font License 1.1 (src/fonts/OFL-*.txt).
+  - Sounds in src/sounds/: CC0, CC BY 3.0, CC BY 4.0, CC BY-SA 3.0 and CC BY-SA 4.0,
+    listed file by file in src/sounds/CREDITS.txt. Sound files made from CC BY-SA
+    material remain under CC BY-SA (the same version), changes included.
+  - The classic court-card art in assets/cards/: MIT, (c) 2018 Howard Yeh
+    (assets/cards/LICENSE.txt).
+
+CREDITS.md lists every author and source.

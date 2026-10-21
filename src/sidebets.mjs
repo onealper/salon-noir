@@ -2,25 +2,28 @@
 // for All Bets Blackjack; straight definitions follow New Jersey's 21+3 text
 // (ace high or low, K-A-2 is not a straight). Every function returns the single
 // best qualifying line — { key, label, pays } where pays is "to 1" — or null.
+// `edge`: the house edge in percent, shown with the paytable so a bet's price can be compared: exact over every
+// eight-deck draw (for Buster and Push 22, every way the dealer can draw out, stands on all 17s; engine sims of
+// 27M rounds agree within their noise). Re-check it whenever a paytable changes.
 
 export const SIDE_BETS = [
-  { id: 'lucky', name: 'Lucky Lucky', short: 'Lucky\nLucky', cards: 'Your two cards and the dealer’s up card',
-    table: [['Suited 7-7-7', 200], ['Suited 6-7-8', 100], ['7-7-7', 50], ['6-7-8', 25], ['Suited 21', 15], ['Any 21', 3], ['Any 20', 2], ['Any 19', 2]] },
-  { id: 'pairs', name: 'Perfect Pairs', short: 'Perfect\nPairs', cards: 'Your first two cards',
+  { id: 'lucky', name: 'Lucky Lucky', short: 'Lucky\nLucky', cards: 'Your two cards and the dealer’s up card', edge: 2.6,
+    table: [['Suited 7-7-7', 200], ['Suited 6-7-8', 100], ['7-7-7', 50], ['6-7-8', 30], ['Suited 21', 15], ['Any 21', 3], ['Any 20', 2], ['Any 19', 2]] },
+  { id: 'pairs', name: 'Perfect Pairs', short: 'Perfect\nPairs', cards: 'Your first two cards', edge: 4.1,
     table: [['Perfect pair', 25], ['Coloured pair', 12], ['Red/black pair', 6]] },
-  { id: 'top3', name: 'Top 3', short: 'Top 3', cards: 'Your two cards and the dealer’s up card',
+  { id: 'top3', name: 'Top 3', short: 'Top 3', cards: 'Your two cards and the dealer’s up card', edge: 9.0,
     table: [['Suited three of a kind', 270], ['Straight flush', 180], ['Three of a kind', 90]] },
-  { id: 'p213', name: '21+3', short: '21+3', cards: 'Your two cards and the dealer’s up card',
+  { id: 'p213', name: '21+3', short: '21+3', cards: 'Your two cards and the dealer’s up card', edge: 3.7,
     table: [['Suited three of a kind', 100], ['Straight flush', 40], ['Three of a kind', 30], ['Straight', 10], ['Flush', 5]] },
-  { id: 'buster', name: 'Buster Blackjack', short: 'Buster', cards: 'The dealer’s final hand',
+  { id: 'buster', name: 'Buster Blackjack', short: 'Buster', cards: 'The dealer’s final hand', edge: 6.1,
     table: [['Bust with 8+ cards and your blackjack', 2000], ['Bust with 7 cards and your blackjack', 800], ['Bust with 8+ cards', 250], ['Bust with 7 cards', 50], ['Bust with 6 cards', 18], ['Bust with 5 cards', 4], ['Bust with 3 or 4 cards', 2]] },
-  { id: 'dpairs', name: 'Dealer Pairs', short: 'Dealer\nPairs', cards: 'The dealer’s first two cards',
+  { id: 'dpairs', name: 'Dealer Pairs', short: 'Dealer\nPairs', cards: 'The dealer’s first two cards', edge: 4.1,
     table: [['Perfect pair', 25], ['Coloured pair', 12], ['Red/black pair', 6]] },
 ];
 
 // On the Free Bet table the last side-bet slot holds Push 22 instead of Dealer Pairs: the one bet
 // that wins on the dealer's 22, the total that pushes every other hand there.
-export const PUSH22 = { id: 'push22', slot: 'dpairs', name: 'Push 22', short: 'Push\n22', cards: 'The dealer’s final hand', table: [['Dealer ends on 22', 11]] };
+export const PUSH22 = { id: 'push22', slot: 'dpairs', name: 'Push 22', short: 'Push\n22', cards: 'The dealer’s final hand', edge: 12.9, table: [['Dealer ends on 22', 11]] };
 export const push22 = dealerTotal => dealerTotal === 22 ? { key: 'push22', label: 'Dealer 22', pays: 11 } : null;
 
 const RED = new Set(['♥', '♦']);
@@ -77,7 +80,7 @@ export function luckyLucky(p1, p2, up) {
   if (sevens && suited) return { key: 'suited777', label: 'Suited 7-7-7', pays: 200 };
   if (sixSevenEight && suited) return { key: 'suited678', label: 'Suited 6-7-8', pays: 100 };
   if (sevens) return { key: '777', label: '7-7-7', pays: 50 };
-  if (sixSevenEight) return { key: '678', label: '6-7-8', pays: 25 };
+  if (sixSevenEight) return { key: '678', label: '6-7-8', pays: 30 };   // the widely dealt 200/100/50/30 table (Nevada GameAce, South Dakota)
   const t = bestTotal(cards);
   if (t === 21) return suited ? { key: 'suited21', label: 'Suited 21', pays: 15 } : { key: '21', label: 'Any 21', pays: 3 };
   if (t === 20) return { key: '20', label: 'Any 20', pays: 2 };

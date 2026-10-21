@@ -1,7 +1,7 @@
 /* Spader: charcoal, brass and ivory. The table itself is a WebGL scene; this is the chrome around it. */
 :root {
   --bg: #0c0c0d; --panel: #141416; --panel-2: #1b1b1e; --line: #2b2b2f; --line-2: #3a3a3f;
-  --ivory: #ece4d2; --muted: #a39d91; --dim: #6f6a62;
+  --ivory: #ece4d2; --muted: #a39d91; --dim: #8a847a;   /* dim still reads 4.5:1 on the panels: small labels use it */
   --gold: #c9a45c; --gold-hi: #e2c483; --gold-lo: #8d7038;
   --win: #d8b86e; --loss: #b85a4f;
   --ease: cubic-bezier(.2, .8, .2, 1);
@@ -29,23 +29,41 @@ kbd { font: 700 10px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; co
 /* The page never scrolls or resizes itself: the app is pinned to the viewport, and the dock keeps one
    height in every game state, so the table (and its camera) never zooms while you play. */
 :root { --dock-h: 150px; }
-.app { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr var(--dock-h); overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+/* One column that may shrink below its content (the bar's row of items must never widen the page). The notch and
+   status-bar insets are kept here, once: the bar and the dock inside add only their own padding. */
+.app { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr var(--dock-h); overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 body:not(.ready) .app { visibility: hidden; }
 
+/* ---- the splash: drawn by index.html before any script runs; it becomes a message if the salon can't open ---- */
+.splash { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; background: var(--bg); color: var(--ivory); text-align: center; font: 500 15px/1.45 Inter, system-ui, sans-serif; transition: opacity .45s ease, visibility 0s .45s; }
+.splash svg { width: 54px; height: 54px; filter: drop-shadow(0 6px 18px rgba(201, 164, 92, .3)); }
+.splash .keylight { animation: keylight 2.4s ease-in-out infinite; }
+.splash p { margin: 0; max-width: 34em; color: #cfc8ba; }
+.splash .splash-word { font: 500 26px/1 "Bodoni Moda", Georgia, serif; letter-spacing: .01em; }
+.splash .splash-word i { font-style: italic; font-weight: 600; color: var(--gold-hi); }
+.splash .splash-why { font-size: 13px; color: var(--muted); }
+.splash .pill { margin-top: 4px; }
+.splash:not(.failed) .splash-fail, .splash.failed .splash-wait { display: none; }
+body.ready .splash:not(.failed) { opacity: 0; visibility: hidden; pointer-events: none; }
+body.reduced .splash .keylight { animation: none; }
+
 /* ---- top bar ---------------------------------------------------------------------------- */
-.top { grid-row: 1; grid-column: 1; display: flex; align-items: center; gap: 20px; padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); position: relative; z-index: 3; }
-/* Progressive blur: the table runs up under the bar and is blurred more the higher it goes, in five
-   stacked backdrop-filter layers (1-16 px), each masked to its own band so the steps blend; a tint
-   on top keeps the numbers readable. The effect reaches a little below the bar and fades out. */
+.top { grid-row: 1; grid-column: 1; display: flex; align-items: center; gap: 20px; padding: 10px 16px; position: relative; z-index: 3; min-width: 0; }
+/* only the name gives way when the bar is short of room (phones drop it below, keeping the spade); the wallet,
+   the shoe and the buttons keep their size, so the settings button can never be pushed off the screen */
+.top > .wallet, .top > .shoe-meter, .top > .tools { flex: none; }
+.top > .brand { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+/* Progressive blur: the table runs up under the bar and is blurred more the higher it goes, in three
+   stacked backdrop-filter layers (2-16 px), each masked to its own band so the steps blend; a tint
+   on top keeps the numbers readable. The effect reaches a little below the bar and fades out. (Each
+   layer is recomposited whenever the table draws: three look as smooth as five did under the tint.) */
 .top-blur { position: absolute; inset: 0 0 -26px 0; z-index: -1; pointer-events: none;
   background: linear-gradient(rgba(10, 10, 11, .82), rgba(10, 10, 11, .55) 62%, rgba(10, 10, 11, 0)); }
 .top-blur i { position: absolute; inset: 0; --m1: 0%; --m2: 20%; --m3: 40%; --m4: 60%;
   -webkit-mask-image: linear-gradient(to top, transparent var(--m1), #000 var(--m2), #000 var(--m3), transparent var(--m4)); mask-image: linear-gradient(to top, transparent var(--m1), #000 var(--m2), #000 var(--m3), transparent var(--m4)); }
-.top-blur i:nth-child(1) { -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px); --m1: 0%; --m2: 12%; --m3: 25%; --m4: 37%; }
-.top-blur i:nth-child(2) { -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); --m1: 12%; --m2: 25%; --m3: 37%; --m4: 50%; }
-.top-blur i:nth-child(3) { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); --m1: 25%; --m2: 37%; --m3: 50%; --m4: 62%; }
-.top-blur i:nth-child(4) { -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); --m1: 37%; --m2: 50%; --m3: 62%; --m4: 75%; }
-.top-blur i:nth-child(5) { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); --m1: 50%; --m2: 62%; --m3: 100%; --m4: 100%; }
+.top-blur i:nth-child(1) { -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); --m1: 0%; --m2: 14%; --m3: 30%; --m4: 46%; }
+.top-blur i:nth-child(2) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); --m1: 30%; --m2: 46%; --m3: 58%; --m4: 72%; }
+.top-blur i:nth-child(3) { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); --m1: 58%; --m2: 72%; --m3: 100%; --m4: 100%; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .top-blur { background: linear-gradient(#111113, rgba(12, 12, 13, .9) 70%, rgba(12, 12, 13, 0)); } }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left; }
 .brand .mark { display: block; width: 32px; height: 32px; flex: none; }
@@ -68,7 +86,10 @@ body:not(.ready) .app { visibility: hidden; }
 .gauge circle.g1, .gauge circle.g2 { transform-box: view-box; transform-origin: 50px 50px; stroke-dashoffset: 0; transition: stroke-dasharray 1s ease, transform 1s ease; }
 .gauge circle.gm { fill: #f2c417; stroke: #0c0c0d; stroke-width: 2; }
 .tools { display: flex; gap: 6px; }
-.icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); border: 1px solid transparent; }
+.icon { position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); border: 1px solid transparent; }
+/* small round buttons keep their look but take a 44px finger (an invisible apron round them) */
+.icon::after, .tray-toggle::after, .rt-nb .pill::after { content: ''; position: absolute; inset: min(0px, (100% - 44px) / 2); }
+.tray-toggle::after { inset: -7px -2px; }
 @media (hover: hover) { .icon:hover { color: var(--ivory); background: var(--panel-2); border-color: var(--line); } }
 .icon svg { width: 21px; height: 21px; }
 #sound .slash { display: none; }
@@ -113,7 +134,7 @@ body:not(.ready) .app { visibility: hidden; }
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
 .banner.bj.show::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255, 236, 190, .35) 50%, transparent 65%); transform: translateX(-100%); animation: glint 1.1s .35s ease-in-out forwards; }
 @keyframes glint { to { transform: translateX(100%); } }
-body[data-mode="result"] .feed { opacity: 0; transition: opacity .2s; }
+body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity .2s; }
 /* hand totals become the outcome when the hand is settled */
 .hand-total.win { background: linear-gradient(#e2c483, #b08a45); color: #17130b; border-color: #e2c483; }
 .hand-total.push { background: #2a2a2f; color: var(--ivory); border-color: #55555c; }
@@ -133,7 +154,10 @@ body[data-mode="result"] .feed { opacity: 0; transition: opacity .2s; }
 
 /* ---- the dock ----------------------------------------------------------------------------------- */
 .dock { position: relative; z-index: 3; display: grid; grid-template-areas: 'dock'; justify-items: center; align-items: center; padding: 10px 16px max(12px, env(safe-area-inset-bottom)); background: linear-gradient(#0f0f10, #0b0b0c); border-top: 1px solid #1d1d20; min-height: 0; }
-.hint { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 8px); translate: -50% 0; margin: 0; width: max-content; max-width: calc(100% - 32px); padding: 6px 14px; border-radius: 99px; background: rgba(12, 12, 13, .72); font-size: 14px; color: #cfc8ba; text-align: center; pointer-events: none; transition: opacity .2s; }
+/* The hint's words morph in a span of their own (a morphing root is made inline and relative, which would pull the
+   line out of place). It hangs just under the bar and above its blur, so it is always sharp. */
+.hint { position: absolute; z-index: 4; left: 50%; top: calc(var(--top-h, 0px) + 8px); translate: -50% 0; margin: 0; width: max-content; max-width: calc(100% - 32px); padding: 6px 14px; border-radius: 99px; background: rgba(12, 12, 13, .72); font-size: 14px; color: #cfc8ba; text-align: center; pointer-events: none; transition: opacity .2s; }
+.hint:empty, .hint:has(> span:empty) { opacity: 0; }
 .hint.off { opacity: 0; }
 .feed { position: absolute; left: 14px; top: calc(50% + var(--top-h, 0px) / 2); translate: 0 -50%; margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; width: 210px; pointer-events: none; }
 .feed li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 10px; padding: 7px 11px 6px; border-radius: 11px; background: rgba(12, 12, 13, .86); border: 1px solid var(--line-2);
@@ -156,6 +180,11 @@ body[data-mode="result"] .feed { opacity: 0; transition: opacity .2s; }
 .tray-toggle .sum:empty { display: none; }
 .tray-toggle svg { width: 16px; height: 16px; transition: transform .2s var(--ease); transform: rotate(-90deg); }
 .tray.open .tray-toggle svg { transform: none; }
+/* (i): the side bets' paytables and what their words mean, in the settings (a tile's tooltip is no use to a finger) */
+.tray-info { position: relative; flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--panel); color: var(--muted); }
+.tray-info svg { width: 17px; height: 17px; }
+.tray-info::after { content: ''; position: absolute; inset: -7px; }
+@media (hover: hover) { .tray-info:hover { color: var(--ivory); border-color: #55555c; } }
 .tiles { display: none; gap: 6px; }
 .tray.open .tiles { display: flex; }
 .tile { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 7px; align-items: center; justify-items: start; gap: 2px; min-width: 104px; padding: 5px 10px 5px 5px; border-radius: 11px; background: linear-gradient(#18181b, #121214); border: 1px solid var(--line-2); text-align: left; transition: border-color .2s, background .2s, opacity .2s; }
@@ -231,7 +260,7 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 /* the side-bet tray slides back down as it closes */
 .tray.open.closing .tiles { animation: tray-out .19s cubic-bezier(.4, 0, 1, 1) forwards; pointer-events: none; }
 @keyframes tray-out { to { opacity: 0; transform: translateY(8px); } }
-.sheet > header { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.sheet > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .sheet h2 { margin: 0; font: 700 20px/1 Cinzel, Georgia, serif; letter-spacing: .06em; }
 .opts { display: grid; padding: 8px 20px; }
 .opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
@@ -257,6 +286,25 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .paytables table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .paytables td { padding: 5px 0; border-top: 1px solid var(--line); }
 .paytables td:last-child { text-align: right; font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
+.paytables .terms { margin: 8px 0 0; padding-left: 16px; color: #cfc8ba; font-size: 12.5px; line-height: 1.45; }
+.paytables .terms b { font-weight: 600; color: var(--ivory); }
+/* Last hands: the book of rounds, newest first, each with its lines and its net; this visit's net in the heading */
+.sheet summary .book-net { margin: 0 10px 0 auto; font-size: 11px; letter-spacing: .1em; color: var(--muted); }
+.book-net b, .wallet .visit output { font-variant-numeric: tabular-nums; }
+.book-net b { margin-left: 4px; font: 800 16px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; color: var(--ivory); }
+.book-net b[data-tone="up"] { color: var(--gold-hi); } .book-net b[data-tone="down"] { color: #e7a197; }
+.book { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+.book .none { color: var(--muted); font-size: 13px; }
+.bk { padding: 8px 11px 9px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.bk-head { display: flex; align-items: baseline; gap: 8px; }
+.bk-head b { font: 700 11px/1.2 Inter, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+.bk-head time { font-size: 11.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.bk-head em { margin-left: auto; font: 800 19px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ivory); }
+.bk.up .bk-head em { color: var(--gold-hi); } .bk.down .bk-head em { color: #e7a197; }
+.bk ul { list-style: none; margin: 5px 0 0; padding: 0; display: grid; gap: 3px; }
+.bk li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; line-height: 1.35; color: #cfc8ba; }
+.bk li em { flex: none; font: 700 14.5px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted); }
+.bk li.side { font-size: 12.5px; color: var(--muted); } .bk li.bolt span { color: #b9c8ff; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 16px; font-size: 14px; }
 .keys dt { font: 800 14px/1.3 "Barlow Condensed", sans-serif; color: var(--gold-hi); letter-spacing: .04em; }
 .keys dd { margin: 0; color: #cfc8ba; }
@@ -282,13 +330,14 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
   .decisions { gap: 6px; }
   .hint { font-size: 12.5px; top: calc(var(--top-h, 0px) + 6px); padding: 5px 11px; }
   .feed { left: 8px; right: 8px; top: auto; bottom: 8px; translate: none; width: auto; display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 4px; }
-  .feed li.loss { display: none; }
+  .feed li.loss { display: none; } .feed.stay li.loss { display: grid; }   /* (the losses too, once the result waits for you) */
   .feed li { padding: 5px 8px 4px; } .feed li span { font-size: 11.5px; } .feed li em { font-size: 15px; }
   .banner em { font-size: 20px; } .banner .rb-label { font-size: 10px; }
   .hand-total { font-size: 15px; padding: 5px 7px 4px; min-width: 30px; }
   }
 @media (max-width: 760px) {
-  :root { --dock-h: 168px; }
+  /* the tray, the chip row (with head room for the chip in hand) and the action row, over the home indicator */
+  :root { --dock-h: calc(178px + max(0px, env(safe-area-inset-bottom) - 12px)); }
   .tray { min-height: 30px; }
   /* on a phone the tray opens as a sheet over the rail, so the dock keeps its height */
   .tray.open .tiles { display: grid; grid-template-columns: repeat(3, 1fr); position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); padding: 8px; border-radius: 16px; background: rgba(16, 16, 18, .96); border: 1px solid var(--line-2); box-shadow: 0 -10px 30px rgba(0, 0, 0, .45); animation: sheet .22s var(--ease); }
@@ -298,24 +347,30 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
   .tile small { font-size: 11px; }
 }
 @media (max-width: 380px) { .chip { width: 40px; height: 40px; } }
+/* an upright phone: the bar keeps the spade (it is the lobby button) and lets the name go; the narrowest also the shoe */
+@media (max-width: 440px) { .brand .word { display: none; } .top { gap: 8px; padding-left: 12px; padding-right: 10px; } }
+@media (max-width: 350px) { .shoe-meter { display: none; } .dock .betting { row-gap: 8px; } .dock .chips { padding-top: 10px; } }
 
 /* ---- phones on their side: table left, controls in a column on the right ------------------------------ */
 @media (orientation: landscape) and (max-height: 520px) {
-  .app { grid-template-columns: 1fr minmax(240px, 34vw); grid-template-rows: auto 1fr; }
-  .dock { display: flex; flex-direction: column; justify-content: center; }
+  .app { grid-template-columns: minmax(0, 1fr) minmax(240px, 34vw); grid-template-rows: auto 1fr; }
+  /* centred while it fits; taller than the column (the side bets open) it starts at the top and scrolls, so the
+     tray's own toggle is never pushed up under the bar */
+  .dock { display: flex; flex-direction: column; justify-content: safe center; }
+  .dock > * { max-width: 100%; }   /* (centred items take their content's width: never more than the column's) */
   .betting, .decisions { transform: none !important; }
   body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions { display: none; }
   .tray.open .tiles { position: static; padding: 0; background: none; border: 0; box-shadow: none; animation: none; }
   .top { grid-column: 1 / -1; padding-top: 5px; padding-bottom: 5px; gap: 12px; }
   .brand small, .shoe-words { display: none; }
-  .brand .wordmark { font-size: 16px; } .brand .mark { width: 24px; height: 24px; } .bank output { font-size: 17px; } .bank .k { font-size: 9px; }
+  .brand .wordmark { font-size: 16px; } .brand .mark { width: 24px; height: 24px; } .bank output { font-size: 17px; } .bank .k { font-size: 10px; letter-spacing: .1em; }
   .icon { width: 34px; height: 34px; }
   .gauge { width: 26px; height: 26px; }
   .stage { grid-column: 1; grid-row: 1 / 3; }
-  .dock { grid-column: 2; grid-row: 2; border-top: 0; border-left: 1px solid #1d1d20; min-height: 0; overflow-y: auto; align-content: center; padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) 10px; }
+  .dock { grid-column: 2; grid-row: 2; border-top: 0; border-left: 1px solid #1d1d20; min-height: 0; overflow-y: auto; align-content: center; padding: 8px 10px max(8px, env(safe-area-inset-bottom)) 10px; }
   .betting { gap: 8px; }
-  .tray { flex-direction: column; gap: 6px; }
-  .tray.open .tiles { display: grid; grid-template-columns: repeat(2, 1fr); width: 100%; }
+  .tray { flex-wrap: wrap; gap: 6px; }   /* the toggle and (i) share a line, the tiles take the next ones */
+  .tray.open .tiles { display: grid; grid-template-columns: repeat(2, 1fr); width: 100%; flex-basis: 100%; }
   .tile { min-width: 0; padding: 5px 7px 4px; } .tile b { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; } .tile small i { display: none; }
   .chips { flex-wrap: wrap; justify-content: center; max-width: 230px; }
   .chip { width: 42px; height: 42px; }
@@ -330,7 +385,11 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
   .feed li { padding: 5px 8px 4px; } .feed li span { font-size: 11.5px; } .feed li em { font-size: 15px; }
   .banner em { font-size: 19px; }
 }
-body.reduced *, body.reduced *::before, body.reduced *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+/* Reduce motion: every animation runs once, at once, to its end (an endless one cut to a hundredth of a millisecond
+   would jump about every frame instead of standing still), and the Deal and Spin glint has nothing to show. */
+body.reduced *, body.reduced *::before, body.reduced *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+body.reduced .shimmer :is(.shimmer-spark-wrap, .shimmer-spark, .shimmer-cone) { animation: none !important; }
+body.reduced .shimmer .shimmer-spark-wrap { display: none; }
 
 /* motion helpers: elements that springs scale need a box of their own */
 .hand-total > span, .bank output, .spot .amount, .pill .label { display: inline-block; }
@@ -416,6 +475,11 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .sh
   .tray.open .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile { grid-template-columns: 26px minmax(0, 1fr); column-gap: 6px; padding: 4px 7px 4px 4px; }
   .tile .ico { width: 26px; height: 26px; border-radius: 7px; } .tile .ico svg { width: 16px; height: 16px; }
+  /* the tray open: tiles go to one line and the chips to one row, so Deal stays in the column without a scroll */
+  .tray.open .tile { grid-template-columns: minmax(0, 1fr) auto; padding: 6px 8px 5px; } .tray.open .tile .ico { display: none; }
+  .tray.open .tile b, .tray.open .tile small { grid-column: auto; grid-row: 1; }
+  .tray.open ~ .chips { flex-wrap: nowrap; justify-content: center; gap: 3px; max-width: none; width: 100%; }
+  .tray.open ~ .chips .chip { flex: 0 1 34px; min-width: 0; width: 34px; height: auto; aspect-ratio: 1; }
 }
 
 /* ---- insurance: asked in the dock, where the decisions live, so the table stays in full view ----------- */
@@ -449,7 +513,7 @@ body.reduced .ins-ace { animation: none; }
 /* ---- head room for the chip in hand: it lifts 7px and wears a 4px ring, so the row keeps clear space above */
 .betting { row-gap: 12px; }
 .chips { padding-top: 14px; padding-bottom: 4px; margin-top: -4px; }
-@media (max-width: 760px) { .chips { padding-top: 13px; } }
+@media (max-width: 760px) { .chips { padding-top: 13px; } .betting { row-gap: 10px; } }
 @media (orientation: landscape) and (max-height: 520px) { .chips { padding-top: 12px; row-gap: 12px; } }
 
 
@@ -493,7 +557,7 @@ body.reduced .ins-ace { animation: none; }
 .rail-title { margin: 0; display: flex; align-items: center; gap: 14px; font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .32em; text-transform: uppercase; color: var(--gold); }
 .rail-title::before, .rail-title::after { content: ''; width: 60px; height: 1px; background: linear-gradient(90deg, transparent, rgba(201, 164, 92, .8)); }
 .rail-title::after { transform: scaleX(-1); }
-.tcards { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, .72fr); gap: 12px; padding-top: 10px; }
+.tcards { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, .9fr); gap: 12px; padding-top: 10px; }
 .tcard { --acc: #c9a45c; position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto 1fr auto; gap: 4px 12px; align-items: start; text-align: left;
   min-height: 132px; padding: 16px 16px 14px; border-radius: 18px; color: var(--ivory);
   background: linear-gradient(180deg, rgba(24, 22, 20, .78), rgba(10, 10, 11, .86)); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
@@ -513,15 +577,17 @@ body.reduced .ins-ace { animation: none; }
 .tcard[aria-checked="true"] .t-ico { background: var(--acc); color: #121110; box-shadow: 0 0 22px color-mix(in srgb, var(--acc) 55%, transparent); }
 .tcard[aria-checked="true"] .t-ico svg .cut { stroke: var(--acc); }
 .t-kick { font: 700 10px/1.2 Inter, system-ui, sans-serif; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
-.tcard b { font: 500 30px/1 "Bodoni Moda", Georgia, serif; }
+/* a name is never clipped: it gives up size with the card's width (a narrow laptop, an iPad on its side) */
+.tcard b { min-width: 0; font: 500 clamp(21px, 2.2vw, 30px)/1 "Bodoni Moda", Georgia, serif; }
 .t-line { grid-column: 1 / -1; margin-top: 8px; font: 500 13px/1.35 Inter, system-ui, sans-serif; color: rgba(236, 228, 210, .72); }
 .t-stat { grid-column: 1 / -1; justify-self: start; margin-top: 6px; padding: 5px 9px; border-radius: 99px; font: 700 10.5px/1 Inter, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--acc); background: color-mix(in srgb, var(--acc) 12%, transparent); border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent); }
 .tcard.soon { cursor: default; opacity: .72; --acc: #7c756a; }
-.tcard.soon b { font-size: 22px; color: var(--muted); }
+.tcard.soon b { font-size: clamp(15px, 1.6vw, 22px); color: var(--muted); }
 .tcard.soon .rope { position: absolute; left: -10%; right: -10%; top: 58%; height: 3px; border-radius: 3px; rotate: -8deg; background: repeating-linear-gradient(90deg, #7d1f28 0 10px, #a8323d 10px 20px); box-shadow: 0 2px 6px rgba(0, 0, 0, .6); opacity: .85; }
 .rail .seat { height: 60px; min-width: min(420px, 100%); justify-content: center; gap: 12px; font-size: 18px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5), 0 0 40px rgba(201, 164, 92, .25); }
 .rail .seat .which { font: 600 12px/1 Inter, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; opacity: .72; }
 .rail .seat .which::before { content: '· '; }
+.lobby-note { margin: 0; max-width: min(520px, calc(100vw - 32px)); padding: 7px 16px; border-radius: 18px; background: rgba(12, 12, 13, .72); border: 1px solid rgba(201, 164, 92, .28); font: 500 13.5px/1.35 Inter, system-ui, sans-serif; color: #e6dfd0; text-align: center; }
 /* while the menu is up (and while the camera flies in) the table's own chrome stays out of the shot */
 body.in-lobby .top, body.in-lobby .dock, body.in-lobby #overlay, body.in-lobby .hint, body.in-lobby .feed, body.in-lobby .banner, body.in-lobby .zap, body.in-lobby .lightning,
 body.flying .top, body.flying .dock, body.flying #overlay, body.flying .hint, body.flying .feed, body.flying .lightning { opacity: 0; pointer-events: none; }
@@ -543,12 +609,13 @@ body.flying .top, body.flying .dock, body.flying #overlay, body.flying .hint, bo
   .tcards::-webkit-scrollbar { display: none; }
   .tcard { flex: 0 0 64%; scroll-snap-align: center; min-height: 0; padding: 13px 14px; }
   .t-line { font-size: 12.5px; margin-top: 4px; }
-  .tcard b { font-size: 26px; }
+  .tcard b { font-size: clamp(20px, 6.8vw, 26px); }
   .rail .seat { width: 100%; height: 56px; }
 }
 @media (orientation: landscape) and (max-height: 520px) {
   .lobby-word span { font-size: 54px; } .lobby-tag { display: none; } .lobby-mark { width: 32px; height: 32px; }
   .tcard { min-height: 0; padding: 10px 12px; } .t-line { display: none; } .tcard b { font-size: 22px; }
+  .t-ico { grid-row: 1; width: 30px; height: 30px; } .tcard b { grid-column: 1 / -1; } .tcard.soon b { font-size: 17px; }   /* the name under the icon: the whole card's width */
   .rail .seat { height: 46px; } .rail-title { display: none; }
 }
 body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, body.reduced .keylight { animation: none !important; }
@@ -566,20 +633,23 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
   box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, .35), inset 0 2px 3px rgba(255, 240, 210, .25), 0 2px 6px rgba(0, 0, 0, .45); }
 .wallet .coin::after { content: ''; position: absolute; inset: 27%; border-radius: 50%; border: 1px solid rgba(220, 184, 108, .85); box-shadow: 0 0 0 2px rgba(26, 22, 17, .9); }
 .wallet .w-seg { display: grid; gap: 2px; line-height: 1; }
-.wallet .k { white-space: nowrap; font: 700 9px/1 Inter, system-ui, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.wallet .k { white-space: nowrap; font: 700 10px/1 Inter, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #969083; }   /* 4.5:1 on the capsule's warmer glass */
 .wallet output { font: 800 21px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; font-variant-numeric: tabular-nums; color: var(--ivory); }
 .wallet .w-seg:first-of-type output { color: var(--gold-hi); }
 .wallet .w-rule { width: 1px; align-self: stretch; margin: 5px 2px; background: linear-gradient(transparent, rgba(201, 164, 92, .4), transparent); }
 .wallet .play output { color: var(--ivory); opacity: .92; }
+/* this visit's net (the book in core/ledger.mjs): gold when up, rose when down; a phone has it under Last hands */
+.wallet .visit output[data-tone="up"] { color: var(--gold-hi); } .wallet .visit output[data-tone="down"] { color: #e7a197; }
+@media (max-width: 600px) { .wallet .visit { display: none; } }
 .wallet.big { height: 56px; padding: 6px 24px 6px 8px; gap: 12px; }
 .wallet.big .coin { width: 42px; height: 42px; }
 .wallet.big output { font-size: 28px; }
-.wallet.big .k { font-size: 9.5px; }
+.wallet.big .k { font-size: 10px; }
 .lobby-balance.wallet { align-items: center; }
 @media (max-width: 760px) {
   .wallet { height: 38px; gap: 8px; padding: 4px 12px 4px 4px; }
   .wallet .coin { width: 28px; height: 28px; }
-  .wallet output { font-size: 18px; } .wallet .k { font-size: 8.5px; letter-spacing: .12em; }
+  .wallet output { font-size: 18px; } .wallet .k { font-size: 10px; letter-spacing: .08em; }
   .wallet.big { height: 50px; } .wallet.big .coin { width: 38px; height: 38px; } .wallet.big output { font-size: 25px; }
 }
 @media (max-width: 400px) { .bank.wallet .coin { display: none; } .bank.wallet { padding-left: 12px; } }
@@ -653,6 +723,9 @@ body[data-table="lightning"] .hint { top: calc(var(--top-h, 0px) + var(--board-h
 @media (orientation: landscape) and (max-height: 520px) { .lb-cell { min-width: 36px; padding: 2px 4px; } .lb-cell b { font-size: 15px; } .lb-cell small { font-size: 8px; } .zap .splash b { font-size: 72px; } }
 @media (prefers-reduced-motion: reduce) { .lb-cell.flash, .l-badge, .zap .splash.go, .lightning.charging .lb-row { animation: none !important; } }
 body.reduced .lb-cell.flash, body.reduced .l-badge, body.reduced .zap .splash.go, body.reduced .lightning.charging .lb-row { animation: none !important; }
+/* Flashing effects (settings): soft turns the board's flicker into a slow swell; off keeps every light steady */
+body[data-flash="soft"] .lightning.charging .lb-row { animation: charge .9s ease-in-out infinite; }
+body[data-flash="off"] .lb-cell.flash, body[data-flash="off"] .lightning.charging .lb-row { animation: none !important; }
 
 
 /* ==== roulette ======================================================================================== */
@@ -668,6 +741,16 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-fade.on { opacity: 1; }
 .r-fade.quick { transition-duration: .09s; }
 .r-hint, body[data-table] .r-hint { top: auto; bottom: 12px; }   /* beat the blackjack tables' hint placement, which may still be on the body */
+/* An upright phone: the layout runs down to the foot of the picture (the column bets are its last row), so the line
+   hangs over the wheel instead, under the recent numbers, and the result takes the same place (a result that is up
+   keeps it until your next bet; a refusal clears it). While the ball runs the line goes to the foot. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .r-hint, body[data-table] .r-hint { top: calc(var(--top-h, 0px) + 50px); bottom: auto; }
+  body[data-rmode="spin"] .r-hint { top: auto; bottom: 12px; }
+  .rstage:has(.r-win.show) .r-hint { opacity: 0; }
+  .r-win { top: calc(var(--top-h, 0px) + 48px); grid-template-columns: auto auto; grid-template-areas: 's e' 'b e' 'g g'; column-gap: 16px; row-gap: 1px; align-items: center; padding: 7px 18px 8px; }
+  .r-win small { grid-area: s; justify-self: start; } .r-win b { grid-area: b; justify-self: start; } .r-win em { grid-area: e; justify-self: end; } .r-win .r-gross { grid-area: g; margin-top: 2px; }
+}
 
 /* recent numbers: newest on the left, a bigger chip */
 .r-history { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 8px); translate: -50% 0; display: flex; gap: 5px; margin: 0; padding: 5px 7px; list-style: none; border-radius: 12px; background: rgba(10, 10, 11, .58); border: 1px solid rgba(255, 255, 255, .06); }
@@ -700,31 +783,46 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-win b { font: 500 15px/1.2 "Bodoni Moda", serif; font-style: italic; color: var(--ivory); }
 .r-win em { font: 800 34px/1 "Barlow Condensed", sans-serif; font-style: normal; color: var(--ivory); font-variant-numeric: tabular-nums; }
 .r-win.up { border-color: rgba(226, 196, 131, .75); } .r-win.up em { color: var(--gold-hi); text-shadow: 0 0 18px rgba(226, 196, 131, .45); }
-.r-win.down em { color: #b9b2a5; font-size: 24px; }
+.r-win.down em { color: #e7a197; font-size: 28px; }
+.r-win .r-gross { font: 600 11.5px/1.2 Inter, system-ui, sans-serif; color: var(--muted); font-variant-numeric: tabular-nums; }
+.r-win .r-gross:empty { display: none; }
 .r-tag { position: absolute; left: 0; top: 0; translate: -50% -100%; display: flex; gap: 5px; align-items: baseline; padding: 3px 8px; border-radius: 99px; background: rgba(12, 12, 13, .82); white-space: nowrap; animation: tag-up 2.6s var(--ease) forwards; }
 .r-tag b { font: 700 11px/1 Inter, system-ui, sans-serif; color: var(--muted); } .r-tag span { font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
 @keyframes tag-up { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
 
 /* sheets: the racetrack and the statistics rise over the table */
-.r-sheet { position: absolute; left: 50%; bottom: 10px; translate: -50% 0; width: min(760px, calc(100% - 20px)); max-height: calc(100% - var(--top-h, 0px) - 70px); overflow: auto; padding: 12px 14px 14px; border-radius: 18px; background: rgba(15, 15, 17, .96); border: 1px solid var(--line-2); box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); pointer-events: auto; z-index: 5; }
+.r-sheet { position: absolute; left: 0; right: 0; margin: 0 auto; bottom: 10px; width: min(760px, calc(100% - 20px)); max-height: calc(100% - var(--top-h, 0px) - 70px); overflow: auto; padding: 12px 14px 14px; border-radius: 18px; background: rgba(15, 15, 17, .96); border: 1px solid var(--line-2); box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); pointer-events: auto; z-index: 5; }
 .r-sheet header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .r-sheet h3 { margin: 0; flex: 1; font: 500 19px/1.1 "Bodoni Moda", serif; font-style: italic; color: var(--ivory); }
 .r-sheet h3 small { margin-left: 8px; font: 600 11px/1 Inter, system-ui, sans-serif; font-style: normal; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
 .r-close { flex: none; }
-.rt { width: 100%; height: auto; display: block; }
+/* the track is drawn in screen pixels for its room (see trackShape in rgame.mjs): --fs and --zfs come with it */
+.rt { width: 100%; height: auto; display: block; overflow: visible; }
 .rt-band { fill: rgba(18, 58, 43, .9); stroke: rgba(201, 164, 92, .8); stroke-width: 1.5; }
 .rt-inner { fill: rgba(10, 30, 22, .9); stroke: rgba(236, 228, 208, .5); stroke-width: 1.2; }
-.rt-num { cursor: pointer; }
-.rt-num circle { stroke: rgba(236, 228, 208, .55); stroke-width: 1.2; transition: stroke .15s, filter .15s; }
-.rt-num.red circle { fill: #a3141f; } .rt-num.black circle { fill: #141416; } .rt-num.green circle { fill: #0d7a45; }
-.rt-num text { font: 700 14px/1 Cinzel, serif; fill: #fff; text-anchor: middle; pointer-events: none; }
-.rt-num.lit circle { stroke: var(--gold-hi); stroke-width: 3; filter: drop-shadow(0 0 5px rgba(226, 196, 131, .8)); }
-.rt-zone { cursor: pointer; } .rt-zone rect { fill: rgba(236, 228, 208, .04); stroke: rgba(236, 228, 208, .35); stroke-width: 1.2; transition: fill .15s; }
-.rt-zone text { font: 700 16px/1 "Bodoni Moda", serif; font-style: italic; fill: var(--ivory); text-anchor: middle; pointer-events: none; }
-@media (hover: hover) { .rt-zone:hover rect { fill: rgba(226, 196, 131, .16); stroke: var(--gold-hi); } .rt-num:hover circle { stroke: var(--gold-hi); stroke-width: 2.6; } }
-.rt-zone:active rect { fill: rgba(226, 196, 131, .24); }
+.rt-num { cursor: pointer; outline: none; }
+.rt-num .hit { fill: transparent; stroke: none; }   /* the whole place between its neighbours takes the tap */
+.rt-num .face { stroke: rgba(236, 228, 208, .55); stroke-width: 1.2; transition: stroke .15s, filter .15s; }
+.rt-num.red .face { fill: #a3141f; } .rt-num.black .face { fill: #141416; } .rt-num.green .face { fill: #0d7a45; }
+.rt-num text { font: 700 var(--fs, 14px)/1 Cinzel, serif; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.rt-num.lit .face { stroke: var(--gold-hi); stroke-width: 3; filter: drop-shadow(0 0 5px rgba(226, 196, 131, .8)); }
+.rt-num:focus-visible .face { stroke: #fff; stroke-width: 3.4; }
+.rt-zone { cursor: pointer; outline: none; } .rt-zone path { fill: rgba(236, 228, 208, .04); stroke: rgba(236, 228, 208, .35); stroke-width: 1.2; stroke-linejoin: round; transition: fill .15s; }
+.rt-zone text { font: italic 700 var(--zfs, 16px)/1 "Bodoni Moda", serif; fill: var(--ivory); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+@media (hover: hover) { .rt-zone:hover path { fill: rgba(226, 196, 131, .16); stroke: var(--gold-hi); } .rt-num:hover .face { stroke: var(--gold-hi); stroke-width: 2.6; } }
+.rt-zone:active path { fill: rgba(226, 196, 131, .24); }
+.rt-zone:focus-visible path { fill: rgba(226, 196, 131, .16); stroke: var(--gold-hi); stroke-width: 2.6; }
 .rt-nb { display: flex; align-items: center; gap: 6px; font: 600 12px/1 Inter, system-ui, sans-serif; color: var(--muted); }
-.rt-nb .pill { height: 30px; width: 30px; padding: 0; justify-content: center; font-size: 17px; }
+.rt-nb .pill { position: relative; height: 30px; width: 30px; padding: 0; justify-content: center; font-size: 17px; }
+/* a refusal said in the sheet, over the top of the track for a moment */
+.r-say { position: absolute; left: 50%; top: 54px; translate: -50% 0; z-index: 1; width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 6px 12px; border-radius: 12px; background: rgba(12, 12, 13, .95); border: 1px solid rgba(184, 90, 79, .65); font: 600 12.5px/1.3 Inter, system-ui, sans-serif; color: #f0c9c2; text-align: center; pointer-events: none; }
+/* a phone: the sheets take the picture under the bar, so the track can give every number a finger's room */
+@media (max-width: 760px) and (orientation: portrait), (orientation: landscape) and (max-height: 520px) {
+  .r-sheet { width: calc(100% - 8px); bottom: 4px; max-height: calc(100% - var(--top-h, 0px) - 8px); padding: 8px 10px 10px; }
+  .r-sheet header { margin-bottom: 4px; gap: 8px; } .r-sheet h3 { font-size: 17px; }
+  #rRaceSheet { padding: 6px 4px; } #rRaceSheet header { margin-bottom: 2px; padding: 0 6px; }   /* the track takes all the width there is */
+}
+@media (orientation: landscape) and (max-height: 520px) { .rt-note { display: none; } }
 .rt-nb output { min-width: 14px; text-align: center; font: 800 17px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
 .rt-note, .st-note { margin: 8px 2px 0; font-size: 12.5px; color: var(--dim); }
 .st-hc { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
@@ -763,6 +861,9 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
   .rdock .chips { flex-wrap: wrap; justify-content: center; }
   .rdock .bet-actions { grid-template-areas: 'u c s' 'd d d'; grid-template-columns: auto auto auto; }
   #rSpin { justify-self: center; min-width: 170px; }
+  /* the column is narrow: Undo, Clear and Rebet go to their icons (they keep their names for screen readers) */
+  #rUndo .label, #rClear .label, #rRebet .label, #rX2 .label { display: none; }
+  #rUndo, #rClear, #rRebet, #rX2 { width: 44px; padding: 0; justify-content: center; }
 }
 body.reduced .r-replay::before { animation: none; }
 body[data-room="roulette"] .bj-only { display: none !important; }

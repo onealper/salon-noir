@@ -16,7 +16,5 @@ export function mark({ title = '', glow = true } = {}) {
     + `<path fill="url(#${g})" d="${SPADE}"/><path fill="none" stroke="#0c0b0a" stroke-opacity=".45" stroke-width="1.1" d="${INLAY}"/>`
     + `<path fill="#0c0b0a" d="${KEYHOLE}"/>${glow ? `<path class="keylight" fill="url(#${l})" d="${KEYLIGHT}"/>` : ''}</svg>`;
 }
-// Kept for callers of the old name.
-export const monogram = mark;
 // The wordmark: "Salon" in a Didone roman, "Noir" in its italic, in brass.
 export const wordmark = (cls = '') => `<span class="wordmark ${cls}"><span>Salon</span> <i>Noir</i></span>`;

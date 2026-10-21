@@ -1,39 +1,49 @@
 # Credits
 
-Salon Noir is built on other people's open work. Licence files sit next to the material they cover.
+Salon Noir is built on other people's open work. Licence files sit next to the material they cover. The game's own code is all rights reserved; that does not change any licence below (see [LICENSE](LICENSE)).
+
+Credits live in three places that must agree (PROJECT.md rule 5): this file, the Credits list in the game's settings (`index.html`), and [`src/sounds/CREDITS.txt`](src/sounds/CREDITS.txt), which lists every sound file.
 
 ## Code libraries (vendored in `src/vendor/`)
 
-| Library | Use | Licence |
-|---|---|---|
-| [three.js](https://threejs.org) | 3D rendering | MIT (`THREE-LICENSE.txt`) |
-| [anime.js](https://animejs.com) | UI spring motion | MIT (`ANIMEJS-LICENSE.md`) |
-| [canvas-confetti](https://github.com/catdad/canvas-confetti) | Win confetti | ISC (`CONFETTI-LICENSE.txt`) |
-| Torph | Morphing text and numbers | MIT (`TORPH-LICENSE.txt`) |
-| web-haptics | Phone haptics | MIT (`WEB-HAPTICS-LICENSE.txt`) |
-| cuelume | Synthesised UI cues | MIT (`CUELUME-LICENSE.txt`) |
-| [Magic UI](https://magicui.design) | Shimmer button, progress ring (ported to plain JS) | MIT (`MAGICUI-LICENSE.md`) |
-| Kinetics (kinetics.colorion.co) | Button, toast and accordion timings (ported to plain JS) | n/a |
+Versions, sources and local changes: [`src/vendor/README.md`](src/vendor/README.md).
 
-## Fonts (`src/fonts/`, SIL Open Font License)
+| Library | Version | Use | Licence |
+|---|---|---|---|
+| [three.js](https://threejs.org) (with its `RoomEnvironment` add-on) | r169 | 3D rendering | MIT (`THREE-LICENSE.txt`) |
+| [anime.js](https://animejs.com) by Julian Garnier | 4.5.0 | UI spring motion | MIT (`ANIMEJS-LICENSE.md`) |
+| [canvas-confetti](https://github.com/catdad/canvas-confetti) by Kiril Vatev | 1.9.4 | Win confetti | ISC (`CONFETTI-LICENSE.txt`) |
+| [Torph](https://torph.lochie.me) by Lochie Axon | 0.1.3 | Morphing text and numbers | MIT (`TORPH-LICENSE.txt`) |
+| [web-haptics](https://haptics.lochie.me) by Lochie Axon | 0.0.6 | Phone haptics | MIT (`WEB-HAPTICS-LICENSE.txt`) |
+| [cuelume](https://github.com/danielwh2/cuelume) by Daniel Belyi | 0.2.4, changed | Synthesised UI cues | MIT (`CUELUME-LICENSE.txt`) |
+| [Magic UI](https://magicui.design) | ported | Shimmer button, progress ring (ported to plain JS) | MIT (`MAGICUI-LICENSE.md`) |
+| Kinetics ([kinetics.colorion.co](https://kinetics.colorion.co), by ckissi) | ported | Button, toast, switch and accordion timings (ported to plain JS) | n/a |
 
-Bodoni Moda · Cinzel · Inter · Barlow Condensed. See `OFL-*.txt`.
+## Fonts (`src/fonts/`, SIL Open Font License 1.1)
+
+Bodoni Moda (The Bodoni Moda Project Authors) · Cinzel (The Cinzel Project Authors) · Inter (The Inter Project Authors) · Barlow Condensed (The Barlow Project Authors). See `OFL-*.txt`.
 
 ## Sound and music
 
-- **Music:** "Bossa Antigua" and "Lobby Time" by Kevin MacLeod ([incompetech.com](https://incompetech.com)), CC BY 4.0
-- **Thunder:** "Thunderstorm" by RHumphries (freesound.org), CC BY 3.0
-- **Spark and lightning:** from /tg/station 13 and Space Station 14, CC BY-SA 3.0
-- **Roulette sounds:** from matiasvallejosdev/casino-roulette-game, CC BY-SA 4.0
-- **Cards and chips:** Casino Audio by [Kenney](https://kenney.nl) and "Card Game sounds" by haeldb, CC0 (see `src/sounds/CREDITS.txt`)
-- **Room recordings:** felix.blume, SholeColtis and xkeril (freesound.org), CC0
-- **Chip-select thock:** Kenney Impact Sounds wood knock with a Kenney clay-chip click, CC0
-- **Dealer voices, room, cheers, stings, menu sounds:** made with ElevenLabs
+File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CREDITS.txt). Every kit file was cut, levelled and re-encoded as MP3 for Salon Noir.
+
+- **Music:** "Bossa Antigua", "Lobby Time" and the roulette table's track (`music-roulette.mp3`, title to be confirmed by the owner) by Kevin MacLeod ([incompetech.com](https://incompetech.com)), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- **Thunder:** cut from "Thunderstorm" by [RHumphries](https://freesound.org/people/RHumphries/) (freesound.org), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
+- **Spark and lightning:** from [/tg/station 13](https://github.com/tgstation/tgstation) and [Space Station 14](https://github.com/space-wizards/space-station-14), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/); our edits of them stay CC BY-SA 3.0
+- **Roulette ball clicks:** from [matiasvallejosdev/casino-roulette-game](https://github.com/matiasvallejosdev/casino-roulette-game), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); our edits of them stay CC BY-SA 4.0
+- **Cards and chips:** [Casino Audio](https://kenney.nl/assets/casino-audio) by [Kenney](https://kenney.nl) and ["Card Game sounds"](https://opengameart.org/content/card-game-sounds) by haeldb, CC0
+- **The room:** recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0, mixed into one loop (`room-casino-1.mp3`)
+- **Chip-select thock:** a [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) wood knock with a Kenney clay-chip click, CC0
+- **Dealer voices (James and Sofia), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs
 
 ## Images
 
-- **Card art:** court-card artwork under MIT, © 2018 Howard Yeh (`assets/cards/LICENSE.txt`)
-- **Wood veneers and the tall salon picture:** generated for Salon Noir
+- **Court cards and the ace of spades in play** (`assets/cards/court-belt/`, `assets/cards/ace_of_spades_2.webp`): drawn for Salon Noir (generated art)
+- **Card back, felt, leather and room** (`assets/table/`): generated for Salon Noir
+- **Classic court cards** (`assets/cards/{jack,queen,king}_of_*.webp`), shown only if a drawn court card fails to load: from Howard Yeh's [playing-cards-assets](https://github.com/hayeah/playing-cards-assets), MIT, © 2018 Howard Yeh (`assets/cards/LICENSE.txt`)
+- **Wood veneer and the tall salon picture** (`assets/roulette/`): generated for Salon Noir
+- **Card faces, pips, chips and felt lettering:** drawn in code (`src/scene/textures.mjs`)
+- **App icons** (`icons/`): rendered from the Salon Noir mark in `src/core/brand.mjs`
 
 ## Research
 

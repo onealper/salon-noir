@@ -74,16 +74,19 @@ void main() {
   gl_FragColor = vec4(c * uI, 1.0);
 }`;
 
-export function createLightning3D(world, { reduced = () => false } = {}) {
+// `soft`: the flashing-effects setting at soft. A strike lights once (no restrikes, no bright-dim-bright lamp) and less
+// brightly, so with the strikes spaced by the controller no more than three flashes come in a second.
+export function createLightning3D(world, { reduced = () => false, soft = () => false } = {}) {
   const { THREE, scene, camera, tickers, requestRender, lights } = world;
   const glowTex = world.radialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)');
   const rnd = (a, b) => a + Math.random() * (b - a);
   const additive = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false };
 
+  // every effect here is light (additive glows, uniforms, lamp and room levels): none moves a shadow caster
   function animate(obj, life, step, end) {
     const t0 = performance.now();
-    const f = () => { const k = (performance.now() - t0) / life; if (k >= 1) { tickers.delete(f); end?.(); requestRender(); return; } step(k); };
-    tickers.add(f); requestRender(); return f;
+    const f = () => { const k = (performance.now() - t0) / life; if (k >= 1) { tickers.delete(f); end?.(); requestRender(false); return; } step(k); };
+    f.still = true; tickers.add(f); requestRender(false); return f;
   }
   // Screen to room: the point on the felt under a screen x (NDC), on the band in front of the dealer,
   // and the point at a given screen position (NDC) at the depth of another point.
@@ -162,9 +165,10 @@ export function createLightning3D(world, { reduced = () => false } = {}) {
       animate(mesh, LEAD, k => { u.uLead.value = Math.floor(k * 9) / 9 + rnd(0, .08); u.uI.value = .4; u.uTip.value = 1.2; u.uWide.value = .6; }, () => {
         res();
         // the return stroke: the whole channel at once, then restrikes, then it bleeds away
-        u.uLead.value = 2; u.uTip.value = 0;
+        u.uLead.value = 2; u.uTip.value = 0; const once = soft();
         animate(mesh, life, k => {
-          const o = k < .07 ? 1.25 : k < .15 ? .25 : k < .24 ? 1 : k < .31 ? .4 : k < .37 ? .85 : Math.max(0, 1 - (k - .37) / .63) ** 1.6;
+          const o = once ? (k < .08 ? .85 : .85 * Math.max(0, 1 - (k - .08) / .92) ** 1.6)
+            : k < .07 ? 1.25 : k < .15 ? .25 : k < .24 ? 1 : k < .31 ? .4 : k < .37 ? .85 : Math.max(0, 1 - (k - .37) / .63) ** 1.6;
           u.uI.value = o; u.uWide.value = .8 + .5 * Math.min(1, o);
         }, () => { scene.remove(mesh); mesh.geometry.dispose(); mat.dispose(); });
       });
@@ -240,12 +244,13 @@ export function createLightning3D(world, { reduced = () => false } = {}) {
     s.position.copy(at); s.position.y += 1; s.scale.setScalar(size); scene.add(s);
     animate(s, life, k => { s.material.opacity = .45 * (1 - k) ** 2; s.scale.setScalar(size * (1 + k * .5)); }, () => { scene.remove(s); s.material.dispose(); });
   }
-  // The room's light answers each strike: a cold lamp over the felt.
-  const lamp = new THREE.PointLight('#bccaff', 0, 420, 1.1); lamp.position.set(0, 95, -30); scene.add(lamp);
+  // The room's light answers each strike: a cold lamp over the felt. It is in the room only at the Lightning
+  // table: a light at zero still costs every lit surface a pass (see setTable).
+  const lamp = new THREE.PointLight('#bccaff', 0, 420, 1.1); lamp.position.set(0, 95, -30); lamp.visible = false; scene.add(lamp);
   let lampJob = 0;
   function lampFlash(peak, at, hot = false) {
-    if (reduced()) return; const id = ++lampJob; if (at) lamp.position.set(at.x, Math.max(45, at.y + 45), at.z + 8); lamp.color.set(hot ? '#ffdca0' : '#bccaff');
-    animate(lamp, 480, k => { if (id !== lampJob) return; lamp.intensity = peak * (k < .06 ? k / .06 : k < .14 ? .3 : k < .22 ? .9 : (1 - k) ** 2); }, () => { if (id === lampJob) lamp.intensity = 0; });
+    if (reduced()) return; const id = ++lampJob, once = soft(); if (at) lamp.position.set(at.x, Math.max(45, at.y + 45), at.z + 8); lamp.color.set(hot ? '#ffdca0' : '#bccaff');
+    animate(lamp, 480, k => { if (id !== lampJob) return; lamp.intensity = once ? peak * .45 * (k < .08 ? k / .08 : (1 - k) ** 2) : peak * (k < .06 ? k / .06 : k < .14 ? .3 : k < .22 ? .9 : (1 - k) ** 2); }, () => { if (id === lampJob) lamp.intensity = 0; });
   }
   // The house lights dip while lightning is in the air.
   const base = { key: lights.key.intensity, hemi: lights.hemi.intensity, glow: lights.glow.intensity };
@@ -254,7 +259,7 @@ export function createLightning3D(world, { reduced = () => false } = {}) {
     const from = dimLevel, id = ++dimJob;
     const bd = lights.backdrop; base.bd ??= bd?.material.color.clone();
     const set = v => { dimLevel = v; lights.key.intensity = base.key * (1 - .66 * v); lights.hemi.intensity = base.hemi * (1 - .72 * v); lights.glow.intensity = base.glow * (1 - .5 * v); if (bd) bd.material.color.copy(base.bd).multiplyScalar(1 - .75 * v); };
-    if (reduced() || ms <= 0) { set(to); requestRender(); return Promise.resolve(); }
+    if (reduced() || ms <= 0) { set(to); requestRender(false); return Promise.resolve(); }
     return new Promise(res => animate(lights, ms, k => { if (id === dimJob) set(from + (to - from) * (k * (2 - k))); }, () => { if (id === dimJob) set(to); res(); }));
   }
 
@@ -263,17 +268,29 @@ export function createLightning3D(world, { reduced = () => false } = {}) {
   const chargeMat = new THREE.ShaderMaterial({ vertexShader: DECAL_VS, fragmentShader: CHARGE_FS, ...additive,
     uniforms: { uTime: { value: 0 }, uI: { value: 0 }, uR: { value: m0.r + .6 }, uS: { value: CS } } });
   const charge = new THREE.Mesh(decalGeo, chargeMat); charge.scale.setScalar(CS); charge.position.set(m0.x, .14, m0.z); charge.visible = false; charge.renderOrder = 4; scene.add(charge);
+  // The current flickers at 30 frames a second (it is noise; more is no livelier) and leaves the shadows be.
+  // With reduced motion it holds still: one frame, no ticker.
   let chargeTick = null, chargeJob = 0;
+  const stopTick = () => { if (chargeTick) { tickers.delete(chargeTick); chargeTick = null; } };
   function setCharge(on) {
     const id = ++chargeJob, u = chargeMat.uniforms;
     if (on) {
       charge.visible = true;
-      if (!chargeTick) { const t0 = performance.now(); chargeTick = () => { u.uTime.value = reduced() ? 0 : (performance.now() - t0) / 1000; }; tickers.add(chargeTick); }
+      if (reduced()) { stopTick(); u.uTime.value = 0; u.uI.value = 1; requestRender(false); return; }
+      if (!chargeTick) {
+        const t0 = performance.now(); let drawn = 0;
+        chargeTick = now => {
+          if (reduced()) { stopTick(); u.uTime.value = 0; requestRender(false); return; }   // reduced motion switched on meanwhile: it holds still
+          if (now - drawn < 31) return; drawn = now; u.uTime.value = (performance.now() - t0) / 1000; requestRender(false);
+        };
+        chargeTick.lazy = chargeTick.still = true; tickers.add(chargeTick);
+      }
       const from = u.uI.value; animate(charge, 500, k => { if (id === chargeJob) u.uI.value = from + (1 - from) * k; }, () => { if (id === chargeJob) u.uI.value = 1; });
     } else if (charge.visible) {
-      const from = u.uI.value; animate(charge, 350, k => { if (id === chargeJob) u.uI.value = from * (1 - k); }, () => { if (id !== chargeJob) return; charge.visible = false; if (chargeTick) { tickers.delete(chargeTick); chargeTick = null; } });
+      if (reduced()) { stopTick(); charge.visible = false; u.uI.value = 0; requestRender(false); return; }
+      const from = u.uI.value; animate(charge, 350, k => { if (id === chargeJob) u.uI.value = from * (1 - k); }, () => { if (id !== chargeJob) return; charge.visible = false; stopTick(); });
     }
-    requestRender();
+    requestRender(false);
   }
 
   // One strike on the felt: the bolt, and where it grounds the burn, the crawling arcs, sparks and the lamp.
@@ -287,14 +304,31 @@ export function createLightning3D(world, { reduced = () => false } = {}) {
     });
     return landed;
   }
-  let amb = 0;
+  // The lobby's preview: now and then a bolt finds the table. Each strike waits for a drawn frame before the
+  // next is timed, so a tab in the background (no frames) queues nothing to release all at once on return.
+  let amb = 0, ambJob = 0;
+  function ambient(on) {
+    const id = ++ambJob; clearTimeout(amb); amb = 0; if (!on) return;
+    const next = () => { amb = setTimeout(() => requestAnimationFrame(() => { if (id !== ambJob) return; if (!document.hidden) hit(ground(rnd(-.55, .55)), { hot: Math.random() < .2, width: 1.2 }); next(); }), 1700); };
+    next();
+  }
+  // At the Lightning table: the lamp joins the room (each material keeps its programs for both, so moving
+  // between tables recompiles nothing twice), and the shaders a strike uses are compiled just after the next
+  // frame, not on the first bolt, then kept by stand-in materials that never leave (three compiles hidden
+  // objects too) so a storm's end doesn't free them.
+  let warm = null;
+  function setTable(on) {
+    if (lamp.visible === on) return; lamp.visible = on; requestRender(false);
+    if (!on || warm) return;
+    warm = new THREE.Group(); warm.visible = false; scene.add(warm);
+    const geo = ribbon([{ pts: [new THREE.Vector3(), new THREE.Vector3(0, 1, 0)], a0: 0, a1: 1, w0: 1, w1: 1, bright: 1 }]), pt = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+    for (const m of [ribbonMat(), ribbonMat({ flat: true }), new THREE.ShaderMaterial({ vertexShader: DECAL_VS, fragmentShader: BURN_FS, ...additive, uniforms: { uMap: { value: null } } })]) warm.add(new THREE.Mesh(geo, m));
+    warm.add(new THREE.Points(pt, new THREE.PointsMaterial({ map: glowTex, size: .8, ...additive })), new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, ...additive })));
+    const r = world.renderer, go = () => r.compileAsync ? r.compileAsync(warm, camera, scene).catch(() => {}) : r.compile(warm, camera, scene);
+    requestAnimationFrame(() => setTimeout(go, 0));
+  }
   return {
-    bolt, sparks, flare, burn, crawl, lampFlash, dim, hit, ground, atScreen, charge: setCharge,
-    // the lobby's preview: now and then a bolt finds the table
-    ambient(on) {
-      clearInterval(amb); amb = 0; if (!on) return;
-      amb = setInterval(() => hit(ground(rnd(-.55, .55)), { hot: Math.random() < .2, width: 1.2 }), 1700);
-    },
-    clear() { clearInterval(amb); amb = 0; dim(0, 0); setCharge(false); },
+    bolt, sparks, flare, burn, crawl, lampFlash, dim, hit, ground, atScreen, charge: setCharge, ambient, setTable,
+    clear() { ambient(false); dim(0, 0); setCharge(false); },
   };
 }

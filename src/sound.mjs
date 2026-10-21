@@ -1,14 +1,14 @@
-// The casino's sound, on the Web Audio API. Four buses under one master: the table (cards, chips,
-// stings, menus, through a small room), the dealer's voice, the room around you, and music. Voice
-// ducks the room and the music while it speaks. Kit clips (sounds/kit) load when first needed.
+// The casino's sound, on the Web Audio API. Five buses under one master: the table (cards, chips,
+// stings, through a small room), the dealer's voice, the room around you, music, and the menus (ui: dry,
+// at the table's level). Voice ducks the room and the music while it speaks. Kit clips (sounds/kit) load when first needed.
 // Table sound: Every clip is trimmed to its onset so it can be fired on
 // the exact frame a card or chip lands. Each play picks a different take and varies pitch and
 // level slightly (no machine-gun repeats), is placed left/right by where it happens on the table,
 // and passes through a small room so the table sounds like one place rather than dry samples.
 const takes = (name, n) => Array.from({ length: n }, (_, i) => `${name}-${i + 1}`);
 // One gesture, one sound. Each event belongs to a channel with a fixed number of voices: the card
-// channel is monophonic (a new card sound cleanly takes over from the last), chips allow two, the
-// interface one. A voice is only taken over by an equal or more important sound, or once the old
+// channel is monophonic (a new card sound cleanly takes over from the last), chips allow two.
+// A voice is only taken over by an equal or more important sound, or once the old
 // one has had its moment; otherwise the newcomer is dropped. `gap` stops rapid repeats.
 const EVENTS = {
   slide:   { ch: 'cards', prio: 2, clips: ['card-slide-3', 'card-slide-4', 'card-slide-7', 'card-slide-8'], gain: .42, pitch: .05 },   // out of the shoe, across the cloth
@@ -21,9 +21,8 @@ const EVENTS = {
   stack:   { ch: 'chips', prio: 2, clips: takes('chips-collide', 4), gain: .44, pitch: .06, gap: 40 },    // a chip onto chips
   payout:  { ch: 'chips', prio: 3, clips: ['chips-stack-1', 'chips-stack-2', 'chips-stack-4', 'chips-stack-5', 'chips-stack-6'], gain: .42, pitch: .05, gap: 160 },
   collect: { ch: 'chips', prio: 3, clips: ['chips-handle-1', 'chips-handle-3', 'chips-handle-4', 'chips-handle-6'], gain: .38, pitch: .04, gap: 180 },
-  ui:      { ch: 'ui', prio: 1, clips: ['chip-lay-3'], gain: .2, pitch: .03, gap: 60 },
 };
-const CHANNELS = { cards: 1, chips: 2, ui: 1 };
+const CHANNELS = { cards: 1, chips: 2 };
 const HOLD = 140;   // ms a sound keeps its voice against a less important one
 const CLIPS = [...new Set(Object.values(EVENTS).flatMap(e => e.clips))];
 // Levels for each bus, before your own sliders.
@@ -43,7 +42,7 @@ export class TableAudio {
     this.dry = this.ctx.createGain(); this.wet = this.ctx.createGain(); this.wet.gain.value = .14;
     const verb = this.ctx.createConvolver(); verb.buffer = this.room(.55);
     this.dry.connect(comp); this.wet.connect(verb).connect(comp); comp.connect(this.master).connect(this.ctx.destination);
-    // the other buses: table (above, through `comp`) · voice · room · music, each with your level
+    // the other buses: table (above, through `comp`) · voice · room · music · ui, each with your level
     this.levels = { table: 1, voice: 1, music: 1 };
     this.bus = {};
     this.bus.table = this.ctx.createGain(); this.bus.table.connect(this.dry); this.bus.table.connect(this.wet);
@@ -53,10 +52,22 @@ export class TableAudio {
     this.ready = Promise.all(CLIPS.map(name => fetch(new URL(`./sounds/${name}.wav`, import.meta.url)).then(r => r.arrayBuffer()).then(b => this.decode(b)).then(buf => this.buffers.set(name, buf)).catch(() => null)));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.ctx.suspend(); this.musicEl?.pause(); }
-      else if (this.unlocked) { this.ctx.resume(); if (this.enabled) this.musicEl?.play().catch(() => {}); }
+      else this.revive();
     });
+    // iOS stops the context under a call, Siri or another app's audio ('interrupted', then 'suspended') and a page
+    // back from the back-forward cache comes back stopped: try at once, and the controller's next gesture does
+    // the rest if the browser wants one (see `running`)
+    this.ctx.onstatechange = () => { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed' && !document.hidden) this.revive(); };
+    addEventListener('pageshow', () => this.revive());
   }
-  decode(bytes) { return new Promise((res, rej) => { const p = this.ctx.decodeAudioData(bytes, res, rej); if (p?.then) p.then(res, rej); }); }
+  revive() { if (!this.unlocked || document.hidden) return; if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {}); if (this.enabled && this.musicEl?.paused) this.musicEl.play().catch(() => {}); }
+  // false while sound waits for a gesture: never started, or stopped since and not yet back
+  get running() { return !this.available || (this.unlocked && this.ctx.state === 'running'); }
+  // `rate`: decoded at this sample rate rather than the device's (44.1 or 48 kHz), for a long clip with nothing above half of it
+  decode(bytes, rate = 0) {
+    let c = this.ctx; if (rate && rate < c.sampleRate) try { c = new OfflineAudioContext(2, 1, rate); } catch { /* the device's rate, then */ }
+    return new Promise((res, rej) => { const p = c.decodeAudioData(bytes, res, rej); if (p?.then) p.then(res, rej); });
+  }
   // A small, warm room: decaying noise, darker as it fades.
   room(seconds) {
     const rate = this.ctx.sampleRate, n = Math.floor(rate * seconds), buf = this.ctx.createBuffer(2, n, rate);
@@ -88,7 +99,9 @@ export class TableAudio {
   // ---- kit clips: fetched and decoded once, on first use (or ahead, with preload) ----------------
   clip(path) {
     if (!this.available) return Promise.resolve(null);
-    if (!this.kit.has(path)) this.kit.set(path, fetch(new URL(`./sounds/kit/${path}.mp3`, import.meta.url)).then(r => r.ok ? r.arrayBuffer() : null).then(b => b && this.decode(b)).catch(() => null));
+    // the room beds (room-*) loop for the whole visit: their MP3s stop at 16 kHz, so at 32 kHz they keep every sound in a
+    // third less memory (the casino bed: 7 MB, not 10)
+    if (!this.kit.has(path)) this.kit.set(path, fetch(new URL(`./sounds/kit/${path}.mp3`, import.meta.url)).then(r => r.ok ? r.arrayBuffer() : null).then(b => b && this.decode(b, path.startsWith('room-') ? 32000 : 0)).catch(() => null));
     return this.kit.get(path);
   }
   preload(paths) { for (const p of paths) void this.clip(p); }
@@ -129,21 +142,6 @@ export class TableAudio {
     const g = this.ctx.createGain(); g.gain.value = 0; src.connect(g).connect(this.bus.room); src.start(0, a);
     g.gain.setTargetAtTime(1, this.ctx.currentTime, .8); this.loops.room = { src, g };
   }
-  // A loop you steer while it plays (the ball on the track): level and pitch follow the action.
-  // Returns { set(gain, rate), stop() }; silent until its clip has loaded.
-  loop(path, { bus = 'table', gain = 0, rate = 1 } = {}) {
-    const h = { g: null, src: null, gain, rate, stopped: false,
-      set: (g, r = h.rate, tc = .06) => { h.gain = g; h.rate = r; if (!h.g) return; const t = this.ctx.currentTime; h.g.gain.setTargetAtTime(g, t, tc); h.src.playbackRate.setTargetAtTime(r, t, tc); },
-      stop: (fade = .25) => { h.stopped = true; if (!h.g) return; const t = this.ctx.currentTime; h.g.gain.setTargetAtTime(0, t, fade / 3); h.src.stop(t + fade * 2); } };
-    if (!this.available) return h;
-    this.clip(path).then(buf => {
-      if (!buf || h.stopped) return;
-      const src = this.ctx.createBufferSource(); src.buffer = buf; src.loop = true; const [a, b] = soundSpan(buf); src.loopStart = a; src.loopEnd = b; src.playbackRate.value = h.rate;
-      const g = this.ctx.createGain(); g.gain.value = 0; src.connect(g).connect(this.bus[bus] ?? this.bus.table); src.start(0, a + Math.random() * (b - a) * .5);
-      h.src = src; h.g = g; g.gain.setTargetAtTime(h.gain, this.ctx.currentTime, .05);
-    });
-    return h;
-  }
   // Music streams (it is long): a media element routed into the music bus, crossfaded on a change.
   music(path) {
     if (!this.available || this.musicPath === path) return; this.musicPath = path;
@@ -157,7 +155,6 @@ export class TableAudio {
     if (this.enabled && this.unlocked) el.play().catch(() => {});
     g.gain.setTargetAtTime(1, this.ctx.currentTime, 1.2);
   }
-  stop() { /* sounds are short; nothing to stop */ }
   // x: where on the table it happens, in cm (the shoe is at about +28, the discard holder at -50)
   play(event, { x = 0, gain = 1 } = {}) {
     if (!this.enabled || !this.available || document.hidden || this.volume === 0 || this.ctx.state !== 'running') return;

@@ -6,7 +6,6 @@ import * as THREE from '../vendor/three.module.min.js';
 export const INK = { red: '#c4122b', black: '#131416', ivory: '#ece4d2', brass: '#c9a45c', felt: '#2b2d2f' };
 import { BRAND, SPADE, INLAY, KEYHOLE, KEYLIGHT } from '../core/brand.mjs';
 import { MODES } from '../core/modes.mjs';
-export { BRAND };
 const RED_SUITS = new Set(['♥', '♦']);
 const SUIT_NAME = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
 
@@ -30,20 +29,29 @@ function texture(c, { srgb = true, aniso = 16, repeat = false } = {}) {
 
 // ---- cards: poker size 63.5 x 88.9 mm -----------------------------------------
 export const CARD_W = 6.35, CARD_H = 8.89, CARD_R = .32;
+// Faces are drawn in a 512-wide frame and painted at `faceK` of that (a preset's `face`): a card on a
+// phone is about 100 device pixels wide, so half size there loses nothing and saves most of the memory.
 const CW = 512, CH = Math.round(512 * CARD_H / CARD_W), CR = Math.round(512 * CARD_R / CARD_W);
+let faceK = 1;
 const art = new Map();
-// Drawn art (generated for this table; see art/): double-headed court panels, the ace of spades,
-// the card back, and the felt, leather and room images. The public-domain court cards in
-// assets/cards stay as the fallback if a panel fails to load.
+// Drawn art (generated for this table; see CREDITS.md): double-headed court panels, the ace of spades,
+// the card back, and the felt, leather and room images. The classic court cards in assets/cards
+// (Howard Yeh, MIT: assets/cards/LICENSE.txt) stay as the fallback if a panel fails to load.
 const COURT_NAMES = Object.values(SUIT_NAME).flatMap(s => ['jack', 'queen', 'king'].map(r => `${r}_of_${s}`));
 export const artImage = key => art.get(key);
-export function preloadCardArt() {
-  const load = (key, src) => new Promise(res => { const i = new Image(); i.onload = () => { art.set(key, i); res(true); }; i.onerror = () => res(false); i.src = src; });
-  return Promise.all([
+const load = (key, src) => new Promise(res => { const i = new Image(); i.onload = () => { art.set(key, i); res(true); }; i.onerror = () => res(false); i.src = src; });
+// The table's own art is awaited before the room is built. The court panels and the ace (most of the bytes)
+// are fetched once the room is on screen (loadCourtArt, after the first frame): no J, Q, K or ace of spades
+// is dealt in the lobby, and a face made before they land (the card waiting in the shoe) is painted plainly
+// and repainted when they do.
+let courtArt = null, courtDone = false, courtLanded;
+const courtReady = new Promise(r => { courtLanded = r; });
+export function preloadCardArt() { return Promise.all(['back', 'felt', 'leather', 'room'].map(n => load('table:' + n, `./assets/table/${n}.webp`))); }
+export function loadCourtArt() {
+  return courtArt ??= Promise.all([
     ...COURT_NAMES.map(async n => { if (!await load('panel:' + n, `./assets/cards/court-belt/${n}.webp`)) await load(n, `./assets/cards/${n}.webp`); }),
     load('ace', './assets/cards/ace_of_spades_2.webp'),
-    ...['back', 'felt', 'leather', 'room'].map(n => load('table:' + n, `./assets/table/${n}.webp`)),
-  ]);
+  ]).then(() => { courtDone = true; courtLanded(); });
 }
 // Standard pip positions in a 3-column grid; y 0 top, 1 bottom.
 const PIPS = {
@@ -60,8 +68,11 @@ function drawIndex(ctx, rank, suit, color) {
   ctx.save(); ctx.translate(66, 150); if (rank === '10') { ctx.scale(.74, 1); ctx.letterSpacing = '-6px'; } ctx.fillText(rank, 0, 0); ctx.restore();
   drawSuit(ctx, suit, 66, 205, 78, color);
 }
-export function paintFace(card) {
-  const c = canvas(CW, CH), ctx = c.getContext('2d'), color = RED_SUITS.has(card.suit) ? INK.red : INK.black;
+export function paintFace(card) { return texture(drawFace(canvas(1, 1), card)); }
+// Paints a face onto `c` (sized here, at faceK), so a cached texture can be repainted in place.
+function drawFace(c, card) {
+  c.width = Math.round(CW * faceK); c.height = Math.round(CH * faceK);
+  const ctx = c.getContext('2d'), color = RED_SUITS.has(card.suit) ? INK.red : INK.black; ctx.scale(faceK, faceK);
   roundRect(ctx, 0, 0, CW, CH, CR); ctx.fillStyle = '#fbfaf6'; ctx.fill(); ctx.save(); ctx.clip();
   ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.lineWidth = 3; roundRect(ctx, 1.5, 1.5, CW - 3, CH - 3, CR); ctx.stroke();
   drawIndex(ctx, card.rank, card.suit, color);
@@ -72,15 +83,15 @@ export function paintFace(card) {
   const img = court ? art.get(`${court}_of_${SUIT_NAME[card.suit]}`) : null;
   ctx.globalCompositeOperation = 'multiply';   // the art's white becomes the card's white
   if (panel) {
-    // A double-headed panel (two halves turned about the waist, joined under a belt; see
-    // art/build.py) inside a thin suit-colour frame.
+    // A double-headed panel (two halves turned about the waist, joined under a belt: the court-belt/
+    // art) inside a thin suit-colour frame.
     const w = 272, h = Math.round(w * panel.height / panel.width), x = (CW - w) / 2, y = (CH - h) / 2;
     ctx.drawImage(panel, x, y, w, h);
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color === INK.red ? 'rgba(179,18,46,.7)' : 'rgba(23,23,26,.72)'; ctx.lineWidth = 2.5;
     ctx.strokeRect(x, y, w, h);
   } else if (img && court) {
-    // The public-domain portrait inside its printed frame; the art's own small indices stay hidden.
+    // The classic (fallback) portrait inside its printed frame; the art's own small indices stay hidden.
     const sx = 44, sy = 44, sw = 246, sh = 399, w = 270, h = w * sh / sw, x = (CW - w) / 2, y = (CH - h) / 2;
     ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
     ctx.strokeStyle = color === INK.red ? 'rgba(196,18,43,.55)' : 'rgba(19,20,22,.6)'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
@@ -88,24 +99,32 @@ export function paintFace(card) {
     const w = 320, h = w * ace.height / ace.width; ctx.drawImage(ace, (CW - w) / 2, (CH - h) / 2, w, h);
   } else if (card.rank === 'A') {
     drawSuit(ctx, card.suit, CW / 2, CH / 2, 190, color);
+  } else if (court) {
+    // its art is still on the way (or failed): a printed frame round the suit, until it arrives
+    const w = 270, h = 438, x = (CW - w) / 2, y = (CH - h) / 2;
+    ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = color; ctx.globalAlpha = .6; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h); ctx.globalAlpha = 1;
+    drawSuit(ctx, card.suit, CW / 2, CH / 2, 150, color);
   } else {
     const box = { x: 168, y: 132, w: 176, h: 452 }, size = card.rank === '10' ? 60 : 66;
     for (const [px, py] of PIPS[card.rank]) drawSuit(ctx, card.suit, box.x + px * box.w, box.y + py * box.h, size, color, py > .5 ? Math.PI : 0);
   }
-  ctx.globalCompositeOperation = 'source-over'; ctx.restore(); return texture(c);
+  ctx.globalCompositeOperation = 'source-over'; ctx.restore(); return c;
 }
-export function paintBack() {
+export function paintBack() { return texture(drawBack(canvas(1, 1))); }
+function drawBack(c) {
   const art = artImage('table:back');
   if (art) {
     // The drawn back at twice the face resolution (one texture, shared by every card): an ivory
     // border and the art inset with rounded corners.
-    const k = 2, W = CW * k, H = CH * k, m = 20 * k, c = canvas(W, H), ctx = c.getContext('2d');
+    c.width = Math.round(CW * 2 * faceK); c.height = Math.round(CH * 2 * faceK);
+    const k = 2, W = CW * k, H = CH * k, m = 20 * k, ctx = c.getContext('2d'); ctx.scale(faceK, faceK);
     roundRect(ctx, 0, 0, W, H, CR * k); ctx.fillStyle = '#f4efe2'; ctx.fill();
     ctx.save(); roundRect(ctx, m, m, W - 2 * m, H - 2 * m, CR * k * .55); ctx.clip();
     ctx.drawImage(art, m, m, W - 2 * m, H - 2 * m); ctx.restore();
-    return texture(c);
+    return c;
   }
-  const c = canvas(CW, CH), ctx = c.getContext('2d'), m = 24;
+  c.width = Math.round(CW * faceK); c.height = Math.round(CH * faceK);
+  const ctx = c.getContext('2d'), m = 24; ctx.scale(faceK, faceK);
   roundRect(ctx, 0, 0, CW, CH, CR); ctx.fillStyle = '#f7f4ec'; ctx.fill();
   roundRect(ctx, m, m, CW - 2 * m, CH - 2 * m, CR * .6); ctx.fillStyle = '#1b1c1f'; ctx.fill(); ctx.save(); ctx.clip();
   ctx.strokeStyle = 'rgba(201,164,92,.28)'; ctx.lineWidth = 2;
@@ -115,11 +134,26 @@ export function paintBack() {
   ctx.beginPath(); ctx.arc(CW / 2, CH / 2, 86, 0, Math.PI * 2); ctx.fillStyle = '#1b1c1f'; ctx.fill(); ctx.lineWidth = 4; ctx.stroke();
   ctx.beginPath(); ctx.arc(CW / 2, CH / 2, 74, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.stroke();
   drawSuit(ctx, '♠', CW / 2, CH / 2 - 4, 92, INK.brass);
-  return texture(c);
+  return c;
 }
 const faceCache = new Map();
-export function faceTexture(card) { const k = card.rank + card.suit; if (!faceCache.has(k)) faceCache.set(k, paintFace(card)); return faceCache.get(k); }
+const needsArt = card => !courtDone && (card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' || (card.rank === 'A' && card.suit === '♠'));
+export function faceTexture(card) {
+  const k = card.rank + card.suit; if (faceCache.has(k)) return faceCache.get(k);
+  const t = paintFace(card); faceCache.set(k, t);
+  if (needsArt(card)) courtReady.then(() => { drawFace(t.image, card); t.needsUpdate = true; artLanded(); });   // same size: an in-place upload
+  return t;
+}
 let backTex; export const backTexture = () => backTex ??= paintBack();
+// Called when court art lands on a face already dealt (the scene asks for a frame).
+let artLanded = () => {}; export const onArtLanded = f => { artLanded = f; };
+// A preset's card detail: every face and the back painted so far is repainted at the new size. A texture
+// that changes size must be freed first (its storage is fixed); the materials keep the same objects.
+export function setFaceDetail(k = 1) {
+  if (k === faceK) return; faceK = k;
+  for (const [key, t] of faceCache) { t.dispose(); drawFace(t.image, { rank: key.slice(0, -1), suit: key.slice(-1) }); t.needsUpdate = true; }
+  if (backTex) { backTex.dispose(); drawBack(backTex.image); backTex.needsUpdate = true; }
+}
 // Card edges seen in a stack: paper-white with a fine line per card. Standing cards (the shoe)
 // stripe across u; cards lying flat (the discard holder) stripe across v.
 export function edgeTexture(standing = true) {
@@ -154,7 +188,7 @@ export function paintFelt(px = 2048, mode = MODES.classic) {
   const [lineA, lineB, lineC] = mode.felt;
   arcText(ctx, lineA, cx, cy, 44 * k, `700 ${3.4 * k}px Cinzel, Georgia, serif`, .7 * k, 'rgba(201,164,92,.95)');
   arcText(ctx, lineB, cx, cy, 49.3 * k, `700 ${lineB.length > 48 ? 1.45 * k : 1.75 * k}px Inter, system-ui, sans-serif`, (lineB.length > 48 ? .26 : .38) * k, 'rgba(236,228,210,.82)');
-  arcText(ctx, lineC, cx, cy, 58.2 * k, `700 ${2.3 * k}px Inter, system-ui, sans-serif`, .6 * k, mode.id === 'lightning' ? 'rgba(236,228,210,.88)' : 'rgba(236,228,210,.88)');
+  arcText(ctx, lineC, cx, cy, 58.2 * k, `700 ${2.3 * k}px Inter, system-ui, sans-serif`, .6 * k, 'rgba(236,228,210,.88)');
   // Wordmark between the dealer's cards and the printing.
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(201,164,92,.9)';
   { // the Salon Noir mark: a brass spade with a lit keyhole, and the wordmark in Bodoni
@@ -363,6 +397,9 @@ export function chipFaceTexture(v) {
   { const sz = 34; ctx.save(); ctx.translate(m - sz / 2, m + 104 - sz / 2); ctx.scale(sz / 100, sz / 100); ctx.fillStyle = '#b8954f'; ctx.fill(new Path2D(SPADE)); ctx.fillStyle = '#f3eee2'; ctx.fill(new Path2D(KEYHOLE)); ctx.restore(); }   // the house mark
   const t = texture(c); chipTop.set(v, t); return t;
 }
+// The chip's face as a small picture for the chip row (shown at about 50 CSS px): a 160 px copy encodes in
+// a tenth of the time of the full face.
+export function chipIcon(v, px = 160) { const c = canvas(px, px); c.getContext('2d').drawImage(chipFaceTexture(v).image, 0, 0, px, px); return c.toDataURL('image/png'); }
 // Height map for the face: spots flush, mould ring raised, inlay slightly recessed.
 export function chipBumpTexture(v) {
   if (chipBump.has(v)) return chipBump.get(v);
