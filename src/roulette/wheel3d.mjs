@@ -12,7 +12,7 @@ export const polar = (r, a, y = 0) => [r * Math.cos(a), y, -r * Math.sin(a)];
 const INK = { red: '#a8131f', black: '#111214', green: '#0d6a3b', ivory: '#f5eedf' };
 const FLOOR = { red: '#7e0f18', black: '#0a0b0c', green: '#0a5130' };
 
-export function createWheel(THREE, { veneer, aniso = 8, env = null, glow = '#ffb85a' }) {
+export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) {
   const wheel = new THREE.Group(), rotor = new THREE.Group(); wheel.add(rotor);
   // a studio environment of its own (a ring light overhead, soft boxes), so the lacquer and chrome carry the arcs
   // and streaks of light a filmed wheel shows
@@ -20,9 +20,7 @@ export function createWheel(THREE, { veneer, aniso = 8, env = null, glow = '#ffb
   const lacquerM = (color = '#060606', rough = .18) => shine(new THREE.MeshPhysicalMaterial({ color, roughness: rough, metalness: 0, specularIntensity: .18, clearcoat: 1, clearcoatRoughness: .03, envMapIntensity: 1.25 }));
   const chrome = shine(new THREE.MeshStandardMaterial({ color: '#f1f3f5', metalness: 1, roughness: .07, envMapIntensity: 1.6 }));
   const brass = shine(new THREE.MeshStandardMaterial({ color: '#d9b265', metalness: 1, roughness: .16, envMapIntensity: 1.4 }));
-  const brassBright = brass;
   const lathe = (pts, segs = 160) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
-  void veneer;
 
   // ---- the bowl: piano-black lacquer from the skirt over the rim and down the stator cone ------------------
   const rim = new THREE.Mesh(lathe([[40.4, -1.4], [40.9, .35], [41.6, .8], [43.2, .9], [44.6, .55], [45.3, -.4], [45.6, -3], [45.6, -15]]), lacquerM('#070707', .16));

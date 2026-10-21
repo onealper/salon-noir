@@ -1,6 +1,6 @@
 // The ball and the wheel, simulated. Units: centimetres, seconds, radians; angles in the wheel's own
 // frame, measured about its vertical axis. Three stages, after Small & Tse, "Predicting the outcome of
-// roulette" (Chaos 22, 2012) and the wheel patents in the Phase 3 research:
+// roulette" (Chaos 22, 2012) and published wheel patents:
 //   track  the ball runs round the inclined ball track, slowed by rolling friction and air drag, until it
 //          is too slow to hold the track (v² < g·R·tan α) and falls away;
 //   cone   it spirals down the stator cone, now and then striking one of the eight diamonds;
@@ -10,6 +10,7 @@
 // wheelhead is given a slightly different push so the pocket under the ball carries the drawn number. The
 // frets repeat every pocket, so this changes nothing about how the ball moves.
 import { PITCH, POCKETS, WHEEL_INDEX } from './rules.mjs';
+import { mulberry } from '../core/rng.mjs';
 
 export const G = 981;
 // The wheel's shape (ball centre heights, relative to the rim of the bowl).
@@ -36,7 +37,7 @@ export function floorY(r) {
 }
 const CONE_SLOPE = Math.atan2(GEO.coneY0 - GEO.coneY1, GEO.coneR0 - GEO.coneR1);
 
-export function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+export { mulberry };   // (core/rng.mjs: the same generator as the ?seed shoe)
 
 // How long the ball holds the track at a given launch speed (closed form of v' = -a - k v²).
 const A0 = 5;    // rolling friction, cm/s²: low, so the last laps slow gently (about 1.9 s, then 2.1 s, on a filmed live wheel)
@@ -44,7 +45,7 @@ function trackTime(v0, vc, k) { const s = Math.sqrt(k / A0); return (Math.atan(v
 function dragFor(v0, vc, T) { let lo = 1e-7, hi = .05; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (trackTime(v0, vc, m) > T) lo = m; else hi = m; } return (lo + hi) / 2; }
 
 const DT = 1 / 240, SAMPLE = 1 / 60;
-// The feel of the wheel, tuned so the stages last as long as on a real wheel (Phase 3 research):
+// The feel of the wheel, tuned so the stages last as long as on a real wheel:
 // about 1 s spiralling down the cone, 1.5-3.5 s of scatter over 4-15 pockets.
 export const TUNE = {
   coneSlope: 14 * Math.PI / 180, coneSpin: .55, coneDamp: .9,          // the cone's pull, spin lost to friction, radial damping
@@ -128,8 +129,9 @@ export function simulate({ dir = 1, theta0 = 0, phi0 = 0, rotorSpeed = 1.9, trac
 
 // A spin to a drawn number. Several spins are tried; the one needing the least extra turn of the
 // wheelhead wins, and that extra turn is given at the croupier's push and fades out long before the
-// ball reaches the wheelhead. `phiNow`: the wheelhead's angle when the ball is launched.
-export function plan(result, { dir = 1, phiNow = 0, fast = false, seed = (Math.random() * 2 ** 32) >>> 0, tries = 12 } = {}) {
+// ball reaches the wheelhead. `phiNow`: the wheelhead's angle when the ball is launched. 24 tries (a few
+// ms) keep the push small: at most about 0.4 of the wheelhead's own speed, against 0.85 with 12.
+export function plan(result, { dir = 1, phiNow = 0, fast = false, seed = (Math.random() * 2 ** 32) >>> 0, tries = 24 } = {}) {
   const rnd = mulberry(seed); let best = null;
   for (let i = 0; i < tries; i++) {
     const opts = { dir, theta0: rnd() * Math.PI * 2, phi0: phiNow, rotorSpeed: 1.25 + rnd() * .25, trackT: (fast ? 5.6 : 9.4) + (rnd() - .5) * (fast ? .6 : 1.2), v0: (fast ? 330 : 360) + rnd() * 40, seed: (rnd() * 2 ** 32) >>> 0 };
@@ -144,9 +146,9 @@ export function plan(result, { dir = 1, phiNow = 0, fast = false, seed = (Math.r
     if (!best || extra < best.extra) best = { ...s, opts, extra, k };
   }
   // the extra turn: given at the push, fading out by the time the ball leaves the track
-  const T = Math.max(1, best.dropAt - .4), e0 = 3 * best.extra / T, rot = Math.sign(-dir);
+  const T = Math.max(1, best.dropAt - .4), rot = Math.sign(-dir);
   best.rotorAt = t => t >= T ? rot * best.extra : rot * best.extra * (1 - (1 - t / T) ** 3);
-  best.result = result; best.T = T; best.e0 = e0;
+  best.result = result; best.T = T;
   return best;
 }
 // Where things are at time t (seconds since launch), interpolated from the samples.

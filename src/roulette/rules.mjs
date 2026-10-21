@@ -1,6 +1,7 @@
 // Single-zero (European) roulette: the wheel, every bet on the layout, the call bets, and a table that
 // takes chips and settles them. Rules and payouts from the New Jersey (N.J.A.C. 13:69F-5), Singapore GRA
-// and Monte-Carlo SBM rule filings; every bet returns 36/37 of its stake over the 37 numbers.
+// and Monte-Carlo SBM rule filings; every bet returns 36/37 of its stake over the 37 numbers, except that the table
+// plays la partage, as Monte-Carlo does: on zero an even-money bet loses only half, so it returns 36.5/37 (98.65%).
 
 // The wheel, clockwise from zero, and the red numbers.
 export const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
@@ -8,7 +9,7 @@ export const POCKETS = WHEEL.length, PITCH = Math.PI * 2 / POCKETS;
 export const WHEEL_INDEX = Object.fromEntries(WHEEL.map((n, i) => [n, i]));
 export const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 export const colorOf = n => n === 0 ? 'green' : REDS.has(n) ? 'red' : 'black';
-export const CHIP_VALUES = [1, 5, 10, 25, 50, 100, 500];
+export { CHIP_VALUES } from '../core/chips.mjs';   // the salon's chips, the same at every table
 
 // On the layout: numbers run in rows of three away from the wheel; a number's row and column.
 export const rowOf = n => Math.ceil(n / 3), colOf = n => (n - 1) % 3 + 1;
@@ -58,8 +59,6 @@ add('tr0-1-2', 'trio', [0, 1, 2], '0/1/2'); add('tr0-2-3', 'trio', [0, 2, 3], '0
 add('ff', 'four', [0, 1, 2, 3], '0/1/2/3');
 for (const [id, o] of Object.entries(OUTSIDE)) add(id, id.startsWith('col') ? 'column' : id.startsWith('doz') ? 'dozen' : 'even', ALL.filter(o.nums), o.label);
 export const spot = id => SPOTS.get(id);
-// The split between two numbers, whichever order they come in (null if they don't touch on the layout).
-export function splitOf(a, b) { const [x, y] = a < b ? [a, b] : [b, a]; return SPOTS.get(`sp${x}-${y}`) ?? null; }
 // What a spot is called in the interface: "Split 17/20 · 17:1".
 export function describe(id) {
   const s = SPOTS.get(id); if (!s) return '';
@@ -132,25 +131,31 @@ export class RouletteTable {
   }
   clear() { if (!this.bets.size) return false; this.bets.clear(); this.history = []; return true; }
   layout() { return [...this.bets].flatMap(([id, vs]) => vs.map(v => [id, v])); }
-  get canRebet() { return !!this.last?.length && !this.bets.size; }
-  rebet() { if (!this.canRebet) return 'Nothing to rebet.'; return this.place(this.last); }
+  // Rebet only when the last layout still fits the balance, so the Spin button never offers what it can't do.
+  get lastTotal() { return (this.last ?? []).reduce((a, [, v]) => a + v, 0); }
+  get canRebet() { return !!this.last?.length && !this.bets.size && this.lastTotal <= this.balance; }
+  rebet() { if (!this.canRebet) return this.last?.length && !this.bets.size ? `Not enough balance to rebet ${this.lastTotal.toLocaleString('en-US')}.` : 'Nothing to rebet.'; return this.place(this.last); }
   double() { if (!this.bets.size) return 'Nothing to double.'; return this.place(this.layout()); }
   // Bets close: the stake leaves the balance.
   close() { if (this.phase !== 'betting' || !this.bets.size || this.total > this.balance) return false; this.phase = 'spinning'; this.staked = this.total; this.last = this.layout(); this.bank.set(this.balance - this.staked); return true; }
-  // Settle on the winning number: each spot wins or loses whole. Returns the wins, the losses and the net.
+  // Settle on the winning number: each spot wins or loses whole, except la partage: on zero, red, black, odd, even,
+  // 1-18 and 19-36 lose half and the other half comes back (`back` on that loss). Returns the wins, the losses,
+  // what came back on zero (`partage`) and the net.
   settle(n) {
-    const wins = [], losses = []; let back = 0;
+    if (this.phase !== 'spinning') return null;   // only a spin whose bets closed is paid
+    const wins = [], losses = []; let back = 0, partage = 0;
     for (const [id, vs] of this.bets) {
       const s = SPOTS.get(id), stake = vs.reduce((a, b) => a + b, 0);
       if (s.nums.includes(n)) { const pay = stake * s.pays; wins.push({ id, stake, pay, kind: s.kind }); back += stake + pay; }
+      else if (n === 0 && s.kind === 'even') { const half = stake / 2; losses.push({ id, stake, kind: s.kind, back: half }); back += half; partage += half; }
       else losses.push({ id, stake, kind: s.kind });
     }
     this.bank.set(this.balance + back);
-    const r = { n, color: colorOf(n), staked: this.staked, back, net: back - this.staked, wins, losses, straight: wins.some(w => w.kind === 'straight') };
+    const r = { n, color: colorOf(n), staked: this.staked, back, net: back - this.staked, wins, losses, partage, straight: wins.some(w => w.kind === 'straight') };
     this.bets.clear(); this.history = []; this.phase = 'betting'; return r;
   }
-  // A spin that couldn't finish hands the chips back.
-  abandon() { if (this.phase === 'spinning') { this.bank.set(this.balance + this.staked); this.phase = 'betting'; } }
+  // A spin that couldn't finish hands the stake back; the chips stay on the layout as they were.
+  abandon() { if (this.phase !== 'spinning') return 0; const back = this.staked; this.bank.set(this.balance + back); this.staked = 0; this.phase = 'betting'; return back; }
 }
 
 // The result of a spin: a fair draw from 37 pockets.

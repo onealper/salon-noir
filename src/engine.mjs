@@ -1,13 +1,15 @@
 // Blackjack rules — Nevada's All Bets Blackjack filing: eight decks, dealer
 // stands on all 17s, hole card with insurance on an ace, blackjack 3:2, one
-// split to two hands, one card on split aces, double after split, ten-card
-// Charlie. No DOM in here; the scene and the controls only read this state.
+// split to two hands (resplits to four at the Free Bet table), one card on split
+// aces, double after split, ten-card Charlie. No DOM in here; the scene and the
+// controls only read this state.
 import { pairOf, twentyOnePlus3, top3, luckyLucky, buster, push22 } from './sidebets.mjs';
+import { CHIP_VALUES, breakDown } from './core/chips.mjs';
+export { CHIP_VALUES, breakDown };   // the salon's chips (core/chips.mjs), the same at the wheel
 
 export const DECKS = 8, SHOE_CARDS = DECKS * 52, CUT_AT = Math.round(SHOE_CARDS * .75);
 export const SPOTS = ['main', 'lucky', 'pairs', 'top3', 'p213', 'buster', 'dpairs'];
 export const LIMITS = { main: [1, 1000], side: [1, 100] };
-export const CHIP_VALUES = [1, 5, 10, 25, 50, 100, 500];
 const limitOf = spot => spot === 'main' ? LIMITS.main : LIMITS.side;
 const sum = a => a.reduce((s, v) => s + v, 0);
 
@@ -41,7 +43,6 @@ const emptyBets = () => Object.fromEntries(SPOTS.map(s => [s, []]));
 // multiplied; push and it waits; lose and it is gone. Weights are tuned (by simulation over
 // basic strategy) so the fee returns about 99% over time.
 export const BUCKETS = ['le17', '18', '19', '20', '21', 'bj'];
-export const BUCKET_NAME = { le17: '17 or less', 18: '18', 19: '19', 20: '20', 21: '21', bj: 'Blackjack' };
 const STRIKES = { le17: [2, 2, 3, 3], 18: [2, 3, 3, 4, 4], 19: [2, 3, 4, 5], 20: [2, 3, 4, 5, 6], 21: [3, 4, 5, 6, 8, 10], bj: [5, 10, 15, 20, 25] };
 export const bucketOf = (h) => h.kind === 'blackjack' ? 'bj' : h.total <= 17 ? 'le17' : String(h.total);
 
@@ -59,13 +60,15 @@ export class Table {
   clearRound() {
     this.hands = [this.newHand()]; this.activeIndex = 0; this.dealer = []; this.stakes = emptyStakes();
     this.insurance = 0; this.insuranceOffered = false; this.results = []; this.result = null; this.peeked = false; this.revealed = false;
+    this.early = 0;   // main-bet money already paid before the settle (even money)
   }
   // stake: your money on the hand · base: the bet a double or split adds · free: free-bet markers
   newHand(cards = [], stake = 0, fromSplit = false, splitAces = false, base = stake, free = 0) { return { cards, stake, base, free, fromSplit, splitAces, doubled: false, done: false }; }
   get activeHand() { return this.hands[this.activeIndex]; }
   get player() { return this.activeHand.cards; }
-  set player(cards) { this.activeHand.cards = cards; }
-  get isSplit() { return this.hands.length === 2; }
+  get isSplit() { return this.hands.length > 1; }
+  // Free Bet resplits to four hands (aces too, one card each, as its Nevada rules of play); elsewhere one split.
+  get maxHands() { return this.mode === 'freebet' ? 4 : 2; }
   get stake() { return this.hands.reduce((s, h) => s + h.stake, 0); }
   get cutReached() { return this.dealt >= CUT_AT; }
   get remaining() { return this.cards.length; }
@@ -115,7 +118,6 @@ export class Table {
   draw() { if (!this.cards.length) this.newShoe(); this.dealt++; return this.cards.pop(); }
   strike() { return Object.fromEntries(BUCKETS.map(b => { const w = STRIKES[b]; return [b, w[Math.floor(this.random() * w.length)]]; })); }
   // Deal order from the filing: player up, dealer up, player up, dealer down.
-  static DEAL_ORDER = ['player', 'dealer', 'player', 'dealer'];
   initialCard(who) { if (this.phase !== 'dealing') return null; const c = this.draw(); (who === 'dealer' ? this.dealer : this.player).push(c); return c; }
   get upCard() { return this.dealer[0]; }
   get playerNatural() { return !this.hands[0].fromSplit && natural(this.hands[0].cards); }
@@ -133,10 +135,14 @@ export class Table {
     return this.peek();
   }
   get insuranceCost() { return this.stakes.main / 2; }
-  get canInsure() { return this.phase === 'insurance' && this.balance >= this.insuranceCost; }
+  get canInsure() { return this.phase === 'insurance' && !this.playerNatural && this.balance >= this.insuranceCost; }
+  // With your blackjack against an ace the offer is even money: the bet is paid 1 to 1 at once, before the dealer
+  // looks. It is its own settlement, not an insurance bet, so it needs no chips (all-in included).
+  get canEvenMoney() { return this.phase === 'insurance' && this.playerNatural; }
   insure(accept) {
     if (this.phase !== 'insurance') return null;
-    if (accept && this.canInsure) { this.insurance = this.insuranceCost; this.balance -= this.insurance; }
+    if (accept && this.canEvenMoney) { const h = this.hands[0]; h.evenMoney = h.done = true; this.early = h.stake * 2; this.balance += this.early; }
+    else if (accept && this.canInsure) { this.insurance = this.insuranceCost; this.balance -= this.insurance; }
     return this.peek();
   }
   // The dealer checks the hole card when showing an ace or a ten.
@@ -157,14 +163,16 @@ export class Table {
   pay(spot, name, stake, pays, line) { const payout = stake * (pays + 1); this.balance += payout; return { spot, name, stake, payout, net: payout - stake, pays, line }; }
 
   // ---- player decisions ---------------------------------------------------
-  get canHit() { return this.phase === 'player' && !this.activeHand.done; }
-  get canStand() { return this.canHit; }
-  get canDouble() { return this.canHit && !this.activeHand.splitAces && this.player.length === 2 && (this.freeDouble || this.balance >= this.activeHand.base); }
+  // a split ace takes one card: it can only stand, or (at Free Bet) be split again when that card is another ace
+  get canHit() { return this.canStand && !this.activeHand.splitAces; }
+  get canStand() { return this.phase === 'player' && !this.activeHand.done; }
+  get canDouble() { return this.canHit && this.player.length === 2 && (this.freeDouble || this.balance >= this.activeHand.base); }
   get isPair() { return this.player.length === 2 && this.player[0].rank === this.player[1].rank; }
-  get canSplit() { return this.canHit && !this.isSplit && this.isPair && (this.freeSplit || this.balance >= this.activeHand.stake); }
-  // Free Bet: the house stakes a double on a hard 9, 10 or 11, and a split of any pair but tens.
+  get canResplit() { return this.isPair && this.hands.length < this.maxHands; }
+  get canSplit() { return this.canStand && this.canResplit && (this.freeSplit || this.balance >= this.activeHand.base); }
+  // Free Bet: the house stakes a double on a hard 9, 10 or 11, and a split (and resplit) of any pair but tens.
   get freeDouble() { if (this.mode !== 'freebet' || this.player.length !== 2 || this.activeHand.splitAces) return false; const t = total(this.player); return !t.soft && t.value >= 9 && t.value <= 11; }
-  get freeSplit() { return this.mode === 'freebet' && this.isPair && !isTen(this.player[0]); }
+  get freeSplit() { return this.mode === 'freebet' && this.canResplit && !isTen(this.player[0]); }
   hit() {
     if (!this.canHit) return null;
     const card = this.draw(); this.player.push(card); const v = total(this.player).value;
@@ -179,21 +187,27 @@ export class Table {
     h.doubled = true;
     const card = this.draw(); this.player.push(card); this.activeHand.done = true; this.advance(); return card;
   }
+  // The active hand becomes two, side by side (`splitAt`, `splitAt + 1`), each to take a second card: the first
+  // keeps its stake (or its free-bet marker), the second is staked again, or played on a marker when free.
   split() {
     if (!this.canSplit) return false;
-    const [a, b] = this.player, stake = this.activeHand.stake, aces = a.rank === 'A', free = this.freeSplit;
-    if (!free) this.balance -= stake;
-    this.hands = [this.newHand([a], stake, true, aces), free ? this.newHand([b], 0, true, aces, stake, stake) : this.newHand([b], stake, true, aces)];
-    this.freeSplitMade = free;
-    this.activeIndex = 0; this.phase = 'splitting'; return true;
+    const i = this.activeIndex, h = this.activeHand, [a, b] = h.cards, aces = a.rank === 'A', free = this.freeSplit;
+    if (!free) this.balance -= h.base;
+    this.hands.splice(i, 1, this.newHand([a], h.stake, true, aces, h.base, h.free), free ? this.newHand([b], 0, true, aces, h.base, h.base) : this.newHand([b], h.base, true, aces));
+    this.freeSplitMade = free; this.splitAt = i;
+    this.phase = 'splitting'; return true;
   }
   splitCard(i) { if (this.phase !== 'splitting' || this.hands[i]?.cards.length !== 1) return null; const c = this.draw(); this.hands[i].cards.push(c); return c; }
   finishSplit() {
-    if (this.phase !== 'splitting' || this.hands.some(h => h.cards.length !== 2)) return false;
-    for (const h of this.hands) h.done = h.splitAces || total(h.cards).value === 21;
+    if (this.phase !== 'splitting' || this.hands.some(h => h.cards.length < 2)) return false;
+    for (const h of this.hands) if (!h.done && total(h.cards).value === 21) h.done = true;
     this.advance(); return true;
   }
-  advance() { const next = this.hands.findIndex(h => !h.done); if (next < 0) this.phase = 'dealer'; else { this.activeIndex = next; this.phase = 'player'; } }
+  // Split aces are done once they have their card, unless it is another ace that can still be split again.
+  advance() {
+    for (const h of this.hands) if (h.splitAces && h.cards.length === 2 && !(this.mode === 'freebet' && h.cards[1].rank === 'A' && this.hands.length < this.maxHands)) h.done = true;
+    const next = this.hands.findIndex(h => !h.done); if (next < 0) this.phase = 'dealer'; else { this.activeIndex = next; this.phase = 'player'; }
+  }
 
   // ---- the dealer ---------------------------------------------------------
   // The dealer draws when a hand is still live against them - yours or another player's (the
@@ -219,7 +233,8 @@ export class Table {
     const hands = this.hands.map((h, index) => {
       const p = total(h.cards).value, pb = !h.fromSplit && natural(h.cards), stake = h.stake;
       let payout = 0, title = 'Dealer wins.', kind = 'loss';
-      if (pb && db) { payout = stake; title = 'Two blackjacks. Push.'; kind = 'push'; }
+      if (h.evenMoney) { payout = stake * 2; title = 'Even money.'; kind = 'win'; }   // paid already, at the offer
+      else if (pb && db) { payout = stake; title = 'Two blackjacks. Push.'; kind = 'push'; }
       else if (db) title = 'Dealer blackjack.';
       else if (pb) { payout = stake * 2.5; title = 'Blackjack!'; kind = 'blackjack'; }
       else if (p > 21) title = 'Bust.';
@@ -227,24 +242,25 @@ export class Table {
       else if (push22s) { payout = stake; title = 'Dealer 22. Push.'; kind = 'push'; }
       else if (d > 21 || p > d) { payout = stake * 2 + h.free; title = d > 21 ? 'Dealer busts. You win.' : 'You win.'; kind = 'win'; }
       else if (p === d) { payout = stake; title = 'Push.'; kind = 'push'; }
-      return { index, stake, free: h.free, payout, net: payout - stake, title, kind, total: p };
+      return { index, stake, free: h.free, payout, net: payout - stake, title, kind, total: p, evenMoney: !!h.evenMoney };
     });
-    const mainPayout = sum(hands.map(h => h.payout)); this.balance += mainPayout;
+    const mainPayout = sum(hands.map(h => h.payout)); this.balance += mainPayout - this.early;
     // Lightning: last hand's multiplier pays on a win, waits on a push, is lost on a loss; then this
-    // hand's best winning total earns its struck multiplier for the next one.
+    // hand's best winning total earns its struck multiplier for the next one. Even money is a win (a waiting
+    // multiplier pays on it), but it gives the blackjack up, so it earns none.
     let bonus = null, earned = null, lost = null;
     if (this.mode === 'lightning') {
       const won = hands.some(h => h.kind === 'win' || h.kind === 'blackjack'), pushed = hands.every(h => h.kind === 'push');
       if (this.pending && won) { bonus = { m: this.pending.m, amount: this.pending.fee * this.pending.m }; this.balance += bonus.amount; this.pending = null; }
       else if (this.pending && !pushed) { lost = this.pending; this.pending = null; }
-      for (const h of hands) if ((h.kind === 'win' || h.kind === 'blackjack') && this.board) {
+      for (const h of hands) if ((h.kind === 'win' || h.kind === 'blackjack') && !h.evenMoney && this.board) {
         const b = bucketOf(h), m = this.board[b]; if (!earned || m > earned.m) earned = { m, bucket: b, fee: this.fee };
       }
       if (earned) this.pending = { m: earned.m, fee: earned.fee, bucket: earned.bucket };
     }
     const mainNet = mainPayout - this.stake + (bonus?.amount ?? 0) - this.fee, sideNet = sum(this.results.map(r => r.net));
-    const title = push22s && hands.every(h => h.kind === 'push') ? 'Dealer 22. Push.' : this.isSplit
-      ? hands.every(h => h.kind === 'win') ? 'Both hands win.' : hands.every(h => h.kind === 'loss') ? 'Dealer wins both.' : hands.every(h => h.kind === 'push') ? 'Both hands push.' : 'Split hands settled.'
+    const two = hands.length === 2, title = push22s && hands.every(h => h.kind === 'push') ? 'Dealer 22. Push.' : this.isSplit
+      ? hands.every(h => h.kind === 'win') ? (two ? 'Both hands win.' : 'All hands win.') : hands.every(h => h.kind === 'loss') ? (two ? 'Dealer wins both.' : 'Dealer wins all.') : hands.every(h => h.kind === 'push') ? (two ? 'Both hands push.' : 'All hands push.') : 'Split hands settled.'
       : hands[0].title;
     this.revealed = false; this.phase = 'result';
     this.result = { hands, title, mainNet, sideNet, net: mainNet + sideNet, sides: [...this.results], blackjack: hands.some(h => h.kind === 'blackjack'), dealerTotal: d, dealerBlackjack: db, dealer22: push22s, fee: this.fee, bonus, earned, lost };
@@ -257,19 +273,36 @@ export class Table {
     if (this.phase === 'betting') return 0;
     if (this.phase === 'result') { this.next(); return 0; }
     const settled = new Set(this.results.map(r => r.spot));
-    let refund = this.stake + this.fee + (settled.has('insurance') ? 0 : this.insurance); this.fee = 0; this.board = null;
+    let refund = sum(this.hands.filter(h => !h.evenMoney).map(h => h.stake)) + this.fee + (settled.has('insurance') ? 0 : this.insurance); this.fee = 0; this.board = null;   // even money was paid at the offer
     for (const s of SPOTS) if (s !== 'main' && this.stakes[s] && !settled.has(s)) refund += this.stakes[s];
     this.balance += refund; this.clearRound(); this.bets = emptyBets(); this.history = []; this.phase = 'betting';
     return refund;
   }
 }
 
-function emptyStakes() { return Object.fromEntries([...SPOTS].map(s => [s, 0])); }
-
-// Largest chips first, as a dealer would make up an amount.
-export function breakDown(amount, values = [...CHIP_VALUES].reverse()) {
-  const out = []; let left = Math.round(amount * 2) / 2;
-  for (const v of values) while (left >= v) { out.push(v); left -= v; }
-  if (left > 0) out.push(left);
-  return out;
+// A hand a page lost mid-play (`rec`: the Table as the page wrote it down) is finished as live tables finish a
+// dropped seat: the player stands, insurance (or even money) is declined, the dealer plays out and the hand is
+// paid. One that can't be played out is voided like a misdeal. Returns { t, delta, result } or, voided,
+// { t, delta, back }; null for a record that is not a hand this table wrote.
+export function playOut(rec, random = Math.random) {
+  if (!Array.isArray(rec?.hands) || !Array.isArray(rec.cards) || !Number.isFinite(rec.balance)) return null;
+  try {
+    const t = new Table({ random, balance: rec.balance, mode: rec.mode }); Object.assign(t, rec);
+    const before = t.balance;
+    try {
+      for (let i = 0; i < 200 && t.phase !== 'result'; i++) {
+        if (t.phase === 'dealing') { if (t.player.length < 2 || t.dealer.length < 2) t.initialCard(t.player.length > t.dealer.length ? 'dealer' : 'player'); else t.finishDeal(); }
+        else if (t.phase === 'insurance') t.insure(false);
+        else if (t.phase === 'player') t.stand();
+        else if (t.phase === 'splitting') { t.hands.forEach((h, k) => { if (h.cards.length === 1) t.splitCard(k); }); t.finishSplit(); }
+        else if (t.phase === 'dealer') { t.revealHole(); while (t.dealerHit()); t.settle(); }
+        else break;
+      }
+      if (t.phase === 'result' && t.result) return { t, delta: t.balance - before, result: t.result };
+    } catch (e) { console.error('the last hand could not be played out', e); }
+    const back = t.abandon();
+    return { t, delta: t.balance - before, back };
+  } catch (e) { console.error('the last hand could not be read', e); return null; }
 }
+
+function emptyStakes() { return Object.fromEntries([...SPOTS].map(s => [s, 0])); }

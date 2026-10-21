@@ -7,25 +7,34 @@
 //   const roll = createRoller(audioContext, destinationNode)
 //   roll.update({ speed, theta, phase }, when)   // each frame; speed in cm/s, theta in radians, phase 0–3
 //   roll.stop(fade)
-export function createRoller(ctx, dest) {
+// The two loops are made once per audio context (about a million samples: a frame or more of work on a
+// phone, just as the ball is launched); each spin starts them at a random point, so no two sound alike.
+const loops = new WeakMap();
+function buffers(ctx) {
+  if (loops.has(ctx)) return loops.get(ctx);
   const rate = ctx.sampleRate, len = Math.floor(rate * 2.5), buf = ctx.createBuffer(1, len, rate), d = buf.getChannelData(0);
   // pink-ish noise (Paul Kellet's filter), so the loop has no hiss edge to repeat; the loop seam is crossfaded
   let b0 = 0, b1 = 0, b2 = 0;
   for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = .99765 * b0 + w * .099046; b1 = .963 * b1 + w * .2965164; b2 = .57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * .1848) * .2; }
   const fade = Math.floor(rate * .25);
   for (let i = 0; i < fade; i++) { const k = i / fade; d[len - fade + i] = d[len - fade + i] * (1 - k) + d[i] * k; }
-  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = fade / rate; src.loopEnd = len / rate;
-
-  const node = (type, f, q) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q; return n; };
-  const gain = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
-  // the rolling grain: a smooth, slightly uneven swell (a few slow sines at odd rates), never a click;
-  // it plays faster the faster the ball runs, like the ball's surface turning over on the wood
+  // the rolling grain: a smooth, slightly uneven swell (a few slow sines at odd rates), never a click
   const glen = Math.floor(rate * 4), gbuf = ctx.createBuffer(1, glen, rate), gd = gbuf.getChannelData(0);
   const parts = [[4, .5], [7, .35], [11, .25], [17, .16], [23, .1]].map(([f, a]) => [f, a, Math.random() * 6.28]);   // whole cycles per 4 s loop: seamless
   let gr = 0;
   for (let i = 0; i < glen; i++) { let v = 0; for (const [f, a, ph] of parts) v += a * Math.sin(6.2832 * f * i / glen + ph); gd[i] = v; gr += v * v; }
   gr = Math.sqrt(gr / glen); for (let i = 0; i < glen; i++) gd[i] /= gr;
-  const grain = ctx.createBufferSource(); grain.buffer = gbuf; grain.loop = true;
+  const out = { noise: buf, fade: fade / rate, grain: gbuf }; loops.set(ctx, out); return out;
+}
+export const prepareRoller = ctx => void buffers(ctx);   // ahead of the first spin, at a quiet moment
+export function createRoller(ctx, dest) {
+  const B = buffers(ctx);
+  const src = ctx.createBufferSource(); src.buffer = B.noise; src.loop = true; src.loopStart = B.fade; src.loopEnd = B.noise.duration;
+
+  const node = (type, f, q) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q; return n; };
+  const gain = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
+  // the grain plays faster the faster the ball runs, like the ball's surface turning over on the wood
+  const grain = ctx.createBufferSource(); grain.buffer = B.grain; grain.loop = true;
   const grainDepth = gain(0);
   // the source: noise rounded off at the top, a ball rolling on wood has no hiss in it
   const soft = node('lowpass', 1200, .5), soft2 = node('lowpass', 1600, .5);
@@ -67,6 +76,7 @@ export function createRoller(ctx, dest) {
       if (stopped) return; stopped = true; const t = ctx.currentTime;
       out.gain.cancelScheduledValues(t); out.gain.setTargetAtTime(0, t, f / 3);
       try { src.stop(t + f * 3); grain.stop(t + f * 3); } catch { /* already stopped */ }
+      setTimeout(() => out.disconnect(), f * 3000 + 50);   // the spent filters leave the table bus
     },
   };
 }

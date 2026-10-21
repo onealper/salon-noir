@@ -3,8 +3,8 @@
 //   chip rack · dealer's cards · wordmark · printed arcs · your cards ·
 //   side-bet crown · your main circle · padded armrest (radius 100).
 import * as THREE from '../vendor/three.module.min.js';
-import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
-import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, backTexture, CARD_W, CARD_H, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
+import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov } from './stage.mjs';
+import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, backTexture, setFaceDetail, onArtLanded, CARD_W, CARD_H, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
 
 export const EDGE_Z = -40, R = 100, CARD_T = .03;
 // Your eye is placed per screen shape (see frame()): seated height and distance are searched
@@ -35,31 +35,13 @@ export function toSeat(k, x, z) {
   const a = seatAngle(k), zr = z - EDGE_Z, c = Math.cos(a), s = Math.sin(a);
   return { x: x * c + zr * s, z: -x * s + zr * c + EDGE_Z };
 }
-// Rendering detail per device class. 'auto' picks one; the frame-time watcher can step down.
-export const QUALITY = {
-  // ratio: the most device pixels drawn per CSS pixel (an iPhone's screen is 3x).
-  high: { name: 'high', ratio: 2, shadow: 2048, soft: true, felt: 4096, chipSegments: 48 },
-  phone: { name: 'phone', ratio: 3, shadow: 2048, soft: true, felt: 4096, chipSegments: 40 },
-  saver: { name: 'saver', ratio: 1.5, shadow: 1024, soft: false, felt: 2048, chipSegments: 28 },
-};
-export function detectQuality() {
-  const coarse = matchMedia('(pointer: coarse)').matches, short = Math.min(screen.width, screen.height) < 820;
-  // deviceMemory exists in Chromium only; Safari reports nothing, and slow devices are caught by the frame watcher.
-  if ((navigator.deviceMemory ?? 8) <= 2) return QUALITY.saver;
-  return coarse && short ? QUALITY.phone : QUALITY.high;
-}
 
 export function createWorld(canvas, { specs, quality = detectQuality(), mode }) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  let ratioCap = quality.ratio; const ratio = () => Math.min(devicePixelRatio || 1, ratioCap);
-  renderer.setPixelRatio(ratio()); setChipDetail(quality.chipSegments);
-  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = quality.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-  const maxTex = renderer.capabilities.maxTextureSize, aniso = renderer.capabilities.getMaxAnisotropy();
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#0c0c0d');
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture; scene.environmentIntensity = .42;
-  const camera = new THREE.PerspectiveCamera(42, 1, 1, 900);
+  // the renderer, its loop and frame watcher, the scene and the camera (stage.mjs: the same for the wheel)
+  const st = createStage(canvas, { quality, background: '#0c0c0d', environment: .42, fov: 42, far: 900, lights: () => [key] });
+  const { renderer, scene, camera, view, tickers, requestRender, maxTex, aniso } = st;
+  setChipDetail(quality.chipSegments); setFaceDetail(quality.face);
+  onArtLanded(() => requestRender());
 
   // ---- light: a warm pendant over the table, a cool fill, a dim back glow ----
   const key = new THREE.SpotLight('#fff0d8', 5200, 0, .78, .85, 1.6);
@@ -104,10 +86,13 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   station.position.set(0, -2.4, EDGE_Z - 20.5); station.receiveShadow = true; if (!roomArt) table.add(station);
   // Padded leather armrest along the curve, with a brass line where it meets the felt.
   const arc = (r, y) => new ArcXZ(r, y);
-  const leather = new THREE.MeshPhysicalMaterial({ color: '#141312', roughness: .58, clearcoat: .35, clearcoatRoughness: .45, sheen: .4, sheenColor: new THREE.Color('#3a3530') });
-  const grainArt = artImage('table:leather'), grain = (u, v) => {
-    // The drawn leather's grain as a bump map, about one 10 cm tile at a time.
-    const t = new THREE.Texture(grainArt); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(u, v); t.anisotropy = aniso; t.needsUpdate = true; return t;
+  const leather = leatherMaterial();
+  const grainArt = artImage('table:leather'); let grainTex = null;
+  const grain = (u, v) => {
+    // The drawn leather's grain as a bump map, about one 10 cm tile at a time. Clones share one image
+    // (one upload); only the tiling differs.
+    if (!grainTex) { grainTex = new THREE.Texture(grainArt); grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping; grainTex.anisotropy = aniso; grainTex.needsUpdate = true; }
+    const t = grainTex.clone(); t.repeat.set(u, v); return t;
   };
   const railLen = Math.PI * (R + 5.4), railRound = 2 * Math.PI * 5.6;
   const railMat = grainArt ? leather.clone() : leather, capMat = grainArt ? leather.clone() : leather;
@@ -117,7 +102,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   }
   const rail = new THREE.Mesh(new THREE.TubeGeometry(arc(R + 5.4, 2.4), 200, 5.6, 28, false), railMat); rail.castShadow = rail.receiveShadow = true; table.add(rail);
   for (const x of [-(R + 5.4), R + 5.4]) { const cap = new THREE.Mesh(new THREE.SphereGeometry(5.6, 28, 16), capMat); cap.position.set(x, 2.4, EDGE_Z); table.add(cap); }
-  const brass = new THREE.MeshStandardMaterial({ color: '#b98f45', metalness: 1, roughness: .28 });
+  const brass = brassMaterial();
   table.add(new THREE.Mesh(new THREE.TubeGeometry(arc(R - .3, .35), 200, .42, 10, false), brass));
   const lip = new THREE.Mesh(new THREE.BoxGeometry(2 * R + 22, 1.1, 1.4), brass); lip.position.set(0, .2, EDGE_Z - .7); table.add(lip);
 
@@ -151,12 +136,12 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   const band = new THREE.Mesh(new THREE.PlaneGeometry(B.w, B.h), new THREE.MeshStandardMaterial({ map: bandTex, transparent: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
   band.rotation.x = -Math.PI / 2; band.position.set(mainSpot.x, .012, mainSpot.z - B.cy + B.h / 2); band.receiveShadow = true; table.add(band);
   const medalSide = new THREE.MeshStandardMaterial({ color: '#8a6d34', metalness: .85, roughness: .32 });
+  const medals = new Map(), medallion = spec => { if (!medals.has(spec.id)) { const t = medallionTexture(spec); t.anisotropy = aniso; medals.set(spec.id, t); } return medals.get(spec.id); };   // one per bet: a table change swaps, never repaints
   for (const spec of specs) {
     const s = LAYOUT.spots[spec.id]; if (!s) continue;
     const g = new THREE.Group(); g.position.set(s.x, 0, s.z);
     const body = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r + .08, s.lift, 64, 1, true), medalSide); body.position.y = s.lift / 2; body.castShadow = body.receiveShadow = true;
-    const t = medallionTexture(spec); t.anisotropy = aniso;
-    const top = new THREE.Mesh(new THREE.CircleGeometry(s.r, 64), new THREE.MeshStandardMaterial({ map: t, roughness: .5, metalness: .15 }));
+    const top = new THREE.Mesh(new THREE.CircleGeometry(s.r, 64), new THREE.MeshStandardMaterial({ map: medallion(spec), roughness: .5, metalness: .15 }));
     top.rotation.x = -Math.PI / 2; top.position.y = s.lift + .002; top.receiveShadow = true;
     g.add(body, top); table.add(g); spots[spec.id] = g;
   }
@@ -192,7 +177,6 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   shoe.group.position.set(LAYOUT.shoe.x, 0, LAYOUT.shoe.z); shoe.group.rotation.y = LAYOUT.shoe.yaw; table.add(shoe.group);
 
   // ---- camera: your seat --------------------------------------------------------------
-  const view = { w: 1, h: 1 };
   // Keep the essentials in frame: your main circle and the side-bet arc, the dealer's edge, and
   // (on wide screens) the whole shoe and discard holder; upright, the shoe's mouth.
   const scratch = new THREE.Vector3();
@@ -208,9 +192,8 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     camera.position.copy(eye); camera.lookAt(eye.x + Math.sin(yaw) * 100 * Math.cos(mid), eye.y - Math.sin(mid) * 100, eye.z - Math.cos(mid) * 100);
     camera.updateMatrixWorld();   // project() reads the world matrix, which render() would otherwise refresh too late
     const fits = fov => { camera.fov = fov; camera.updateProjectionMatrix(); return must.every(p => { scratch.set(...p).project(camera); return Math.abs(scratch.x) < .96 && Math.abs(scratch.y) < .94 && scratch.z < 1; }); };
-    if (!fits(70)) return null;
-    let lo = 16, hi = 70; while (hi - lo > .25) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
-    fits(hi); return hi;
+    const fov = fitFov(fits, 16, 70, .25); if (fov == null) return null;
+    fits(fov); return fov;
   }
   const pxOf = (a, b) => { scratch.set(...a).project(camera); const x0 = scratch.x, y0 = scratch.y; scratch.set(...b).project(camera); return Math.hypot((scratch.x - x0) * view.w, (scratch.y - y0) * view.h) / 2; };
   // The padded rail must not hide the near edge of your main circle (checked in the centre plane).
@@ -223,7 +206,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // for the area below it, then the lens is extended upward over those pixels (an off-centre
   // frustum), so the room shows through the bar without anything important sitting under it.
   function frame(w, h, top = 0) {
-    renderer.setPixelRatio(ratio()); renderer.setSize(w, h, false);
+    st.size(w, h);
     const vh = Math.max(1, h - top); view.w = w; view.h = vh;
     camera.clearViewOffset(); camera.aspect = w / vh;
     const portrait = w / vh < .9, compact = !portrait && vh < 460, cfg = portrait ? CAMERA.port : CAMERA.land, must = mustSee(portrait, compact);   // compact: a phone on its side
@@ -258,6 +241,9 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     orbitAt.set(Math.sin(a) * 8, portrait ? -120 : -44, portrait ? -8 : 0);
     camera.position.copy(orbitEye); camera.up.set(0, 1, 0); camera.lookAt(orbitAt); camera.updateMatrixWorld();
   }
+  // The orbit is a slow drift: drawn at 30 frames a second (`lazy`, it asks for its own frames) and,
+  // moving only the camera, never redraws the shadows (`still`). The fly-in takes every frame.
+  let shown = 0;
   function showTick(now) {
     if (show.fly) {
       const f = show.fly, k = Math.min(1, (now - f.t0) / f.ms), e = k < .5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
@@ -266,16 +252,18 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       if (k >= 1) { tickers.delete(showTick); show.on = false; show.fly = null; applyPan(); f.done(); }
       return;
     }
-    placeShowcase(now);
+    if (now - shown < 31) return;
+    shown = now; placeShowcase(now); requestRender(false);
   }
+  showTick.still = true;
   const showcase = {
     get on() { return show.on; },
-    start(still = false) { show.on = true; show.fly = null; if (still) { tickers.delete(showTick); placeShowcase(9000); } else tickers.add(showTick); requestRender(); },   // `still`: reduced motion holds one pose
+    start(still = false) { show.on = true; show.fly = null; showTick.lazy = true; if (still) { tickers.delete(showTick); placeShowcase(9000); } else tickers.add(showTick); requestRender(false); },   // `still`: reduced motion holds one pose
     // fly from wherever the orbit is to your seat; resolves when you are sitting
     stop(ms = 1300) {
       if (!show.on) return Promise.resolve();
-      if (ms <= 0) { tickers.delete(showTick); show.on = false; camera.position.copy(seatPos); applyPan(); requestRender(); return Promise.resolve(); }
-      tickers.add(showTick);
+      if (ms <= 0) { tickers.delete(showTick); show.on = false; camera.position.copy(seatPos); applyPan(); requestRender(false); return Promise.resolve(); }
+      showTick.lazy = false; tickers.add(showTick);
       return new Promise(done => { show.fly = { t0: performance.now(), ms, fromPos: camera.position.clone(), fromQuat: camera.quaternion.clone(), done }; requestRender(); });
     },
   };
@@ -283,7 +271,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // `pan` is a turn about the vertical (radians, positive looks left) on top of the framed view.
   const baseQuat = new THREE.Quaternion(), panQ = new THREE.Quaternion(); let pan = 0;
   function applyPan() { if (show.on) return; camera.quaternion.copy(panQ.setFromAxisAngle(UPV, pan).multiply(baseQuat)); camera.updateMatrixWorld(); }
-  function setPan(a) { pan = a; applyPan(); requestRender(); }
+  function setPan(a) { pan = a; applyPan(); requestRender(false); }
   // How far to turn so the point (x, z) on the felt sits comfortably inside the picture: if it is
   // already well inside, don't turn at all; otherwise turn until it sits `to` (in screen halves) off centre.
   function panFor(x, z, to = .3) {
@@ -298,47 +286,33 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     pan = keep; applyPan(); return out;
   }
   const UPV = new THREE.Vector3(0, 1, 0);
-  let dirty = true, running = false; const tickers = new Set();
-  function requestRender() { dirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
-  // Frame-time watch: while things move, compare each frame with the display's own refresh (the
-  // shortest recent interval - 8, 16 or 33 ms), so a 30 Hz screen or Low Power Mode is not mistaken
-  // for a slow GPU. Only frames that miss well behind it count. After a stretch of mostly late
-  // frames, draw a quarter fewer pixels per CSS pixel (never below one less than the tier's own);
-  // after a few smooth stretches, step back up.
-  let last = 0, late = 0, frames = 0, base = 1e9, good = 0;
-  function watch(t) {
-    if (!last || !tickers.size) { last = t; return; }
-    const dt = t - last; last = t; if (dt > 250) return;
-    frames++; base = Math.min(base * 1.002, dt); if (dt > base * 1.7) late++;
-    if (frames < 90) return;
-    const floor = Math.max(1, quality.ratio - 1);
-    if (late > 45 && ratioCap > floor) { ratioCap = Math.max(floor, ratioCap - .25); good = 0; resize(); }
-    else if (late < 5 && ratioCap < quality.ratio && ++good >= 3) { ratioCap = Math.min(quality.ratio, ratioCap + .25); good = 0; resize(); }
-    frames = late = 0;
+  // A preset applies at once: pixels, shadow size and softness (the stage), the cloth, the chips' detail and the card faces.
+  function setQuality(q) {
+    const was = quality; quality = q; st.setQuality(q);
+    if (q.felt !== was.felt) paintMode(mode);
+    setChipDetail(q.chipSegments); swapChipGeometry(scene); setFaceDetail(q.face);
+    requestRender();
   }
-  const resize = () => { renderer.setPixelRatio(ratio()); renderer.setSize(view.w, view.h, false); requestRender(); };
-  function setQuality(q) { quality = q; ratioCap = q.ratio; resize();
-    key.shadow.mapSize.set(q.shadow, q.shadow); key.shadow.map?.dispose(); key.shadow.map = null; renderer.shadowMap.type = q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap; renderer.shadowMap.needsUpdate = true; requestRender(); }
-  function loop(t) {
-    watch(t); if (!tickers.size) last = 0;
-    const active = tickers.size > 0; running = false;
-    for (const f of tickers) f(t);            // a finishing tween may request another frame here
-    if (dirty || active) { dirty = false; renderer.render(scene, camera); }
-    if ((tickers.size || dirty) && !running) { running = true; requestAnimationFrame(loop); }
+  // Another table's rules: its printing on the felt, and the medallion in the last side-bet spot. The cloth
+  // is repainted only when the table really changes (it is the largest picture in the room).
+  let slot = specs.find(s => s.id === 'dpairs') ?? null;
+  function paintMode(m) {
+    mode = m; const t = paintFelt(Math.min(maxTex, quality.felt), m); t.anisotropy = aniso;
+    felt.material.map.dispose(); felt.material.map.image.width = 0; felt.material.map = t;   // width 0 frees the old canvas's pixels now, not at the next collection
+    requestRender();
   }
-  const v3 = new THREE.Vector3();
-  function project(x, y, z) { v3.set(x, y, z).project(camera); return { x: (v3.x + 1) / 2 * view.w, y: (1 - v3.y) / 2 * view.h, behind: v3.z > 1 }; }
+  function setMode(m, slotSpec) {
+    if (m !== mode) paintMode(m);
+    const top = spots.dpairs?.children[1];
+    if (top && slotSpec && slotSpec !== slot) { slot = slotSpec; top.material.map = medallion(slotSpec); requestRender(); }
+  }
+  const project = st.project;
 
   return {
     THREE, renderer, scene, camera, table, spots, shoe, frame, requestRender, tickers, project, setQuality, setPan, panFor, get pan() { return pan; },
     lights: { key, hemi, glow, get backdrop() { return backdrop; } }, showcase, afterFrame, radialTexture, setExtraSee(pts) { extraSee = pts; },
-    // Another table's rules: its printing on the felt, and the medallion in the last side-bet spot.
-    setMode(m, slotSpec) {
-      const t = paintFelt(Math.min(maxTex, quality.felt), m); t.anisotropy = aniso;
-      felt.material.map.dispose(); felt.material.map = t; felt.material.needsUpdate = true;
-      const top = spots.dpairs?.children[1]; if (top && slotSpec) { const mt = medallionTexture(slotSpec); mt.anisotropy = aniso; top.material.map = mt; top.material.needsUpdate = true; }
-      requestRender();
-    }, get quality() { return quality; }, get pixelRatio() { return renderer.getPixelRatio(); },
+    setMode, pause: st.pause, get paused() { return st.paused; },
+    get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     discard: { group: discard, get count() { return discarded; }, set: setDiscards, topY: () => .6 + discarded * CARD_T },
     edgeTex, acrylic, edgeLine,
   };
@@ -432,12 +406,19 @@ export function chipMaterials(v) {
   if (chipMats.has(v)) return chipMats.get(v);
   const side = new THREE.MeshStandardMaterial({ map: chipEdgeTexture(v), roughness: .5 });
   const top = new THREE.MeshStandardMaterial({ map: chipFaceTexture(v), bumpMap: chipBumpTexture(v), bumpScale: .9, roughness: .46 });
-  const mats = [side, top, top]; chipMats.set(v, mats); return mats;
+  const mats = [side, top]; chipMats.set(v, mats); return mats;
 }
-// A clay chip: a rim with softly rounded edges and two flat faces. Groups: 0 rim, 1 top, 2 bottom.
-// Both faces and the rim share one angle convention, so the edge spots line up.
+// A clay chip: a rim with softly rounded edges and two flat faces. Groups: 0 the rim, 1 both faces (one
+// material, so one draw call for the pair). Both faces and the rim share one angle convention, so the edge
+// spots line up.
 let chipGeo, chipDetail = 48;
 export const setChipDetail = n => { chipDetail = n; };
+// After a change of detail, chips already in a scene take the new shape (the old one is freed).
+export function swapChipGeometry(scene) {
+  const geo = chipGeometry(), old = new Set();
+  scene.traverse(o => { if (o.geometry?.userData.chip && o.geometry !== geo) { old.add(o.geometry); o.geometry = geo; } });
+  for (const g of old) g.dispose();
+}
 export function chipGeometry(segments = chipDetail) {
   if (chipGeo?.userData.segments === segments) return chipGeo;
   const r = CHIP_R, h = CHIP_H / 2, b = .045, pos = [], nor = [], uv = [], idx = [], groups = [];
@@ -451,16 +432,16 @@ export function chipGeometry(segments = chipDetail) {
     const a = j * (segments + 1) + i, d = a + segments + 1; idx.push(a, d, a + 1, a + 1, d, d + 1);
   }
   groups.push([start, idx.length, 0]); start = idx.length;
-  for (const [y, sgn, g] of [[h, 1, 1], [-h, -1, 2]]) {
+  for (const [y, sgn] of [[h, 1], [-h, -1]]) {
     const base = pos.length / 3; pos.push(0, y, 0); nor.push(0, sgn, 0); uv.push(.5, .5);
     for (let i = 0; i <= segments; i++) { const a = i / segments * Math.PI * 2, x = (r - b) * Math.cos(a), z = (r - b) * Math.sin(a); pos.push(x, y, z); nor.push(0, sgn, 0); uv.push(x / (2 * r) + .5, .5 - z / (2 * r)); }
     for (let i = 0; i < segments; i++) sgn > 0 ? idx.push(base, base + i + 2, base + i + 1) : idx.push(base, base + i + 1, base + i + 2);
-    groups.push([start, idx.length - start, g]); start = idx.length;
   }
+  groups.push([start, idx.length - start, 1]);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx); for (const [s0, n, m] of groups) geo.addGroup(s0, n, m); geo.computeBoundingSphere();
-  geo.userData.segments = segments; return chipGeo = geo;
+  geo.userData.segments = segments; geo.userData.chip = true; return chipGeo = geo;
 }
 function radialTexture(inner, outer) {
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');

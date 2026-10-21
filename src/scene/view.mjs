@@ -50,34 +50,39 @@ const bezier = (p0, p1, p2, p3, n = 48) => Array.from({ length: n + 1 }, (_, k) 
 // winnings - is stacked on top of it; tall stacks are cut into columns of twenty, as dealers do.
 const STACKS = { ...LAYOUT.spots, ins: { x: -13, z: 17.2 } };
 // Another player's things carry the key 's<seat>' (their hand and stake), then a letter for the
-// rest: 'b' the second hand after a split, 'i' insurance, 'p' Perfect Pairs, 't' 21+3.
-// A trailing 'f' is the free-bet marker beside that hand's stake ('h0f', 's3f', 's3bf').
-const seatOf = key => typeof key === 'string' && /^s\d(b|i|p|t)?f?$/.test(key) ? +key[1] : null;
+// rest: 'b', 'c', 'd' the second to fourth hands after splits, 'i' insurance, 'p' Perfect Pairs, 't' 21+3.
+// Your hands are 'h0'-'h3'. A trailing 'f' is the free-bet marker beside that hand's stake ('h0f', 's3f', 's3bf').
+const seatOf = key => typeof key === 'string' && /^s\d(b|c|d|i|p|t)?f?$/.test(key) ? +key[1] : null;
 const partOf = key => key.slice(2).replace(/f$/, '');
+const HAND_PARTS = ['', 'b', 'c', 'd'];
+export const handKey = (seat, j) => seat == null ? `h${j}` : `s${seat}${HAND_PARTS[j]}`;
 const MARKER = { dx: 0, dz: -4.4 };   // where a marker sits: just above its stake, toward the dealer
+// Split hands side by side, in your seat's frame: two well apart; three or four (Free Bet resplits) a card's width
+// and a little apart, the row shifted left so the stair-stepped cards sit centred on the seat.
+export const handX = (j, n) => n <= 1 ? 0 : n === 2 ? (j ? 9.5 : -9.5) : (j - (n - 1) / 2) * (n === 3 ? 9.5 : 9) - .9;
+// Their stakes in the main circle: one in the middle, two side by side; three or four in a row across it, set a
+// little toward the dealer, with their markers in a row below them (above would run into the side-bet arc).
+function stakeAt(j, n) { const m = LAYOUT.spots.main; return n <= 1 ? { x: m.x, z: m.z } : n === 2 ? { x: m.x + (j ? 2.3 : -2.3), z: m.z } : { x: m.x + (j - (n - 1) / 2) * 4, z: m.z - 1.6 }; }
+function markerAt(j, n) { const s = stakeAt(j, n); return n <= 2 ? { x: s.x + MARKER.dx, z: s.z + MARKER.dz } : { x: s.x, z: s.z + 4.2 }; }
 // Where those sit, in your seat's frame (carried round to theirs).
 export const SEAT_SPOTS = { p: { x: -10.5, z: 43, r: 3 }, t: { x: 10.5, z: 43, r: 3 }, i: { x: -13, z: 17.2 } };
 export class TableView {
   constructor(world, motion, audio) {
     Object.assign(this, { world, motion, audio }); this.T = world.table;
-    this.front = null; this.cards = []; this.stacks = new Map(); this.split = false; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Set();
+    this.front = null; this.cards = []; this.stacks = new Map(); this.handCount = 1; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Map();
   }
+  get split() { return this.handCount > 1; }
+  seatHands(k) { return this.seatSplits.get(k) ?? 1; }   // how many hands that seat is playing
   // ---- stack geometry ------------------------------------------------------------------------
+  // A hand's stake, or (a trailing 'f') the free-bet marker beside it; side bets and insurance have their own spots.
   stackBase(key) {
-    const m = LAYOUT.spots.main, s = this.split ? 2.3 : 0;
-    if (key.endsWith('f')) {   // a free-bet marker: just off its hand's stake, on your seat's right of it
-      const hand = key.slice(0, -1), k = seatOf(key);
-      if (k == null) { const b = this.stackBase(hand); return { x: b.x + MARKER.dx, z: b.z + MARKER.dz }; }
-      const split = this.seatSplits.has(k) ? 2.3 : 0, x = m.x + (partOf(key) === 'b' ? split : -split) + MARKER.dx;
-      return toSeat(k, x, m.z + MARKER.dz);
-    }
-    if (key === 'h0') return { x: m.x - s, z: m.z }; if (key === 'h1') return { x: m.x + s, z: m.z };
     const k = seatOf(key);
-    if (k != null) {
-      const part = partOf(key), spot = SEAT_SPOTS[part], split = this.seatSplits.has(k) ? 2.3 : 0;
-      return spot ? toSeat(k, spot.x, spot.z) : toSeat(k, m.x + (part === 'b' ? split : -split), m.z);
-    }
-    return STACKS[key];
+    if (/^h\df?$/.test(key)) { const j = +key[1], n = this.handCount; return key.endsWith('f') ? markerAt(j, n) : stakeAt(j, n); }
+    if (k == null) return STACKS[key];
+    const part = partOf(key), spot = SEAT_SPOTS[part];
+    if (spot) return toSeat(k, spot.x, spot.z);
+    const j = HAND_PARTS.indexOf(part), n = this.seatHands(k), p = key.endsWith('f') ? markerAt(j, n) : stakeAt(j, n);
+    return toSeat(k, p.x, p.z);
   }
   // Where a player's hand rests on the rail: chips come from here and go back here.
   home(key, x = 0, y = 9, z = 70) { const k = seatOf(key); if (k == null) return V(x, y, z); const p = toSeat(k, x, z); return V(p.x, y, p.z); }
@@ -201,11 +206,10 @@ export class TableView {
     if (owner === 'dealer') { const d = LAYOUT.dealer; return { pos: V(d.x - 3.6 + i * 4.4, .05 + i * CARD_T, d.z), heading: 0 }; }
     const k = seatOf(owner);
     if (k != null) {   // another seat: your layout, turned to face them
-      const bx = this.seatSplits.has(k) ? (partOf(owner) === 'b' ? 9.5 : -9.5) : 0;
-      const a = this.anchorAt(bx, i, turn), p = toSeat(k, a.pos.x, a.pos.z);
+      const a = this.anchorAt(handX(HAND_PARTS.indexOf(partOf(owner)), this.seatHands(k)), i, turn), p = toSeat(k, a.pos.x, a.pos.z);
       return { pos: V(p.x, a.pos.y, p.z), heading: a.heading + seatAngle(k), seat: k };
     }
-    return this.anchorAt(this.split ? (owner === 0 ? -9.5 : 9.5) : 0, i, turn);
+    return this.anchorAt(handX(owner, this.handCount), i, turn);
   }
   anchorAt(bx, i, turn) {
     const base = LAYOUT.player;
@@ -268,7 +272,7 @@ export class TableView {
     });
     m.position.copy(p3); m.quaternion.copy(qT);
     if (!staged) next?.();
-    const c = { card, mesh: m, owner, i, hidden, heading: h1, flipFace, yaw: tgt.seat != null ? seatAngle(tgt.seat) : 0 }; this.cards.push(c);
+    const c = { card, mesh: m, owner, i, turn, hidden, heading: h1, flipFace, yaw: tgt.seat != null ? seatAngle(tgt.seat) : 0 }; this.cards.push(c);
     if (atSpot) await this.turnOver(c, 300 * D.speed);
   }
   // After a new shoe the first card is burned: out face down, straight into the discard holder.
@@ -312,27 +316,28 @@ export class TableView {
     }, ease.inOut);
     m.position.copy(base); m.quaternion.copy(cardQuat(c.heading, 1));
   }
-  // Split: the second card slides across to become the second hand; the stake moves with it.
-  async splitHands() {
-    const second = this.handCards(0)[1], first = this.handCards(0)[0]; this.split = true;
-    second.owner = 1; second.i = 0;
-    const moves = [[first, this.anchor(0, 0)], [second, this.anchor(1, 0)]].map(([c, a]) => { const from = c.mesh.position.clone();
-      return this.motion.tween(TIMING.split, t => { c.mesh.position.lerpVectors(from, a.pos, t); c.mesh.position.y += Math.sin(Math.PI * t) * .8; }, ease.inOut); });
-    const stake = this.chipsOf('h0'), from = stake.map(c => c.position.clone());
-    moves.push(this.motion.tween(TIMING.split, t => stake.forEach((c, i) => { const to = this.chipSlot('h0', i); c.position.lerpVectors(from[i], to, t); }), ease.inOut));
-    this.audio?.play('slide', { gain: .6 }); await Promise.all(moves);
+  // Split: hand `at`'s second card slides across to become a new hand beside it (`at + 1`; the hands after it move
+  // up one), and every hand and stake shuffles over to its place for `n` hands. `seat`: another player's, else yours.
+  async splitHands(at = 0, n = 2, seat = null) {
+    const key = j => handKey(seat, j), owner = j => seat == null ? j : key(j);
+    const second = this.handCards(owner(at))[1];
+    for (let j = n - 2; j > at; j--) {   // the hands after the split move up one, last first
+      for (const c of this.handCards(owner(j))) c.owner = owner(j + 1);
+      for (const s of ['', 'f']) { this.stacks.delete(key(j + 1) + s); this.rename(key(j) + s, key(j + 1) + s); }
+    }
+    second.owner = owner(at + 1); second.i = 0;
+    if (seat == null) this.handCount = n; else this.seatSplits.set(seat, n);
+    const cards = this.cards.filter(c => seat == null ? typeof c.owner === 'number' : seatOf(c.owner) === seat);
+    const moves = cards.map(c => { const from = c.mesh.position.clone(), to = this.anchor(c.owner, c.i, c.turn).pos;
+      return this.motion.tween(TIMING.split, t => { c.mesh.position.lerpVectors(from, to, t); c.mesh.position.y += Math.sin(Math.PI * t) * .8; }, ease.inOut); });
+    for (let j = 0; j < n; j++) for (const s of ['', 'f']) {   // stakes and markers slide to their new spots, each chip at its height
+      const k = key(j) + s, chips = this.chipsOf(k), from = chips.map(c => c.position.clone());
+      if (chips.length) moves.push(this.motion.tween(TIMING.split, t => chips.forEach((c, i) => { const to = this.chipSlot(k, i); c.position.set(from[i].x + (to.x - from[i].x) * t, from[i].y, from[i].z + (to.z - from[i].z) * t); }), ease.inOut));
+    }
+    this.audio?.play('slide', { gain: seat == null ? .6 : .5, x: second.mesh.position.x }); await Promise.all(moves);
   }
-
   // Another player splits: the same moves as yours, at their seat.
-  async splitSeat(k) {
-    const key = `s${k}`, [first, second] = this.handCards(key); this.seatSplits.add(k);
-    second.owner = `${key}b`; second.i = 0;
-    const moves = [[first, this.anchor(key, 0)], [second, this.anchor(`${key}b`, 0)]].map(([c, a]) => { const from = c.mesh.position.clone();
-      return this.motion.tween(TIMING.split, t => { c.mesh.position.lerpVectors(from, a.pos, t); c.mesh.position.y += Math.sin(Math.PI * t) * .8; }, ease.inOut); });
-    const stake = this.chipsOf(key), from = stake.map(c => c.position.clone());
-    moves.push(this.motion.tween(TIMING.split, t => stake.forEach((c, i) => { const to = this.chipSlot(key, i); c.position.lerpVectors(from[i], to, t); }), ease.inOut));
-    this.audio?.play('slide', { gain: .5, x: first.mesh.position.x }); await Promise.all(moves);
-  }
+  splitSeat(k, at = 0, n = 2) { return this.splitHands(at, n, k); }
 
   // ---- the clear-up ------------------------------------------------------------------------------
   // Right to left, as regulations ask: each hand is squared up onto its first card, the piles are
@@ -363,16 +368,16 @@ export class TableView {
     const d = this.world.discard.group; d.updateMatrixWorld();
     const into = V(0, this.world.discard.topY() + .3, 0).applyMatrix4(d.matrix), from = packet.position.clone(), r0 = packet.rotation.y;
     await this.motion.tween(TIMING.discard * this.dealer.speed, t => { packet.position.lerpVectors(from, into, t); packet.position.y += Math.sin(Math.PI * t) * 8; packet.rotation.y = r0 + (d.rotation.y - r0) * smooth(t); }, ease.inOut);
-    this.T.remove(packet); this.cards = []; this.split = false; this.seatSplits.clear();
+    this.T.remove(packet); this.cards = []; this.handCount = 1; this.seatSplits.clear();
     this.world.discard.set(this.world.discard.count + n); this.audio?.play('land', { x: into.x, gain: 1.6 });
   }
-  clearCards() { for (const c of this.cards) c.mesh.parent?.remove(c.mesh); this.cards = []; this.split = false; this.seatSplits.clear(); this.world.requestRender(); }
+  clearCards() { for (const c of this.cards) c.mesh.parent?.remove(c.mesh); this.cards = []; this.handCount = 1; this.seatSplits.clear(); this.world.requestRender(); }
 
   // ---- the cut card and a new shoe -------------------------------------------------------------------
   // When the cut card reaches the front the dealer takes it out and lays it beside the shoe:
   // this round finishes, then the shoe is replaced.
   async ejectCut() {
-    const g = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, CARD_T * 2, CARD_H), new THREE.MeshStandardMaterial({ color: '#f2c417', roughness: .4 }));
+    const g = this.cutCard ??= new THREE.Mesh(new THREE.BoxGeometry(CARD_W, CARD_T * 2, CARD_H), new THREE.MeshStandardMaterial({ color: '#f2c417', roughness: .4 }));   // one card, every shoe
     const from = this.shoeToTable(this.world.shoe.frontPose()), to = V(LAYOUT.shoe.x + 6, .06, LAYOUT.shoe.z + 12);
     g.position.copy(from.pos); g.castShadow = true; this.T.add(g); this.cutOnFelt = g;
     const q0 = from.quat.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0))), q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, .5, 0));

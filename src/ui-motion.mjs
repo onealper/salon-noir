@@ -35,11 +35,14 @@ export function pop(el, { from = .6, delay = 0 } = {}) {
   if (!el) return; if (reduced) { utils.set(el, { opacity: 1, scale: 1 }); return; }
   animate(el, { opacity: [0, 1], scale: [from, 1], ease: S.pop, delay });
 }
-// A group entering: each item rises into place a beat after the one before.
+// A group entering: each item rises into place a beat after the one before. It moves on the `translate` property and
+// lets go of its inline opacity and offset once in place, so the stylesheet rules again: a disabled control looks
+// disabled, and a transform of the item's own (the chip in hand stands lifted) is left alone.
+const release = els => { for (const e of els) { e.style.removeProperty('opacity'); e.style.removeProperty('translate'); } };
 export function enter(els, { y = 14, gap = 35, from = 'first' } = {}) {
   els = [...els].filter(e => e && e.offsetParent !== null); if (!els.length) return;
-  if (reduced) { utils.set(els, { opacity: 1, translateY: 0 }); return; }
-  animate(els, { opacity: [0, 1], translateY: [y, 0], ease: S.soft, delay: stagger(gap, { from }) });
+  if (reduced) { utils.remove(els, null, 'opacity'); utils.remove(els, null, 'translate'); release(els); return; }
+  animate(els, { opacity: [0, 1], translate: [`0px ${y}px`, '0px 0px'], ease: S.soft, delay: stagger(gap, { from }), onComplete: () => release(els) });
 }
 // A value that changed: a quick bump so the eye catches it.
 export function bump(el, k = 1.14) {

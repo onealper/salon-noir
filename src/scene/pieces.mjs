@@ -1,6 +1,6 @@
 // Cards and chips as objects, plus the small motion engine that moves them.
 import * as THREE from '../vendor/three.module.min.js';
-import { CARD_W, CARD_H, CARD_R, CHIP_R, CHIP_H, faceTexture, backTexture, markerFaceTexture } from './textures.mjs';
+import { CARD_W, CARD_H, CARD_R, faceTexture, backTexture, markerFaceTexture } from './textures.mjs';
 import { chipMaterials, chipGeometry, CARD_T } from './world.mjs';
 
 // ---- orientation vocabulary -------------------------------------------------------------
@@ -49,7 +49,7 @@ export function createChip(value) {
 // A free-bet marker: a slightly smaller, thicker brass-yellow disc that reads FREE BET.
 let markerMats;
 export function createMarker() {
-  markerMats ??= (() => { const side = new THREE.MeshStandardMaterial({ color: '#c99a2e', metalness: .35, roughness: .4 }), top = new THREE.MeshStandardMaterial({ map: markerFaceTexture(), roughness: .42 }); return [side, top, top]; })();
+  markerMats ??= (() => { const side = new THREE.MeshStandardMaterial({ color: '#c99a2e', metalness: .35, roughness: .4 }), top = new THREE.MeshStandardMaterial({ map: markerFaceTexture(), roughness: .42 }); return [side, top]; })();   // rim, both faces
   const m = new THREE.Mesh(chipGeometry(), markerMats); m.scale.set(.86, 1.5, .86); m.castShadow = m.receiveShadow = true; m.userData.value = 'free'; return m;
 }
 
