@@ -759,6 +759,12 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-history li.red { background: #a3141f; } .r-history li.black { background: #19191c; box-shadow: inset 0 0 0 1px #34343a; } .r-history li.green { background: #0d7a45; }
 .r-history li.latest { width: 34px; height: 34px; margin: -3px 2px -3px 0; font-size: 18px; box-shadow: 0 0 0 2px var(--gold-hi), 0 0 14px rgba(226, 196, 131, .4); }
 .r-history li:nth-child(n+2) { opacity: .88; } .r-history li:nth-child(n+8) { opacity: .6; }
+/* While the ball runs the hint is a small pill at the foot. From the drop, and in the replay, the picture is the wheel's
+   alone: the strip steps up out of it (it is back as the number is called, with the number) and the hint goes. */
+body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; font-size: 12.5px; }
+.r-history { transition: opacity .3s var(--ease), translate .3s var(--ease); }
+.rstage.r-wheelonly .r-history { opacity: 0; translate: -50% -8px; }
+.rstage.r-wheelonly .r-hint { opacity: 0; }
 
 /* the bet under your finger or pointer */
 .r-loupe { position: absolute; left: 0; top: 0; translate: -50% -100%; display: grid; justify-items: center; gap: 2px; padding: 6px 12px 6px; border-radius: 12px; background: rgba(14, 14, 15, .9); border: 1px solid rgba(226, 196, 131, .55); box-shadow: 0 8px 20px rgba(0, 0, 0, .45); white-space: nowrap; z-index: 3; }
@@ -771,6 +777,9 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-bubble.red b { background: radial-gradient(circle at 35% 30%, #d0303c, #8e1019); } .r-bubble.black b { background: radial-gradient(circle at 35% 30%, #3a3a40, #0e0e10); } .r-bubble.green b { background: radial-gradient(circle at 35% 30%, #22a866, #0a5c33); }
 .r-bubble small { padding: 3px 9px; border-radius: 99px; background: rgba(10, 10, 11, .8); font: 700 10.5px/1.2 Inter, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--ivory); white-space: nowrap; }
 .r-bubble::after { content: ''; position: absolute; left: 50%; bottom: -18px; width: 1.5px; height: 16px; translate: -50% 0; background: linear-gradient(var(--gold-hi), transparent); }
+/* under the ball where the bar or the recent numbers would cover it */
+.r-bubble.below { translate: -50% 22px; }
+.r-bubble.below::after { top: -18px; bottom: auto; background: linear-gradient(transparent, var(--gold-hi)); }
 .r-replay { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 54px); translate: -50% 0; padding: 5px 12px 5px 22px; border-radius: 99px; background: rgba(10, 10, 11, .7); font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .22em; text-transform: uppercase; color: var(--ivory); }
 .r-replay::before { content: ''; position: absolute; left: 10px; top: 50%; width: 6px; height: 6px; translate: 0 -50%; border-radius: 50%; background: #e0493f; animation: rec 1s steps(2) infinite; }
 @keyframes rec { 50% { opacity: .2; } }
@@ -786,6 +795,15 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-win.down em { color: #e7a197; font-size: 28px; }
 .r-win .r-gross { font: 600 11.5px/1.2 Inter, system-ui, sans-serif; color: var(--muted); font-variant-numeric: tabular-nums; }
 .r-win .r-gross:empty { display: none; }
+/* Beside the layout (any screen but an upright phone) the result is one line in the recent numbers' place, the room kept
+   for the strip above the picture: lower down it covered the racetrack printed on the cloth. The strip is back with your
+   next bet, the new number first. */
+@media (min-width: 761px), (orientation: landscape) {
+  .r-win { top: calc(var(--top-h, 0px) + 6px); width: max-content; max-width: calc(100% - 24px); grid-template-columns: repeat(4, auto); grid-template-areas: 's b e g'; align-items: center; column-gap: 14px; padding: 3px 18px 4px; white-space: nowrap; }   /* (its own width: placed at left 50%, it would shrink to the half on its right) */
+  .r-win small { grid-area: s; } .r-win b { grid-area: b; } .r-win em { grid-area: e; font-size: 30px; } .r-win.down em { font-size: 26px; }
+  .r-win .r-gross { grid-area: g; max-width: 200px; white-space: normal; text-align: left; }
+  .rstage:has(.r-win.show) .r-history { opacity: 0; }
+}
 .r-tag { position: absolute; left: 0; top: 0; translate: -50% -100%; display: flex; gap: 5px; align-items: baseline; padding: 3px 8px; border-radius: 99px; background: rgba(12, 12, 13, .82); white-space: nowrap; animation: tag-up 2.6s var(--ease) forwards; }
 .r-tag b { font: 700 11px/1 Inter, system-ui, sans-serif; color: var(--muted); } .r-tag span { font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
 @keyframes tag-up { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
@@ -828,14 +846,14 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .st-hc { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
 .st-hc h4 { margin: 0 0 6px; font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .st-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.st-n { display: grid; justify-items: center; width: 44px; padding: 6px 0 4px; border-radius: 10px; font: 700 17px/1 Cinzel, serif; color: #fff; pointer-events: auto; }
+.st-n { display: grid; justify-items: center; width: 44px; padding: 6px 0 4px; border-radius: 10px; font: 800 19px/1 "Barlow Condensed", sans-serif; font-variant-numeric: tabular-nums; color: #fff; pointer-events: auto; }   /* figures in Barlow, as on the cloth and the strip (Cinzel's 11 reads II) */
 .st-n small { margin-top: 3px; font: 700 10px/1 Inter, system-ui, sans-serif; opacity: .75; }
 .st-n.red { background: #a3141f; } .st-n.black { background: #19191c; box-shadow: inset 0 0 0 1px #34343a; } .st-n.green { background: #0d7a45; }
 .st-bar { display: grid; grid-template-columns: 88px 1fr; align-items: center; gap: 10px; margin: 6px 0; font: 600 12px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 .st-bar > div { display: flex; height: 24px; border-radius: 8px; overflow: hidden; gap: 2px; }
-.st-bar i { display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; }
+.st-bar i { display: flex; align-items: center; justify-content: center; min-width: max-content; padding: 0 5px; overflow: hidden; }   /* a small share keeps its label whole: the bar is the figure's, the figure is printed */
 .st-bar em { font: 700 11px/1 Inter, system-ui, sans-serif; font-style: normal; color: #fff; white-space: nowrap; }
-.st-bar i.red { background: #a3141f; } .st-bar i.black { background: #232327; } .st-bar i.green { background: #0d7a45; }
+.st-bar i.red { background: #a3141f; } .st-bar i.black { background: #232327; } .st-bar i.green { background: #0d7a45; flex-shrink: 0; }   /* the zero's share is small: its label is never cut */
 .st-bar i.a { background: #3a3326; } .st-bar i.b { background: #5a4a2c; } .st-bar i.c { background: #7d6536; }
 
 /* the dock */

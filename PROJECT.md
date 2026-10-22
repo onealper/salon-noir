@@ -21,7 +21,7 @@ House rules worth knowing (all in the rules cards in Settings, and checked by th
 - **Classic** (the base of all three): 8 decks, dealer stands on soft 17, hole card with a peek, blackjack pays 3:2, one split (aces take one card), double after split, insurance 2:1 and **even money** offered on your blackjack against an ace, ten-card Charlie. Lucky Lucky pays **30:1 on an unsuited 6-7-8**.
 - **Free Bet:** free doubles on hard 9-11 and free splits on every pair but tens, **resplitting up to four hands**; tens split for your own stake; a dealer 22 pushes, and Push 22 takes the Dealer Pairs spot (11:1).
 - **Lightning:** a fee equal to the main bet; multipliers struck onto the final totals pay on your next win. Its return figures (engine.mjs, modes.mjs) are the owner's call: leave them as they are.
-- **European roulette:** single zero with **la partage** (half of each even-money bet back on zero), the racetrack with neighbours and the call bets, limits per kind of bet. Bets settle the moment they close (the number is drawn then); the ball's flight only shows it.
+- **European roulette:** single zero with **la partage** (half of each even-money bet back on zero), the racetrack with neighbours and the call bets (printed on the cloth in a landscape view; on an upright phone the Racetrack sheet is the track), limits per kind of bet. Every player's chips on a spot make one column; wins are pushed to the players' edge of the cloth, in line with their bets. Bets settle the moment they close (the number is drawn then); the ball's flight only shows it, and the screen gives nothing away early: once the ball is at rest James says "The winning number is…" and the number, its bubble showing as he starts to say it, and the balance and "This visit" hold until the winnings land on the cloth. The dolly stands on the number's column and comes up as the chips go home, before "Place your bets"; the number keeps a soft glow until your next chip.
 - **Nothing is lost by leaving.** Each blackjack hand is saved move by move; a hand a closed or reloaded page left unfinished is **played out on the next visit** (you stand, insurance declined) and paid, with a note over the lobby. The saved hand never holds the order of the shoe or the dealer's hole card (`record` in `engine.mjs`), so the play-out deals them from a fresh shuffle of the unseen cards. A second window can't pay it twice (see `inFlight` in `core/wallet.mjs`), and the balance isn't reset while another window has a hand riding.
 
 History: the code folder was called `v28` (its 28th version) until it was renamed `src`. The project began as "Velvet Blackjack", was renamed "Spader", and is now "Salon Noir". Old names still show up in comments and in storage keys (every setting is kept under `spader.*`, and the balance falls back to an old `spader.balance`), on purpose.
@@ -44,7 +44,7 @@ On https and localhost a service worker (`sw.js`) keeps the game for offline pla
 node --test                     # from the repo root, Node 22+; about 6 s, no install
 ```
 
-`test/*.test.mjs` import the pure modules straight from `src/` (rules engines, side bets, players, roulette rules and physics, wallet, ledger) and check every payout, the paytables' house edges, money conservation, playing out a saved hand, the ball landing in the drawn pocket, and the architecture rules below. Run it after touching any rules or money code. On Node 22 don't pass a directory (`node --test test/` fails); with no argument it finds `test/**`.
+`test/*.test.mjs` import the pure modules straight from `src/` (rules engines, side bets, players, roulette rules and physics, wallet, ledger) and check every payout, the paytables' house edges, money conservation, playing out a saved hand, the ball landing in the drawn pocket, the slow-motion replay keeping the ball in the picture on every screen shape, the roulette table's look (the other players' chip colours kept clear of the value chips and the brass, true-size chips, statistics that count the zero), and the architecture rules below. Run it after touching any rules or money code. On Node 22 don't pass a directory (`node --test test/` fails); with no argument it finds `test/**`.
 
 ### Testing aids
 
@@ -113,6 +113,7 @@ src/                       All code, styles, fonts, sounds and libraries
     rgame.mjs              The roulette room, createRoulette(ctx): betting, spin, payout
     rules.mjs              European roulette rules, bets, payouts. No DOM.
     physics.mjs            Ball/wheel simulation (seeded, after Small & Tse 2012)
+    replay.mjs             The slow-motion replay's camera, fitted to the screen from the planned path. No DOM.
     rscene.mjs             Roulette 3D table and layout
     wheel3d.mjs            3D wheel model
     roller.mjs             Synthesised ball-rolling sound

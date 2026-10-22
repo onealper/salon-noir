@@ -10,6 +10,7 @@ import { createStage, QUALITY, detectQuality, leatherMaterial, brassMaterial, fi
 import { SPOTS, colorOf, rowOf, colOf, REDS, WHEEL as WHEEL_ORDER } from './rules.mjs';
 import { createWheel } from './wheel3d.mjs';
 import { GEO } from './physics.mjs';
+const WELL = GEO.rimR + .4;   // the well the bowl stands in, just clear of its rim
 
 export { THREE };
 // Cell sizes per seat (cm): cu along the table, cv across; z0 the zero's depth, cc the column boxes',
@@ -69,7 +70,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // ---- the table ---------------------------------------------------------------------------------------------------
   const table = new THREE.Group(); scene.add(table);
   const woodTex = (img, rx, ry, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
-  const walnut = new THREE.MeshPhysicalMaterial({ color: ART.veneer ? '#d9c2b0' : '#1c120c', map: woodTex(ART.veneer, 4, 1, Math.PI / 2), roughness: .4, clearcoat: .9, clearcoatRoughness: .1 });   // the table: Macassar ebony, its stripes along the length
+  const walnut = new THREE.MeshPhysicalMaterial({ color: ART.veneer ? '#d9c2b0' : '#1c120c', map: woodTex(ART.veneer, 4, 1, Math.PI / 2), roughness: .4, clearcoat: .9, clearcoatRoughness: .3, envMapIntensity: .6 });   // the table: Macassar ebony, its stripes along the length (a satin lacquer: a glossier one blew out white beside the wheel at the seat's grazing angle)
   const leather = leatherMaterial();
   const grain = artImage('table:leather'); if (grain) { const t = new THREE.Texture(grain); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(24, 2); t.needsUpdate = true; leather.bumpMap = t; leather.bumpScale = 1.8; }
   const brass = brassMaterial();
@@ -110,9 +111,12 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const Z = v => v >= 0 ? zg - v * s.cv : v >= -1 ? zg - v * s.d : zg + s.d + (-v - 1) * s.e;
     const U = x => x < x0 ? (x - x0) / s.z0 : x <= x0 + 12 * s.cu ? (x - x0) / s.cu : 12 + (x - x0 - 12 * s.cu) / s.cc;
     const V = z => z <= zg ? (zg - z) / s.cv : z <= zg + s.d ? -(z - zg) / s.d : -1 - (z - zg - s.d) / s.e;
-    const xEnd = X(13), zFar = Z(3), zNear = Z(-2), wheelX = x0 - s.z0 - 5 - 45.6;
-    // the cloth: the grid, felt round it, the racetrack printed on the croupier's side (-z), room at the foot for the players' chips
-    return { orient, s, x0, zg, X, Z, U, V, xEnd, zFar, zNear, wheelX, rect: { x0: wheelX + 30, x1: xEnd + 34, z0: zFar - 40, z1: zNear + 15 } };
+    const xEnd = X(13), zFar = Z(3), zNear = Z(-2), wheelX = x0 - s.z0 - 5 - GEO.rimR, rect = { x0: wheelX + 30, x1: xEnd + 34, z0: zFar - 40, z1: zNear + 15 };
+    // the racetrack, a stadium printed on the croupier's side: only from the long side. On an upright phone it would lie
+    // off the right edge of the picture, and the Racetrack sheet is the phone's track.
+    const track = orient === 'land' ? (() => { const xa = X(-1), len = (xEnd - xa) * .78, H = Math.min(26, zFar - rect.z0 - 5 - 4); return { cx: (xa + xEnd) / 2, cz: zFar - 4 - H / 2, len, H }; })() : null;
+    // the cloth: the grid, felt round it, the racetrack, room at the foot for the players' chips
+    return { orient, s, x0, zg, X, Z, U, V, xEnd, zFar, zNear, wheelX, rect, track };
   }
   // Where each spot's chips sit, in layout units (u along, v across).
   function anchorUV(id) {
@@ -131,7 +135,8 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       case 'even': return [['low', 'even', 'red', 'black', 'odd', 'high'].indexOf(id) * 2 + 1, -1.5];
     }
   }
-  const anchor = (id, slot = 0) => { const [u, v] = anchorUV(id), off = [[0, 0], [.95, -.7], [-.95, -.7], [.95, .7], [-.95, .7]][slot % 5]; return new THREE.Vector3(L.X(u) + off[0], 0, L.Z(v) + off[1]); };
+  // (each player's layer of a spot's one column sits a few millimetres off by its slot, so the layers read apart)
+  const anchor = (id, slot = 0) => { const [u, v] = anchorUV(id), off = [[0, 0], [.3, -.22], [-.3, -.22], [.3, .22], [-.3, .22]][slot % 5]; return new THREE.Vector3(L.X(u) + off[0], 0, L.Z(v) + off[1]); };
   // The spot under a point on the felt, or null.
   function spotAt(x, z) {
     const u = L.U(x), v = L.V(z), s = L.s;
@@ -167,42 +172,52 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const s = L.s, portrait = L.orient === 'port', line = Math.max(2, .13 * ppc), CREAM = 'rgba(238,226,190,.92)';
     const INKC = { red: '#c3192b', black: '#111111', green: '#12924f' };
     const box = (u0, v0, u1, v1) => { const xa = px(L.X(u0)), xb = px(L.X(u1)), za = pz(L.Z(v0)), zb = pz(L.Z(v1)); return [Math.min(xa, xb), Math.min(za, zb), Math.abs(xb - xa), Math.abs(zb - za)]; };
-    // print text at a point on the felt (cm), standing up for your seat: from the long side up is -z; from the foot, up is -x
+    // print text at a point on the felt (cm), standing up for your seat: from the long side up is -z; from the foot, up is -x.
+    // `str` may be runs, [text, scale, rise], set side by side (a raised 'st' in '1st 12'). Figures are Barlow Condensed,
+    // the salon's face for values (its 1 is never read as a Roman I); words are Cinzel, the felt lettering.
+    const BARLOW = '"Barlow Condensed"';
     const print = (str, x, z, size, { color = CREAM, font = 'Cinzel', weight = 700, rot = 0, track = 0, key = 0 } = {}) => {
       g.save(); g.translate(px(x), pz(z)); g.rotate((portrait ? -Math.PI / 2 : 0) + rot);
-      g.font = `${weight} ${size * ppc}px ${font}, "Bodoni Moda", serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; if (track) g.letterSpacing = `${track * ppc}px`;
-      if (key) { g.lineJoin = 'round'; g.lineWidth = key * ppc; g.strokeStyle = CREAM; g.strokeText(str, 0, size * ppc * .06); }
-      g.fillStyle = color; g.fillText(str, 0, size * ppc * .06); g.restore();
+      g.textAlign = 'left'; g.textBaseline = 'middle'; if (track) g.letterSpacing = `${track * ppc}px`;
+      const face = k => { g.font = `${weight} ${size * k * ppc}px ${font}, "Bodoni Moda", serif`; };
+      const runs = (Array.isArray(str) ? str : [[str, 1, 0]]).map(([t, k = 1, up = 0]) => { face(k); return [t, k, up, g.measureText(t).width - (track ? track * ppc : 0)]; });
+      let at = -runs.reduce((a, r) => a + r[3], 0) / 2;
+      for (const [t, k, up, w] of runs) {
+        face(k); const y = size * ppc * (.06 - up);
+        if (key) { g.lineJoin = 'round'; g.lineWidth = key * ppc; g.strokeStyle = CREAM; g.strokeText(t, at, y); }
+        g.fillStyle = color; g.fillText(t, at, y); at += w;
+      }
+      g.restore();
     };
     const text = (str, u, v, size, o) => print(str, L.X(u), L.Z(v), size, o);
     g.lineWidth = line; g.strokeStyle = CREAM; g.lineJoin = 'round';
     // numbers
-    const nSize = portrait ? s.cu * .58 : s.cu * .5;
+    const nSize = portrait ? s.cu * .62 : s.cu * .56;
     for (let n = 1; n <= 36; n++) {
       const [x, y, w, h] = box(rowOf(n) - 1, colOf(n) - 1, rowOf(n), colOf(n)); g.strokeRect(x, y, w, h);
-      text(String(n), rowOf(n) - .5, colOf(n) - .5, nSize, { color: INKC[REDS.has(n) ? 'red' : 'black'], key: .16 });
+      text(String(n), rowOf(n) - .5, colOf(n) - .5, nSize, { color: INKC[REDS.has(n) ? 'red' : 'black'], key: .16, font: BARLOW });
     }
     // zero: a pointed box toward the wheel
     { const [x, y, w, h] = box(-1, 0, 0, 3), tip = w * .42;
       g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + tip, y); g.lineTo(x, y + h / 2); g.lineTo(x + tip, y + h); g.lineTo(x + w, y + h); g.closePath(); g.stroke();
-      text('0', -.45, 1.5, nSize * 1.15, { color: INKC.green, key: .18 }); }
-    // columns
-    for (const k of [1, 2, 3]) { const [x, y, w, h] = box(12, k - 1, 13, k); g.strokeRect(x, y, w, h); text('2 to 1', 12.5, k - .5, portrait ? s.cc * .24 : s.cu * .2, { font: 'Inter', weight: 700, rot: portrait ? 0 : -Math.PI / 2 }); }
+      text('0', -.45, 1.5, nSize * 1.15, { color: INKC.green, key: .18, font: BARLOW }); }
+    // columns (at least an 8 px cap height on a phone held upright)
+    for (const k of [1, 2, 3]) { const [x, y, w, h] = box(12, k - 1, 13, k); g.strokeRect(x, y, w, h); text('2 to 1', 12.5, k - .5, portrait ? s.cc * .4 : s.cu * .38, { font: BARLOW, rot: portrait ? 0 : -Math.PI / 2 }); }
     // dozens and even money
-    ['1st 12', '2nd 12', '3rd 12'].forEach((t, i) => { const [x, y, w, h] = box(i * 4, -1, i * 4 + 4, 0); g.strokeRect(x, y, w, h); text(t, i * 4 + 2, -.5, portrait ? s.d * .42 : s.d * .36, { rot: portrait ? Math.PI / 2 : 0 }); });
+    [['1', 'st'], ['2', 'nd'], ['3', 'rd']].forEach(([d, o], i) => { const [x, y, w, h] = box(i * 4, -1, i * 4 + 4, 0); g.strokeRect(x, y, w, h); text([[d], [o, .56, .2], [' 12']], i * 4 + 2, -.5, s.d * .5, { font: BARLOW, rot: portrait ? Math.PI / 2 : 0 }); });
     ['1–18', 'EVEN', 'RED', 'BLACK', 'ODD', '19–36'].forEach((t, i) => {
       const [x, y, w, h] = box(i * 2, -2, i * 2 + 2, -1); g.strokeRect(x, y, w, h);
       if (t === 'RED' || t === 'BLACK') {   // the diamonds
         const cx = px(L.X(i * 2 + 1)), cy = pz(L.Z(-1.5)), a = (portrait ? s.e : s.cu * 1.35) * .5 * ppc * .62, b = (portrait ? s.cu * 1.35 : s.e) * .5 * ppc * .62;
         g.beginPath(); g.moveTo(cx - a, cy); g.lineTo(cx, cy - b); g.lineTo(cx + a, cy); g.lineTo(cx, cy + b); g.closePath();
         g.fillStyle = t === 'RED' ? INKC.red : INKC.black; g.fill(); g.lineWidth = line * .9; g.stroke(); g.lineWidth = line;
-      } else text(t, i * 2 + 1, -1.5, portrait ? s.e * .3 : s.e * .3, { font: 'Inter', weight: 700, rot: portrait ? Math.PI / 2 : 0, track: .08 });
+      } else text(t, i * 2 + 1, -1.5, s.e * .46, /\d/.test(t) ? { font: BARLOW, rot: portrait ? Math.PI / 2 : 0, track: .04 } : { rot: portrait ? Math.PI / 2 : 0, track: .08 });
     });
     // a double gold rule round the grid
     g.strokeStyle = 'rgba(214,180,104,.9)'; g.lineWidth = line * 1.2;
     { const [x, y, w, h] = box(-1, -2, 13, 3), m = .9 * ppc; g.strokeRect(x - m, y - m, w + 2 * m, h + 2 * m); g.lineWidth = line * .6; g.strokeRect(x - 1.5 * m, y - 1.5 * m, w + 3 * m, h + 3 * m); }
     // the racetrack, printed on the croupier's side: the wheel's order round a stadium, its sectors named inside
-    { const x0 = L.X(-1), x1 = L.xEnd, len = (x1 - x0) * .78, cxr = (x0 + x1) / 2, gapT = portrait ? 11 : 4, H = Math.min(26, L.zFar - R.z0 - 5 - gapT), czr = L.zFar - gapT - H / 2, bw = H * .27, r = H / 2, st = len - H;
+    if (L.track) { const { len, cx: cxr, cz: czr, H } = L.track, bw = H * .27, r = H / 2, st = len - H;
       const pt = (t, rr) => {   // a point round the stadium at fraction t, starting at the left apex and running clockwise seen from above
         const per = 2 * st + 2 * Math.PI * r; let d = ((t % 1) + 1) % 1 * per; const arc = Math.PI * r;
         if (d < arc / 2) { const a = Math.PI + d / r; return [cxr - st / 2 + rr * Math.cos(a), czr + rr * Math.sin(a)]; } d -= arc / 2;
@@ -216,14 +231,18 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       const N = WHEEL_ORDER.length, at0 = -.5 / N;
       for (let i = 0; i < N; i++) {
         const tb = at0 + i / N, [ax, az] = pt(tb, r), [bx, bz] = pt(tb, r - bw); g.beginPath(); g.moveTo(px(ax), pz(az)); g.lineTo(px(bx), pz(bz)); g.stroke();
-        const n = WHEEL_ORDER[i], [mx, mz] = pt(tb + .5 / N, r - bw / 2); print(String(n), mx, mz, bw * .52, { color: INKC[colorOf(n)], key: .12, font: '"Barlow Condensed"', weight: 700 });
+        const n = WHEEL_ORDER[i], [mx, mz] = pt(tb + .5 / N, r - bw / 2); print(String(n), mx, mz, bw * .52, { color: INKC[colorOf(n)], key: .12, font: BARLOW });
       }
       // the sector lines across the inside (Voisins | Orphelins | Tiers), and their names
       const edge = n => pt(at0 + WHEEL_ORDER.indexOf(n) / N, r - bw);
-      const lines = [[17, 22], [27, 1]].map(([a, b]) => { const [ax, az] = edge(a), [bx, bz] = edge(b); g.beginPath(); g.moveTo(px(ax), pz(az)); g.lineTo(px(bx), pz(bz)); g.stroke(); return (ax + bx) / 2; });
-      const lab = (t, x, k = .27) => print(t, x, czr, (H - 2 * bw) * k, { font: 'Cinzel', weight: 700, track: .06 });
-      const left = cxr - st / 2, right = cxr + st / 2;
-      lab('ZÉRO', left - r * .18, .2); lab('VOISINS', (left + r * .35 + lines[0]) / 2); lab('ORPHELINS', (lines[0] + lines[1]) / 2, .24); lab('TIERS', (lines[1] + right) / 2);
+      const lines = [[17, 22], [27, 1]].map(([a, b]) => { const [ax, az] = edge(a), [bx, bz] = edge(b); g.beginPath(); g.moveTo(px(ax), pz(az)); g.lineTo(px(bx), pz(bz)); g.stroke(); return [ax, az, bx, bz]; });
+      // each name sized to its own room on the band, so a long one never runs into a divider, the ring or the numbers:
+      // ZÉRO inside the round end (where the band is narrowest), the others between the dividers where they cross its type
+      const band = H - 2 * bw, ri = r - bw, left = cxr - st / 2, right = cxr + st / 2, hh = band * .14;
+      const xAt = ([ax, az, bx, bz], z) => ax + (bx - ax) * (z - az) / (bz - az), lo = l => Math.min(xAt(l, czr - hh), xAt(l, czr + hh)), hi = l => Math.max(xAt(l, czr - hh), xAt(l, czr + hh));
+      const lab = (t, a, b, k = .27) => { g.font = `700 100px Cinzel, "Bodoni Moda", serif`; g.letterSpacing = '0px'; const em = g.measureText(t).width / 100; print(t, (a + b) / 2, czr, Math.min(band * k, (b - a - .06 * t.length) / em), { font: 'Cinzel', weight: 700, track: .06 }); };
+      const zEnd = left + ri * .62;
+      lab('ZÉRO', left - Math.sqrt(ri * ri - (hh + 1) ** 2) + .4, zEnd, .2); lab('VOISINS', zEnd + 1.6, lo(lines[0]) - 1.2); lab('ORPHELINS', hi(lines[0]) + 1.2, lo(lines[1]) - 1.2, .24); lab('TIERS', hi(lines[1]) + 1.2, right);
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; return t;
   }
@@ -241,8 +260,8 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     // chip tray cut in beside it, a padded leather armrest round the players' side and the foot, a dark base
     clearGroup(body);
     const cz = (L.zFar + L.zNear) / 2, wx = L.wheelX;
-    const x0T = wx - 50, x1T = R.x1 + 24, z1T = R.z1 + 25, z0T = Math.min(R.z0 - 6, cz - 46 - 34);
-    const tray = { x0: wx - 30, x1: wx + 26, z0: cz - 46 - 30, z1: cz - 46 - 7 };
+    const x0T = wx - WELL - 4, x1T = R.x1 + 24, z1T = R.z1 + 25, z0T = Math.min(R.z0 - 6, cz - WELL - 34);
+    const tray = { x0: wx - 30, x1: wx + 26, z0: cz - WELL - 30, z1: cz - WELL - 7 };
     L.tray = new THREE.Vector3((tray.x0 + tray.x1) / 2, 0, (tray.z0 + tray.z1) / 2);
     // the top: rounded at the head and the foot, the well and the tray cut out
     const shape = new THREE.Shape(), rr = 22, P = (x, z) => new THREE.Vector2(x, -z);
@@ -250,12 +269,12 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     shape.lineTo(x1T, -(z1T - rr)); shape.absarc(x1T - rr, -(z1T - rr), rr, 0, -Math.PI / 2, true);
     shape.lineTo(x0T + rr * 1.6, -z1T); shape.absarc(x0T + rr * 1.6, -(z1T - rr * 1.6), rr * 1.6, -Math.PI / 2, -Math.PI, true);
     shape.lineTo(x0T, -(z0T + rr)); shape.absarc(x0T + rr, -(z0T + rr), rr, Math.PI, Math.PI / 2, true);
-    const hole = new THREE.Path(); hole.absarc(wx, -cz, 46, 0, Math.PI * 2, true); shape.holes.push(hole);
+    const hole = new THREE.Path(); hole.absarc(wx, -cz, WELL, 0, Math.PI * 2, true); shape.holes.push(hole);
     shape.holes.push(new THREE.Path([P(tray.x0, tray.z0), P(tray.x0, tray.z1), P(tray.x1, tray.z1), P(tray.x1, tray.z0)]));
     const topGeo = new THREE.ExtrudeGeometry(shape, { depth: 12, bevelEnabled: true, bevelThickness: .8, bevelSize: .8, bevelSegments: 3, curveSegments: 64 }); topGeo.rotateX(-Math.PI / 2); topGeo.translate(0, -13.1, 0);
     const top = new THREE.Mesh(topGeo, walnut); top.receiveShadow = true; top.castShadow = true; body.add(top);
     const dark = new THREE.MeshStandardMaterial({ color: '#0b0908', roughness: .9, side: THREE.BackSide });
-    const well = new THREE.Mesh(new THREE.CylinderGeometry(46, 46, 18, 96, 1, true), dark); well.position.set(wx, -9.3, cz); body.add(well);
+    const well = new THREE.Mesh(new THREE.CylinderGeometry(WELL, WELL, 18, 96, 1, true), dark); well.position.set(wx, -9.3, cz); body.add(well);
     // the tray: a velvet-lined recess holding the float, chips lying on their sides in rows
     { const w = tray.x1 - tray.x0, d = tray.z1 - tray.z0, inner = new THREE.Mesh(new THREE.BoxGeometry(w, 6, d), new THREE.MeshStandardMaterial({ color: '#1a1512', roughness: 1, side: THREE.BackSide }));
       inner.position.set(L.tray.x, -3.2, L.tray.z); body.add(inner);
@@ -263,7 +282,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
         const m = new THREE.Mesh(new THREE.BoxGeometry(along === 'x' ? len + .8 : .8, .5, along === 'z' ? len + .8 : .8), brass);
         m.position.set(along === 'x' ? a + len / 2 : a, .05, along === 'z' ? b + len / 2 : b); body.add(m);
       }
-      const rows = 10, gap = (w - 4) / rows, len = d - 3, cr = CHIP_R * .92;
+      const rows = 10, gap = (w - 4) / rows, len = d - 3, cr = CHIP_R;
       const colours = ['#ece6d6', '#b4202b', '#1e6a3c', '#17181b', '#5d2b7d', '#d29a34', '#ece6d6', '#b4202b', '#1e6a3c', '#17181b'];
       for (let i = 0; i < rows; i++) {
         const m = new THREE.Mesh(new THREE.CylinderGeometry(cr, cr, len, 28, 1, false), floatMaterial(colours[i], len)); m.rotation.x = Math.PI / 2;
@@ -302,7 +321,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     // highlight tiles: one per number and per outside box
     clearGroup(hi); tiles.clear();
     const tile = (key, u0, v0, u1, v1) => {
-      const w = Math.abs(L.X(u1) - L.X(u0)), d = Math.abs(L.Z(v1) - L.Z(v0)), m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: '#ffd98a', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+      const w = Math.abs(L.X(u1) - L.X(u0)), d = Math.abs(L.Z(v1) - L.Z(v0)), m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: '#ffd98a', alphaMap: glowMap(w, d, key === 0), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
       m.rotation.x = -Math.PI / 2; m.position.set((L.X(u0) + L.X(u1)) / 2, .06, (L.Z(v0) + L.Z(v1)) / 2); m.visible = false; hi.add(m); tiles.set(key, m);
     };
     for (let n = 1; n <= 36; n++) tile(n, rowOf(n) - 1, colOf(n) - 1, rowOf(n), colOf(n));
@@ -322,25 +341,56 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     if (isTall) { backdrop.position.set(L.wheelX - 190, -30 + H * .12, 0); backdrop.rotation.set(0, Math.PI / 2, 0); }     // behind the wheel, seen from the foot
     else { backdrop.position.set(L.xEnd * .2, -20 - H / 2 + .45 * H + 30, L.zFar - 170); backdrop.rotation.set(0, 0, 0); }
   }
-  // Light up numbers or boxes: keys are numbers or outside ids; `level` 0-1.
-  function highlight(keys, { level = .32, color = '#ffd98a' } = {}) {
-    for (const [k, m] of tiles) { const on = keys.includes(k); m.visible = on; if (on) { m.material.opacity = level; m.material.color.set(color); } }
+  // A lit box glows like a lamp under the cloth: brightest along its printed edge and fading in toward the middle, so
+  // the numeral keeps its ink. One alpha map per box shape (the zero's is pointed), shared by the boxes of that size.
+  const glowMaps = new Map();
+  function glowMap(w, d, zero) {
+    const key = `${w.toFixed(2)}x${d.toFixed(2)}${zero ? 'z' : ''}`; if (glowMaps.has(key)) return glowMaps.get(key);
+    const k = 12, W = Math.ceil(w * k), D = Math.ceil(d * k), c = document.createElement('canvas'); c.width = W; c.height = D; const g = c.getContext('2d');
+    const path = () => { g.beginPath(); if (zero) { const tip = W * .42; g.moveTo(W, 0); g.lineTo(tip, 0); g.lineTo(0, D / 2); g.lineTo(tip, D); g.lineTo(W, D); g.closePath(); } else g.rect(0, 0, W, D); };
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, D); g.save(); path(); g.clip(); g.lineJoin = 'round';
+    for (let i = 24; i >= 1; i--) { g.lineWidth = i * .1 * k * 2; g.strokeStyle = 'rgba(255,255,255,.045)'; path(); g.stroke(); }   // a soft falloff 2.4 cm deep
+    g.lineWidth = .4 * k * 2; g.strokeStyle = '#fff'; path(); g.stroke(); g.restore();   // and a bright 4 mm line on the edge
+    const t = new THREE.CanvasTexture(c); glowMaps.set(key, t); return t;
+  }
+  // Light up numbers or boxes: keys are numbers or outside ids, or [key, level]; `level` 0-1. `fade` (ms) brings the
+  // glow up once, as a lamp warms (a still ticker: no shadows redrawn, and it stops at full).
+  let glowJob = null;
+  function highlight(keys, { level = .32, color = '#ffd98a', fade = 0 } = {}) {
+    const want = new Map(keys.map(k => Array.isArray(k) ? k : [k, level]));
+    if (glowJob) { tickers.delete(glowJob); glowJob = null; }
+    for (const [k, m] of tiles) { const lv = want.get(k); m.visible = lv != null; if (lv != null) { m.userData.level = lv; m.material.opacity = fade > 0 ? 0 : lv; m.material.color.set(color); } }
+    if (fade > 0) {
+      const t0 = performance.now(), job = now => { const t = Math.min(1, (now - t0) / fade), e = 1 - (1 - t) ** 3; for (const m of tiles.values()) if (m.visible) m.material.opacity = m.userData.level * e; if (t >= 1) { tickers.delete(job); if (glowJob === job) glowJob = null; } };
+      job.still = true; glowJob = job; tickers.add(job);
+    }
     requestRender(false);   // glowing tiles cast nothing
   }
 
   // ---- chips and the dolly ------------------------------------------------------------------------------------------
-  const wheelChipMats = new Map();
+  // The other players' colour chips: each colour has its own count of edge inserts, on the face and round the rim, so a
+  // stack still says whose it is from the side or to an eye that can't tell the colours apart (`chipLook` sets the count).
+  const wheelChipMats = new Map(), chipLooks = new Map();
   function wheelChipMaterials(color) {
     if (wheelChipMats.has(color)) return wheelChipMats.get(color);
+    const n = chipLooks.get(color)?.inserts ?? 6, half = Math.PI * .3 / n;   // the inserts cover 30% of the edge, however many
     const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
     g.fillStyle = color; g.fillRect(0, 0, 256, 256);
     g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 10; g.beginPath(); g.arc(128, 128, 84, 0, Math.PI * 2); g.stroke();
-    g.lineWidth = 18; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.beginPath(); g.arc(128, 128, 116, a - .16, a + .16); g.stroke(); }
+    g.lineWidth = 18; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; g.beginPath(); g.arc(128, 128, 116, a - half, a + half); g.stroke(); }
     const face = new THREE.CanvasTexture(c); face.colorSpace = THREE.SRGBColorSpace;
-    const side = new THREE.MeshStandardMaterial({ color, roughness: .5 }), top = new THREE.MeshStandardMaterial({ map: face, roughness: .45 });
+    // the rim: u runs once round the chip from the face's angle 0 (as chipEdgeTexture lines its spots up)
+    const r = document.createElement('canvas'); r.width = 512; r.height = 16; const e = r.getContext('2d');
+    e.fillStyle = color; e.fillRect(0, 0, 512, 16); e.fillStyle = 'rgba(255,255,255,.85)';
+    for (let i = 0; i <= n; i++) { const u = i / n * 512, hw = half / (Math.PI * 2) * 512; e.fillRect(u - hw, 0, hw * 2, 16); }
+    e.fillStyle = 'rgba(0,0,0,.22)'; e.fillRect(0, 0, 512, 2); e.fillRect(0, 14, 512, 2);
+    const rim = new THREE.CanvasTexture(r); rim.colorSpace = THREE.SRGBColorSpace; rim.wrapS = THREE.RepeatWrapping;
+    const side = new THREE.MeshStandardMaterial({ map: rim, roughness: .5 }), top = new THREE.MeshStandardMaterial({ map: face, roughness: .45 });
     const mats = [side, top]; wheelChipMats.set(color, mats); return mats;   // rim, both faces
   }
-  const chipMesh = v => { const m = new THREE.Mesh(chipGeometry(), typeof v === 'number' ? chipMaterials(v) : wheelChipMaterials(v)); m.castShadow = m.receiveShadow = true; m.scale.setScalar(.92); chipsG.add(m); return m; };
+  // true size: a 39 mm chip, CHIP_H thick (the regulation 1.55 in, and Paulson's roulette chip)
+  const chipMesh = v => { const m = new THREE.Mesh(chipGeometry(), typeof v === 'number' ? chipMaterials(v) : wheelChipMaterials(v)); m.castShadow = m.receiveShadow = true; chipsG.add(m); return m; };
+  const chipLook = (color, look) => { chipLooks.set(color, look); };
   const dolly = new THREE.Group(); dolly.visible = false; table.add(dolly);
   { const glass = new THREE.MeshPhysicalMaterial({ color: '#f4f1ea', roughness: .05, metalness: 0, clearcoat: 1, clearcoatRoughness: .04, envMapIntensity: 2.2, transparent: true, opacity: .42, depthWrite: false });   // no transmission: that would draw the whole room twice a frame
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.5, .5, 40), brass); base.position.y = .25;
@@ -358,10 +408,18 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const fov = fitFov(ok, 12, 75, .2); if (fov == null) return null;
     p.fov = fov; return p;
   }
+  // the same for a shot worked out between frames (the replay): over the picture under the bar, the camera left as it was
+  function fitNow(pos, look, pts, mx, my) {
+    const off = camera.view?.enabled ? { ...camera.view } : null, was = { pos: camera.position.clone(), quat: camera.quaternion.clone(), fov: camera.fov };
+    camera.clearViewOffset(); const p = fit(pos, look, pts, mx, my);
+    if (off) camera.setViewOffset(off.fullWidth, off.fullHeight, off.offsetX, off.offsetY, off.width, off.height);
+    camera.position.copy(was.pos); camera.quaternion.copy(was.quat); camera.fov = was.fov; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+    return p;
+  }
   const shots = {};
   const wheelCentre = () => wheel.group.position.clone();
   function layoutCorners() { return [[-1, 3], [-1, -2], [13, 3], [13, -2]].map(([u, v]) => new THREE.Vector3(L.X(u), 0, L.Z(v))); }
-  const rimPts = (r = 46, y = 1.5, n = 16) => Array.from({ length: n }, (_, i) => wheelCentre().add(new THREE.Vector3(r * Math.cos(i / n * Math.PI * 2), y, r * Math.sin(i / n * Math.PI * 2))));
+  const rimPts = (r = WELL, y = 1.5, n = 16) => Array.from({ length: n }, (_, i) => wheelCentre().add(new THREE.Vector3(r * Math.cos(i / n * Math.PI * 2), y, r * Math.sin(i / n * Math.PI * 2))));
   function computeShots() {
     const portrait = L.orient === 'port', wc = wheelCentre(), cz = wc.z;
     // your seat: the whole layout, largest, with the wheel beside it (Mac) or rising at the top (phone)
@@ -374,9 +432,13 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       }
     } else {
       // seated at the long side: a long lens from a good way back keeps the table from bending
-      const must = [...layoutCorners(), ...rimPts(46, 1.5, 24).filter(p => p.x > L.wheelX + 22)], cx = (L.wheelX + 22 + L.xEnd) / 2;   // the layout first: the wheel may run off the picture's left edge
+      // the layout and the printed racetrack first (the wheel may run off the picture's left edge)
+      const T = L.track, must = [...layoutCorners(), ...rimPts(WELL, 1.5, 24).filter(p => p.x > L.wheelX + 22), ...(T ? [[-1, 0], [1, 0], [-.5, -1], [.5, -1]].map(([a, b]) => new THREE.Vector3(T.cx + a * (b ? T.len - T.H : T.len) / 2, 0, T.cz + b * T.H / 2)) : [])], cx = (L.wheelX + 22 + L.xEnd) / 2;
+      // aimed at the middle of what must show, seen from the camera (the track makes it lopsided): the lens can be no wider
+      // than the content needs. The camera has no yaw, so a point's height in the picture depends on its y and z alone.
+      const aim = pos => { let a0 = Infinity, a1 = -Infinity; for (const q of must) { const a = Math.atan2(pos.y - q.y, pos.z - q.z); a0 = Math.min(a0, a); a1 = Math.max(a1, a); } const yL = WHEEL_Y * .4; return new THREE.Vector3(cx, yL, pos.z - (pos.y - yL) / Math.tan((a0 + a1) / 2)); };
       for (let h = 100; h <= 380; h += 12) for (let d = 30; d <= 380; d += 12) {
-        const pos = new THREE.Vector3(cx, h, L.zNear + d), look = new THREE.Vector3(cx, WHEEL_Y * .4, cz), p = fit(pos, look, must, .97, .93);
+        const pos = new THREE.Vector3(cx, h, L.zNear + d), look = aim(pos), p = fit(pos, look, must, .97, .93);
         if (!p) continue; const score = cellPx(p) - Math.max(0, p.fov - 26) * 1.6; if (!best || score > best.score) best = { ...p, score };
       }
     }
@@ -405,7 +467,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       return best ?? around(17, 96, r, y, 1, .93, -6);
     };
     // while the ball runs: a low three-quarter view, locked off, as the live studios film the track
-    shots.wheel = portrait ? around(78, 74, 45.8, 1, 1, .9, -4) : around(96, 60, 45.8, 1, .92, .9, -4);
+    shots.wheel = portrait ? around(78, 74, GEO.rimR + .2, 1, 1, .9, -4) : around(96, 60, GEO.rimR + .2, 1, .92, .9, -4);
     // pushed in as the ball drops: the wheelhead fills the picture
     // from the drop: straight down over the wheelhead, where the bounce and the pocket are clearest
     shots.push = portrait ? overhead(37, -6, 118) : around(10, 96, 37, -6, .92, .92, -6);
@@ -449,7 +511,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   function placeShowcase(now) {
     if (!L) return;
     // a slow sway round the table from the players' side, looking toward the salon behind it
-    const t = now / 1000, portrait = camera.aspect < .9, wc = wheelCentre(), cx = (L.wheelX - 46 + L.xEnd) / 2, a = Math.sin(t * .07) * .32 + Math.sin(t * .029) * .08;
+    const t = now / 1000, portrait = camera.aspect < .9, wc = wheelCentre(), cx = (L.wheelX - WELL + L.xEnd) / 2, a = Math.sin(t * .07) * .32 + Math.sin(t * .029) * .08;
     if (portrait) { const r = 370; camera.position.set(cx + Math.cos(a) * r, 300 + Math.sin(t * .11) * 5, wc.z + Math.sin(a) * r); camera.lookAt(cx - 22, -46, wc.z); camera.fov = 40; }
     else { const r = 300; camera.position.set(cx + Math.sin(a) * r, 185 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); camera.lookAt(cx + Math.sin(a) * 36, -30, wc.z - 14); camera.fov = 36; }
     camera.up.set(0, 1, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
@@ -480,8 +542,8 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   }
 
   return {
-    THREE, renderer, scene, camera, wheel, table, tickers, requestRender, frame, project, pick, highlight, anchor, chipMesh, dolly, chipsG,
-    shots, move, setPose, showcase, relayout, setQuality,
+    THREE, renderer, scene, camera, wheel, table, tickers, requestRender, frame, project, pick, highlight, anchor, chipMesh, chipLook, dolly, chipsG,
+    shots, move, setPose, showcase, relayout, setQuality, fit: fitNow,
     get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },
     wheelToWorld(p) { return new THREE.Vector3(p[0], p[1], p[2]).add(wheel.group.position); },
