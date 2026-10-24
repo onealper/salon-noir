@@ -1,9 +1,9 @@
 // The table's physical choreography. Reads nothing from the rules engine: the controller
 // tells it what happened, and it moves cards and chips the way a dealer would.
 import * as THREE from '../vendor/three.module.min.js';
-import { LAYOUT, CARD_T, SHOE, toSeat, seatAngle } from './world.mjs';
+import { LAYOUT, CARD_T, SHOE, toSeat, seatAngle, chipGeometry } from './world.mjs';
 import { CARD_W, CARD_H, CHIP_H } from './textures.mjs';
-import { createCard, createChip, createMarker, cardQuat, headingOf, ease } from './pieces.mjs';
+import { createCard, createChip, createMarker, cardQuat, headingOf, ease, tossChip, payoutCuts, pushChipStack, RestingChipBatch } from './pieces.mjs';
 import { breakDown } from '../engine.mjs';
 
 export const TIMING = { dealPlayer: 720, dealDealer: 640, reveal: 620, peek: 560, chip: 300, chipToss: 440, chipMove: 460, payout: 500, square: 180, gather: 300, discard: 620, toPlayer: 560, split: 440, shoeFill: 1100 };
@@ -70,6 +70,7 @@ export class TableView {
   constructor(world, motion, audio) {
     Object.assign(this, { world, motion, audio }); this.T = world.table;
     this.front = null; this.cards = []; this.stacks = new Map(); this.handCount = 1; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Map();
+    this.resting = new RestingChipBatch(this.T, { geometry: chipGeometry });
   }
   get split() { return this.handCount > 1; }
   seatHands(k) { return this.seatSplits.get(k) ?? 1; }   // how many hands that seat is playing
@@ -98,63 +99,67 @@ export class TableView {
   // gravity arc, lands flat with a click, and settles with one small bounce and a fading wobble.
   addChip(key, value, from = null) {
     const chips = this.chipsOf(key), c = createChip(value), to = this.chipSlot(key, chips.length);
-    const k = seatOf(key), start = from ?? (k == null ? V(to.x * .5 + (Math.random() - .5) * 2, 9, 70) : this.home(key, (Math.random() - .5) * 2)), top = Math.max(start.y, to.y) + 3.4, LAND = .76;
-    const spin0 = Math.random() * Math.PI * 2, spin = (Math.random() - .5) * 1.4, a = Math.random() * Math.PI * 2, tx = Math.sin(a), tz = Math.cos(a);
-    c.rotation.set(0, spin0, 0); c.position.copy(start); this.T.add(c); chips.push(c);
-    const onStack = chips.length > 1; let landed = false;
-    const flight = this.motion.tween(TIMING.chipToss, t => {
-      if (t < LAND) {
-        const u = t / LAND, e = 1 - (1 - u) ** 2.4, w = 1 - u;
-        c.position.set(start.x + (to.x - start.x) * e, w * w * start.y + 2 * w * u * top + u * u * to.y, start.z + (to.z - start.z) * e);
-        c.rotation.set(tx * .42 * w, spin0 + spin * e, tz * .42 * w);
-      } else {
-        if (!landed) { landed = true; this.audio?.play(onStack ? 'stack' : 'chip', { x: to.x }); }
-        const v = (t - LAND) / (1 - LAND), damp = (1 - v) ** 2, wob = Math.cos(v * Math.PI * 3) * .07 * damp;
-        c.position.set(to.x, to.y + Math.sin(v * Math.PI) * .22 * (1 - v), to.z);
-        c.rotation.set(tx * wob, spin0 + spin, tz * wob);
-      }
-    }).then(() => { c.position.copy(to); c.rotation.set(0, spin0 + spin, 0); if (!landed) this.audio?.play(onStack ? 'stack' : 'chip', { x: to.x }); c.userData.flight = null; });
+    const k = seatOf(key), start = from ?? (k == null ? V(to.x * .5 + (Math.random() - .5) * 2, 9, 70) : this.home(key, (Math.random() - .5) * 2));
+    this.T.add(c); chips.push(c);
+    const flight = tossChip(this.motion, c, start, to, { duration: TIMING.chipToss, audio: this.audio, onStack: chips.length > 1 }).then(() => {
+      c.userData.flight = null; if (this.stacks.get(key)?.includes(c)) this.resting.park(c);
+    });
     c.userData.flight = flight; return flight;
   }
-  // Chips for an amount, largest first, dropped one after another on top of the stack.
+  // Player chips remain individual tosses; rack winnings arrive as coherent dealer-sized cuts.
   async addAmount(key, amount, source = 'player') {
     const vals = breakDown(amount, CHIPS);
+    if (source === 'rack') {
+      const start = this.chipsOf(key).length, b = this.stackBase(key), from = V(LAYOUT.rack.x + b.x * .15, 2.5, LAYOUT.rack.z + 3);
+      await Promise.all(payoutCuts(vals, { start }).map(({ index, size }, i) => this.flyStack(key, vals.slice(index, index + size), from, { delay: i * 70, gain: i ? .6 : 1 })));
+      return;
+    }
     for (const [i, v] of vals.entries()) {
-      const from = source === 'rack' ? V(LAYOUT.rack.x + (this.stackBase(key).x) * .15, 2.5, LAYOUT.rack.z + 3) : null;
-      const p = source === 'rack' ? this.flyChip(key, v, from, i === 0) : this.addChip(key, v);
-      if (i === vals.length - 1) await p; else await this.motion.wait(source === 'rack' ? 70 : 60);
+      const p = this.addChip(key, v);
+      if (i === vals.length - 1) await p; else await this.motion.wait(60);
     }
   }
-  // Winnings travel from the dealer's rack in a low arc and land on your stack.
-  async flyChip(key, value, from, audible = true) {
-    const chips = this.chipsOf(key), c = createChip(value), to = this.chipSlot(key, chips.length);
-    c.rotation.y = Math.random() * Math.PI * 2; c.position.copy(from); this.T.add(c); chips.push(c);
-    await this.motion.tween(TIMING.payout, t => { const e = ease.inOut(t); c.position.lerpVectors(from, to, e); c.position.y += Math.sin(Math.PI * e) * 4; });
-    c.position.copy(to); if (audible) this.audio?.play('payout', { x: to.x });
+  // Reserve every destination before a delayed cut starts, so simultaneous payouts cannot
+  // choose the same slots. Every chip stays represented, including an odd blackjack's half.
+  flyStack(key, values, from, { delay = 0, gain = 1, audible = true } = {}) {
+    const chips = this.chipsOf(key), cut = [], targets = [];
+    for (const v of values) {
+      const c = createChip(v), to = this.chipSlot(key, chips.length); c.rotation.y = Math.random() * Math.PI * 2;
+      this.T.add(c); chips.push(c); cut.push(c); targets.push(to);
+    }
+    const active = () => cut.some(c => this.stacks.get(key)?.includes(c));
+    const flight = pushChipStack(this.motion, cut, from, targets, { duration: TIMING.payout, delay, audio: audible ? this.audio : null, gain, active }).then(() => {
+      for (const c of cut) { c.userData.flight = null; if (this.stacks.get(key)?.includes(c)) this.resting.park(c); }
+    });
+    for (const c of cut) c.userData.flight = flight;
+    return flight;
   }
-  async buildStack(key, amount) { for (const c of this.chipsOf(key)) this.T.remove(c); this.stacks.set(key, []); await this.addAmount(key, amount); }
+  flyChip(key, value, from, audible = true) { return this.flyStack(key, [value], from, { audible }); }
+  async buildStack(key, amount) { for (const c of this.chipsOf(key)) this.resting.remove(c); this.stacks.set(key, []); await this.addAmount(key, amount); }
   async removeTop(key) {
-    const c = this.chipsOf(key).pop(); if (!c) return; if (c.userData.flight) await c.userData.flight; const from = c.position.clone(), to = seatOf(key) == null ? V(from.x * .5, 20, 90) : this.home(key, 0, 20, 90);
-    await this.motion.tween(TIMING.chip, t => c.position.lerpVectors(from, to, t), ease.in); this.T.remove(c);
+    const c = this.chipsOf(key).pop(); if (!c) return; if (c.userData.flight) await c.userData.flight; this.resting.lift(c); const from = c.position.clone(), to = seatOf(key) == null ? V(from.x * .5, 20, 90) : this.home(key, 0, 20, 90);
+    await this.motion.tween(TIMING.chip, t => c.position.lerpVectors(from, to, t), ease.in); this.resting.remove(c);
   }
   // Losing chips are drawn off the felt into the dealer's rack, top chip first.
   async toRack(key) {
     const chips = this.chipsOf(key); if (!chips.length) return; this.stacks.set(key, []); this.audio?.play('collect', { x: this.stackBase(key).x });
+    for (const c of chips) this.resting.lift(c);
     const base = this.stackBase(key), rack = V(LAYOUT.rack.x + base.x * .3, 1.4, LAYOUT.rack.z + 2.6);
     await Promise.all(chips.map((c, i) => { const from = c.position.clone(), to = rack.clone().add(V(0, i * CHIP_H, 0));
       return this.motion.wait((chips.length - 1 - i) * 18).then(() => this.motion.tween(TIMING.chipMove, t => { c.position.lerpVectors(from, to, t); c.position.y += Math.sin(Math.PI * t) * 1.2; }, ease.inOut)); }));
-    for (const c of chips) this.T.remove(c); this.world.requestRender();
+    for (const c of chips) this.resting.remove(c); this.world.requestRender();
   }
   // Winnings are paid onto the bet itself.
   async payout(key, amount) { await this.addAmount(key, amount, 'rack'); }
   // At the end of a round every stack slides back to you, each moving as one piece.
   async toPlayer() {
     const entries = [...this.stacks.entries()].filter(([, a]) => a.length), stacks = entries.map(([, a]) => a); this.stacks.clear(); if (!stacks.length) return; this.audio?.play('collect', { gain: .8 });
+    for (const c of stacks.flat()) this.resting.lift(c);
     await Promise.all(entries.map(([key, chips], k) => {
       const from = chips.map(c => c.position.clone()), b = from[0], to = seatOf(key) == null ? V(b.x * .6, 10, 84) : this.home(key, 0, 10, 84), dest = from.map(f => to.clone().add(f).sub(b));
       return this.motion.wait(k * 40).then(() => this.motion.tween(TIMING.toPlayer, t => chips.forEach((c, i) => c.position.lerpVectors(from[i], dest[i], t)), ease.in));
     }));
-    for (const c of stacks.flat()) this.T.remove(c);
+    for (const c of stacks.flat()) this.resting.remove(c);
   }
   // Make a stack show exactly these chips (bottom first). Chips already there stay put;
   // extra chips drop in, chips no longer bet lift back to your hand.
@@ -173,10 +178,10 @@ export class TableView {
     const from = V(LAYOUT.rack.x + this.stackBase(key).x * .2, 3, LAYOUT.rack.z + 4);
     c.rotation.y = Math.random() * Math.PI * 2; c.position.copy(from); this.T.add(c); chips.push(c);
     await this.motion.tween(TIMING.payout, t => { c.position.lerpVectors(from, to, t); c.position.y += Math.sin(Math.PI * t) * 3.5; }, ease.inOut);
-    c.position.copy(to); this.audio?.play('chip', { x: to.x, gain: .8 });
+    c.position.copy(to); if (this.stacks.get(key)?.includes(c)) this.resting.park(c); this.audio?.play('chip', { x: to.x, gain: .8 });
   }
   rename(from, to) { if (!this.stacks.has(from)) return; this.stacks.set(to, this.stacks.get(from)); this.stacks.delete(from); }
-  clearChips() { for (const c of [...this.stacks.values()].flat()) this.T.remove(c); this.stacks.clear(); this.world.requestRender(); }
+  clearChips() { for (const c of [...this.stacks.values()].flat()) this.resting.remove(c); this.stacks.clear(); this.world.requestRender(); }
 
   // ---- the shoe ------------------------------------------------------------------------------
   syncShoe(remaining, untilCut) { this.world.shoe.setStack(remaining, untilCut); this.world.requestRender(); }
@@ -332,7 +337,8 @@ export class TableView {
       return this.motion.tween(TIMING.split, t => { c.mesh.position.lerpVectors(from, to, t); c.mesh.position.y += Math.sin(Math.PI * t) * .8; }, ease.inOut); });
     for (let j = 0; j < n; j++) for (const s of ['', 'f']) {   // stakes and markers slide to their new spots, each chip at its height
       const k = key(j) + s, chips = this.chipsOf(k), from = chips.map(c => c.position.clone());
-      if (chips.length) moves.push(this.motion.tween(TIMING.split, t => chips.forEach((c, i) => { const to = this.chipSlot(k, i); c.position.set(from[i].x + (to.x - from[i].x) * t, from[i].y, from[i].z + (to.z - from[i].z) * t); }), ease.inOut));
+      for (const c of chips) this.resting.lift(c);
+      if (chips.length) moves.push(this.motion.tween(TIMING.split, t => chips.forEach((c, i) => { const to = this.chipSlot(k, i); c.position.set(from[i].x + (to.x - from[i].x) * t, from[i].y, from[i].z + (to.z - from[i].z) * t); }), ease.inOut).then(() => { for (const c of chips) this.resting.park(c); }));
     }
     this.audio?.play('slide', { gain: seat == null ? .6 : .5, x: second.mesh.position.x }); await Promise.all(moves);
   }

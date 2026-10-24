@@ -123,6 +123,10 @@ docs/             Screenshots
 
 Start with **[PROJECT.md](PROJECT.md)**. It's the full brief (architecture, file map, design rules and what's next), written so any developer or AI assistant can pick up the work. `node --test` from the repo root runs the rules and money tests (Node 22+, nothing to install).
 
+On Node 24, use `node --no-experimental-global-navigator --test` so the wallet tests use their simulated browser environment.
+
+Optional browser checks live in `tools/check-blackjack.cjs`, `tools/check-roulette.cjs`, and `tools/check-audio.cjs`. With Playwright and Chromium available as development tools and the game served locally, run `node tools/check-roulette.cjs` (or either other filename). `SALON_BASE_URL` selects a different server address; see [PROJECT.md](PROJECT.md#tests) for configuration and the distinction between browser checks and physical phone testing.
+
 ## Credits
 
 Built on open-source libraries and openly licensed sounds and fonts. See **[CREDITS.md](CREDITS.md)** for every library, font, sound and image, [src/sounds/CREDITS.txt](src/sounds/CREDITS.txt) for each sound file, and [src/vendor/README.md](src/vendor/README.md) for library versions and local changes.

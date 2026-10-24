@@ -4,7 +4,7 @@
 // laps, no jump as the ball leaves the track, the wheelhead at a croupier's speed and never seen being pushed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { plan, at, simulate, mulberry, duration, GEO, THROW } from '../src/roulette/physics.mjs';
+import { plan, at, simulate, mulberry, duration, GEO, THROW, TUNE } from '../src/roulette/physics.mjs';
 import { WHEEL_INDEX, PITCH, POCKETS } from '../src/roulette/rules.mjs';
 
 const spins = [];
@@ -57,6 +57,24 @@ test('the wheelhead turns at a croupier\'s 15-20 rpm, coasts, and is never seen 
   }
 });
 
+test('leaving the track preserves angular momentum; a collision-free first integration step changes speed by less than 1.3%', () => {
+  let firstSteps = 0;
+  for (const { p } of spins) {
+    const s = p.samples.find(x => x[5] === 1);
+    if (p.events.some(e => e.type === 'deflector' && e.t <= s[0] + 1e-9)) continue;
+    const steps = Math.round((s[0] - p.dropAt) * 240) + 1;
+    const momentum = s[2] * s[6], before = p.drop.r * p.drop.v;
+    assert.ok(Math.abs(momentum / before - (1 - TUNE.coneSpin / 240) ** steps) < 1e-9, 'the drop adds no angular impulse beyond rolling friction');
+    // A 60 Hz sample may span four integration steps and legitimate radial acceleration.
+    // Check the actual first 1/240 s step separately instead of treating that acceleration as a jump.
+    if (steps === 1) {
+      firstSteps++;
+      assert.ok(Math.abs((s[6] / s[2]) / (p.drop.v / p.drop.r) - 1) < .013);
+    }
+  }
+  assert.ok(firstSteps > 100, `${firstSteps} collision-free first steps checked`);
+});
+
 test('the ball rests out against its pocket\'s outer wall, and the canoes knock it about as on a real wheel', () => {
   const hits = [0, 0, 0, 0];
   for (const { p } of spins) { assert.ok(Math.abs(at(p, p.settledAt + 2).r - GEO.restR) < .05); hits[Math.min(3, p.deflectors)]++; }
@@ -70,4 +88,32 @@ test('the raw simulation always settles in some pocket, spread evenly over the w
     assert.ok(Number.isInteger(s.pocket), `spin ${i} settled`); f[s.pocket]++;
   }
   const chi = f.reduce((s, x) => s + (x - N / 37) ** 2 / (N / 37), 0); assert.ok(chi < 80, `chi-squared ${chi.toFixed(1)}`);   // seeded: the same every run
+});
+
+test('raw simulations can be played back without a drawn-number correction', () => {
+  for (const [i, { p }] of spins.slice(0, 40).entries()) {
+    const s = simulate({ ...p.opts, seed: i + 1 });
+    for (const t of [0, s.dropAt / 2, s.dropAt + .2, s.settledAt + .12]) {
+      const b = at(s, t);
+      for (const v of [b.theta, b.r, b.y, b.phi, b.speed]) assert.ok(Number.isFinite(v));
+    }
+    const b = at(s, s.settledAt + .12), pocket = ((Math.round((b.phi - b.theta) / PITCH) % POCKETS) + POCKETS) % POCKETS;
+    assert.equal(pocket, s.pocket, `raw spin ${i}: rests in its simulated pocket`);
+  }
+});
+
+test('playback stays continuous across frame boundaries when sample timestamps drift from 60 Hz', () => {
+  for (const { p } of spins.slice(0, 16)) {
+    for (let frame = 1; frame / 60 < duration(p); frame++) {
+      const t = frame / 60, a = at(p, t - 1e-7), b = at(p, t + 1e-7);
+      const distance = Math.hypot(a.r * Math.cos(a.theta) - b.r * Math.cos(b.theta), a.y - b.y, a.r * Math.sin(a.theta) - b.r * Math.sin(b.theta));
+      assert.ok(distance < .001, `frame ${frame}: ball jumps ${distance.toFixed(4)} cm`);
+      assert.ok(Math.abs(a.phi - b.phi) < 1e-5, `frame ${frame}: wheelhead jumps`);
+    }
+    for (const sample of p.samples) {
+      const b = at(p, sample[0]);
+      assert.ok(Math.abs(b.theta - sample[1]) < 1e-9, 'each stored ball position is reproduced at its own timestamp');
+      assert.ok(Math.abs(b.phi - sample[4] - p.rotorAt(sample[0])) < 1e-9);
+    }
+  }
 });

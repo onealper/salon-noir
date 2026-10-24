@@ -46,6 +46,10 @@ node --test                     # from the repo root, Node 22+; about 6 s, no in
 
 `test/*.test.mjs` import the pure modules straight from `src/` (rules engines, side bets, players, roulette rules and physics, wallet, ledger) and check every payout, the paytables' house edges, money conservation, playing out a saved hand, the ball landing in the drawn pocket, the slow-motion replay keeping the ball in the picture on every screen shape, the roulette table's look (the other players' chip colours kept clear of the value chips and the brass, true-size chips, statistics that count the zero), and the architecture rules below. Run it after touching any rules or money code. On Node 22 don't pass a directory (`node --test test/` fails); with no argument it finds `test/**`.
 
+On Node 24, run `node --no-experimental-global-navigator --test`: the wallet tests simulate browsers without Web Locks, and Node 24's global `navigator.locks` otherwise bypasses that simulation. The chip tests also check exact physical payout values (including half-chip returns), twenty-chip columns, the shared toss, and instance updates/removal.
+
+Optional real-browser checks are in `tools/check-blackjack.cjs`, `tools/check-roulette.cjs`, and `tools/check-audio.cjs`. They need Playwright and Chromium as development tools, separate from the application; neither is loaded by the game. Start the HTTP server, then run a tool with `SALON_BASE_URL=http://127.0.0.1:8000 node tools/check-roulette.cjs` (substitute the other filenames as needed). `SALON_CHROMIUM` can select a browser executable. The audio check defaults to real rendering, normal play, and sound on. Its explicitly selected `SALON_QA_AUDIO_ONLY=1` mode checks only the audio graph and controls. Chromium phone viewports do not substitute for an actual iPhone/Safari check.
+
 ### Testing aids
 
 | Aid | What it does |
@@ -66,6 +70,10 @@ node --test                     # from the repo root, Node 22+; about 6 s, no in
 - **State:** one shared chip balance in localStorage (`src/core/wallet.mjs`, key `salonnoir.balance`, starts at 1,000); every key is listed under Storage below
 - **Targets:** desktop browsers and iPhone Safari. Phone performance matters (graphics presets, battery saver, reduced motion).
 
+Blackjack and roulette share the same chip toss and grouped payout motion. Resting chips are rendered in batches by denomination or player colour; moving chips temporarily become individual meshes. Winnings travel in full twenty-chip columns and remainder cuts of up to five, respecting denomination and destination-column boundaries. Every chip retains its full value, including half-chip change.
+
+Roulette's AI players have independent session bankrolls, starting at 1,000 each, with counted reserves on their rail. A marker shows each colour's assigned unit; the name label counts reserve chips, and its accessible description also gives the bank, stake, and chips on the cloth. Chips debit the bank as they leave the reserve. Closed wagers settle once after physical collection; cancelling an unclosed wager refunds it. A player below their unit at a round boundary buys back to their original bank, with the added amount tracked separately from wins. Large banks exchange excess over a rack of 200 colour chips for ordinary value chips; the total value is never truncated. These banks do not read or write the user's wallet. Betting hints have their own line in the roulette dock, clear of the banks and value markers.
+
 ## File map
 
 ```
@@ -76,6 +84,7 @@ sw.js, manifest.webmanifest, icons/   Offline play and the home-screen app (icon
 .nojekyll                  Empty: GitHub Pages serves the files as they are (README, "Play on your phone over HTTPS")
 docs/screenshots/          Screenshots used by the README
 test/                      node --test suite over the pure modules (helpers.mjs: cards, seeded random, storage stand-in)
+tools/                     Optional Playwright checks for blackjack, roulette, and normal-play audio
 src/                       All code, styles, fonts, sounds and libraries
   app.mjs                  The salon (start reading here): settings, sound, the settings sheet and Last hands, the top bar,
                            the lobby and moving between rooms, the one key handler; plays out a hand left unfinished
@@ -107,6 +116,7 @@ src/                       All code, styles, fonts, sounds and libraries
     world.mjs              Blackjack 3D table and seated camera
     view.mjs               Dealer choreography: how cards and chips move
     pieces.mjs             Card and chip objects plus a small motion engine
+    chip-motion.mjs        Shared chip toss, grouped payouts, and batches of resting chips
     textures.mjs           Canvas-drawn card faces, felt layout, chips
     lightning3d.mjs        Lightning-table bolts, felt burns, sparks
   roulette/
@@ -114,6 +124,9 @@ src/                       All code, styles, fonts, sounds and libraries
     rules.mjs              European roulette rules, bets, payouts. No DOM.
     physics.mjs            Ball/wheel simulation (seeded, after Small & Tse 2012)
     replay.mjs             The slow-motion replay's camera, fitted to the screen from the planned path. No DOM.
+    chip-stacks.mjs        Exact physical payout chips and twenty-chip column positions. No DOM.
+    players.mjs            AI banks, counted inventory, wagers, refunds and once-only settlement. No DOM.
+    reserve-layout.mjs     Counted reserve positions and bounds for each seat. No DOM.
     rscene.mjs             Roulette 3D table and layout
     wheel3d.mjs            3D wheel model
     roller.mjs             Synthesised ball-rolling sound

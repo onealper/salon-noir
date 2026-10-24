@@ -4,12 +4,14 @@
 // upright phone you sit at the foot (+x), looking up the table at the wheel. The layout is painted for
 // whichever seat you have, cells shaped for the screen, numbers facing you.
 import * as THREE from '../vendor/three.module.min.js';
-import { artImage, CHIP_H, CHIP_R } from '../scene/textures.mjs';
+import { artImage, CHIP_H, CHIP_R, colourChipTextures } from '../scene/textures.mjs';
 import { chipGeometry, chipMaterials, setChipDetail, swapChipGeometry } from '../scene/world.mjs';
+import { RestingChipBatch } from '../scene/pieces.mjs';
 import { createStage, QUALITY, detectQuality, leatherMaterial, brassMaterial, fitFov } from '../scene/stage.mjs';
 import { SPOTS, colorOf, rowOf, colOf, REDS, WHEEL as WHEEL_ORDER } from './rules.mjs';
 import { createWheel } from './wheel3d.mjs';
 import { GEO } from './physics.mjs';
+import { reserveLayout } from './reserve-layout.mjs';
 const WELL = GEO.rimR + .4;   // the well the bowl stands in, just clear of its rim
 
 export { THREE };
@@ -35,6 +37,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const st = createStage(canvas, { quality, background: '#0b0a09', environment: .5, fov: 40, far: 1400, lights: () => [keyW, keyL],
     restored: () => { const old = studioEnv; studioEnv = studio(); wheel.group.traverse(o => { if (o.material?.envMap === old) o.material.envMap = studioEnv; }); } });
   const { renderer, scene, camera, tickers, requestRender, maxTex, aniso } = st;
+  const afterFrame = new Set(); scene.onAfterRender = () => { for (const f of afterFrame) f(); };
   setChipDetail(quality.chipSegments);
 
   // ---- light: one pendant over the wheel and one over the layout, a cool fill, warm room glow -------------
@@ -92,6 +95,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const body = new THREE.Group(); table.add(body);
   const hi = new THREE.Group(); table.add(hi);             // highlight tiles over the layout
   const chipsG = new THREE.Group(); table.add(chipsG);
+  const chipBatch = new RestingChipBatch(chipsG, { geometry: () => chipGeometry() });
 
   // the float's chips, lying on their sides: a stripe per chip edge, edge spots, seen end-on as a row
   const floatMats = new Map();
@@ -104,7 +108,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const m = new THREE.MeshStandardMaterial({ map: t, roughness: .5 }); floatMats.set(color, m); return m;
   }
   // ---- the layout, for the seat you have -----------------------------------------------------------------------
-  let L = null;   // { shape, x0, zg, xEnd, zFar, zNear, wheelX, feltRect, ... }
+  let L = null, buildingTable = false;   // { shape, x0, zg, xEnd, zFar, zNear, wheelX, feltRect, ... }
   function geometry(orient) {
     const s = SHAPES[orient], x0 = 0, zg = (3 * s.cv - s.d - s.e) / 2;
     const X = u => u < 0 ? x0 + u * s.z0 : u <= 12 ? x0 + u * s.cu : x0 + 12 * s.cu + (u - 12) * s.cc;
@@ -252,6 +256,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const keep = new Set([walnut, leather, brass, feltMat]);
   function clearGroup(g) { g.traverse(o => { if (o === g) return; o.geometry?.dispose(); for (const m of [o.material ?? []].flat()) if (!keep.has(m) && ![...floatMats.values()].includes(m)) m.dispose(); }); g.clear(); }
   function buildTable(orient) {
+    buildingTable = true;
     L = geometry(orient); const R = L.rect;
     repaintLayout();
     felt.scale.set(R.x1 - R.x0, R.z1 - R.z0, 1); felt.position.set((R.x0 + R.x1) / 2, 0, (R.z0 + R.z1) / 2);
@@ -331,6 +336,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     ['low', 'even', 'red', 'black', 'odd', 'high'].forEach((id, i) => tile(id, i * 2, -2, i * 2 + 2, -1));
     placeBackdrop();
     for (const f of relayout) f();
+    buildingTable = false;
     requestRender();
   }
   const tiles = new Map(), relayout = new Set();
@@ -371,26 +377,91 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // The other players' colour chips: each colour has its own count of edge inserts, on the face and round the rim, so a
   // stack still says whose it is from the side or to an eye that can't tell the colours apart (`chipLook` sets the count).
   const wheelChipMats = new Map(), chipLooks = new Map();
-  function wheelChipMaterials(color) {
-    if (wheelChipMats.has(color)) return wheelChipMats.get(color);
-    const n = chipLooks.get(color)?.inserts ?? 6, half = Math.PI * .3 / n;   // the inserts cover 30% of the edge, however many
-    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
-    g.fillStyle = color; g.fillRect(0, 0, 256, 256);
-    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 10; g.beginPath(); g.arc(128, 128, 84, 0, Math.PI * 2); g.stroke();
-    g.lineWidth = 18; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; g.beginPath(); g.arc(128, 128, 116, a - half, a + half); g.stroke(); }
-    const face = new THREE.CanvasTexture(c); face.colorSpace = THREE.SRGBColorSpace;
-    // the rim: u runs once round the chip from the face's angle 0 (as chipEdgeTexture lines its spots up)
-    const r = document.createElement('canvas'); r.width = 512; r.height = 16; const e = r.getContext('2d');
-    e.fillStyle = color; e.fillRect(0, 0, 512, 16); e.fillStyle = 'rgba(255,255,255,.85)';
-    for (let i = 0; i <= n; i++) { const u = i / n * 512, hw = half / (Math.PI * 2) * 512; e.fillRect(u - hw, 0, hw * 2, 16); }
-    e.fillStyle = 'rgba(0,0,0,.22)'; e.fillRect(0, 0, 512, 2); e.fillRect(0, 14, 512, 2);
-    const rim = new THREE.CanvasTexture(r); rim.colorSpace = THREE.SRGBColorSpace; rim.wrapS = THREE.RepeatWrapping;
-    const side = new THREE.MeshStandardMaterial({ map: rim, roughness: .5 }), top = new THREE.MeshStandardMaterial({ map: face, roughness: .45 });
-    const mats = [side, top]; wheelChipMats.set(color, mats); return mats;   // rim, both faces
+  function wheelChipMaterials(color, value = null) {
+    const key = `${color}|${chipLooks.get(color)?.inserts ?? 6}|${value ?? ''}`;
+    if (wheelChipMats.has(key)) return wheelChipMats.get(key);
+    const { face, rim, bump } = colourChipTextures(color, { inserts: chipLooks.get(color)?.inserts ?? 6, value });
+    const side = new THREE.MeshStandardMaterial({ map: rim, roughness: .5 });
+    const top = new THREE.MeshStandardMaterial({ map: face, bumpMap: bump, bumpScale: .9, roughness: .46 });
+    const mats = [side, top]; wheelChipMats.set(key, mats); return mats;
   }
   // true size: a 39 mm chip, CHIP_H thick (the regulation 1.55 in, and Paulson's roulette chip)
   const chipMesh = v => { const m = new THREE.Mesh(chipGeometry(), typeof v === 'number' ? chipMaterials(v) : wheelChipMaterials(v)); m.castShadow = m.receiveShadow = true; chipsG.add(m); return m; };
   const chipLook = (color, look) => { chipLooks.set(color, look); };
+  const playerMarkers = new THREE.Group(); playerMarkers.name = 'Player chip values'; table.add(playerMarkers);
+  const playerReserve = new THREE.Group(); playerReserve.name = 'Players\' counted reserves'; table.add(playerReserve);
+  const reserveBatch = new RestingChipBatch(playerReserve, { geometry: () => chipGeometry() });
+  const reserveTrayMat = new THREE.MeshStandardMaterial({ color: '#171615', metalness: .12, roughness: .68 });
+  const reserveTrayGeo = new THREE.BoxGeometry(1, 1, 1), reserveRecords = new Map();
+  let reserveInfo = [];
+  let markerPlayers = [];
+  const playerHome = slot => L.orient === 'port'
+    ? new THREE.Vector3(L.xEnd + 15, 0, L.Z(3) + (L.zNear - L.Z(3)) * (slot + .5) / 4)
+    : new THREE.Vector3(L.X(0) + (L.xEnd - L.X(0)) * (slot + .5) / 4, 0, L.zNear + 9);
+  function showPlayerChips(players = markerPlayers) {
+    markerPlayers = players;
+    if (!L) return;
+    const present = new Set(players.map(r => r.name)); let boundsChanged = false;
+    for (const [owner, rec] of reserveRecords) if (!present.has(owner)) {
+      rec.pool.forEach(m => reserveBatch.remove(m)); rec.marker.removeFromParent(); rec.tray.removeFromParent();
+      reserveRecords.delete(owner); boundsChanged = true;
+    }
+    players.forEach((r, i) => {
+      chipLook(r.color, r);
+      let rec = reserveRecords.get(r.name);
+      if (!rec) {
+        const marker = new THREE.Mesh(chipGeometry(), wheelChipMaterials(r.color, r.unit)), tray = new THREE.Mesh(reserveTrayGeo, reserveTrayMat);
+        marker.castShadow = marker.receiveShadow = tray.castShadow = tray.receiveShadow = true;
+        rec = { marker, tray, pool: [], key: '', info: null }; reserveRecords.set(r.name, rec);
+        playerMarkers.add(marker); playerReserve.add(tray);
+      }
+      const { marker } = rec, home = playerHome(i);
+      marker.material = wheelChipMaterials(r.color, r.unit);
+      marker.userData = { owner: r.name, value: r.unit };
+      if (playerMarkers.children[i] !== marker) { marker.removeFromParent(); playerMarkers.children.splice(i, 0, marker); marker.parent = playerMarkers; }
+      const nextKey = `${L.orient}|${L.xEnd}|${L.zNear}|${L.zFar}|${i}|${r.color}|${r.inserts}|${r.unit}|${r.bankroll ?? ''}|${r.reserveCount ?? 0}`;
+      if (rec.key === nextKey) return;
+      rec.key = nextKey;
+      const values = r.reserveValues ?? [], bank = reserveLayout(values.length, {
+        orient: L.orient, center: L.orient === 'port' ? home.z : home.x,
+        edge: (L.orient === 'port' ? L.rect.x1 : L.rect.z1) + .3,
+        span: (L.orient === 'port' ? L.zNear - L.zFar : L.xEnd - L.X(0)) / 4,
+        radius: CHIP_R, height: CHIP_H,
+      });
+      const f = bank.footprint ? { ...bank.footprint } : null, old = rec.info?.footprint;
+      marker.position.copy(home).setY(CHIP_H / 2);
+      // A separate unit disc sits on the tray's front lip, in clear view rather than behind its bank.
+      // It is a value marker, so it never enters the reserve's chip count or amount.
+      if (f) {
+        marker.position.y = 9.2 + CHIP_H / 2;
+        if (L.orient === 'port') { marker.position.x = f.x1 + CHIP_R + .2; f.x1 += CHIP_R * 2 + .5; }
+        else { marker.position.z = f.z1 + CHIP_R + .2; f.z1 += CHIP_R * 2 + .5; }
+      }
+      if (JSON.stringify(f) !== JSON.stringify(old && { x0: old.x0, x1: old.x1, z0: old.z0, z1: old.z1, y0: old.y0, y1: old.y1 })) boundsChanged = true;
+      values.forEach((value, index) => {
+        let m = rec.pool[index];
+        const material = value === r.unit ? wheelChipMaterials(r.color) : chipMaterials(value);
+        if (!m) { m = new THREE.Mesh(chipGeometry(), material); m.castShadow = m.receiveShadow = true; rec.pool.push(m); }
+        else if (m.material !== material) { reserveBatch.remove(m); m.material = material; }
+        m.geometry = chipGeometry();   // a pooled chip may have been inactive when the graphics preset changed
+        const p = bank.positions[index]; m.position.set(p.x, p.y, p.z); m.rotation.set(0, index * 2.39996, 0);
+        m.userData = { owner: r.name, value, reserve: true, index }; reserveBatch.park(m);
+      });
+      for (let j = values.length; j < rec.pool.length; j++) reserveBatch.remove(rec.pool[j]);
+      rec.tray.visible = !!f;
+      if (f) { rec.tray.position.set((f.x0 + f.x1) / 2, 9.2 - .175, (f.z0 + f.z1) / 2); rec.tray.scale.set(f.x1 - f.x0, .35, f.z1 - f.z0); }
+      rec.info = { owner: r.name, slot: i, unit: r.unit, amount: values.reduce((sum, value) => sum + value, 0), count: values.length,
+        columns: bank.columns, across: bank.across, rows: bank.rows, values: Object.freeze([...values]), footprint: f ? { ...f, owner: r.name } : null };
+    });
+    reserveInfo = players.map(r => reserveRecords.get(r.name).info);
+    if (boundsChanged && !buildingTable && view.w > 0) frame(view.w, view.h, view.top);
+    requestRender();
+  }
+  const reservePosition = (owner, index) => {
+    const rec = reserveRecords.get(owner);
+    return rec && Number.isSafeInteger(index) && index >= 0 && index < rec.info.count ? rec.pool[index].position.clone() : null;
+  };
+  relayout.add(() => showPlayerChips());
   const dolly = new THREE.Group(); dolly.visible = false; table.add(dolly);
   { const glass = new THREE.MeshPhysicalMaterial({ color: '#f4f1ea', roughness: .05, metalness: 0, clearcoat: 1, clearcoatRoughness: .04, envMapIntensity: 2.2, transparent: true, opacity: .42, depthWrite: false });   // no transmission: that would draw the whole room twice a frame
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.5, .5, 40), brass); base.position.y = .25;
@@ -422,10 +493,12 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const rimPts = (r = WELL, y = 1.5, n = 16) => Array.from({ length: n }, (_, i) => wheelCentre().add(new THREE.Vector3(r * Math.cos(i / n * Math.PI * 2), y, r * Math.sin(i / n * Math.PI * 2))));
   function computeShots() {
     const portrait = L.orient === 'port', wc = wheelCentre(), cz = wc.z;
+    const markers = markerPlayers.map((_, i) => playerHome(i));
+    const reserves = reserveInfo.flatMap(r => r?.footprint ? [r.footprint.x0, r.footprint.x1].flatMap(x => [r.footprint.z0, r.footprint.z1].flatMap(z => [r.footprint.y0, r.footprint.y1].map(y => new THREE.Vector3(x, y, z)))) : []);
     // your seat: the whole layout, largest, with the wheel beside it (Mac) or rising at the top (phone)
     let best = null;
     if (portrait) {
-      const must = [...layoutCorners(), new THREE.Vector3(L.wheelX + 28, 0, cz)];
+      const must = [...layoutCorners(), ...markers, ...reserves, new THREE.Vector3(L.wheelX + 28, 0, cz)];
       for (let h = 80; h <= 280; h += 8) for (let d = 10; d <= 170; d += 8) {
         const pos = new THREE.Vector3(L.xEnd + d, h, cz), look = new THREE.Vector3((L.X(-1) + L.xEnd) / 2 - 8, 0, cz), p = fit(pos, look, must, .96, .95);
         if (!p) continue; const score = cellPx(p) - Math.max(0, p.fov - 42) * .8; if (!best || score > best.score) best = { ...p, score };
@@ -433,7 +506,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     } else {
       // seated at the long side: a long lens from a good way back keeps the table from bending
       // the layout and the printed racetrack first (the wheel may run off the picture's left edge)
-      const T = L.track, must = [...layoutCorners(), ...rimPts(WELL, 1.5, 24).filter(p => p.x > L.wheelX + 22), ...(T ? [[-1, 0], [1, 0], [-.5, -1], [.5, -1]].map(([a, b]) => new THREE.Vector3(T.cx + a * (b ? T.len - T.H : T.len) / 2, 0, T.cz + b * T.H / 2)) : [])], cx = (L.wheelX + 22 + L.xEnd) / 2;
+      const T = L.track, must = [...layoutCorners(), ...markers, ...reserves, ...rimPts(WELL, 1.5, 24).filter(p => p.x > L.wheelX + 22), ...(T ? [[-1, 0], [1, 0], [-.5, -1], [.5, -1]].map(([a, b]) => new THREE.Vector3(T.cx + a * (b ? T.len - T.H : T.len) / 2, 0, T.cz + b * T.H / 2)) : [])], cx = (L.wheelX + 22 + L.xEnd) / 2;
       // aimed at the middle of what must show, seen from the camera (the track makes it lopsided): the lens can be no wider
       // than the content needs. The camera has no yaw, so a point's height in the picture depends on its y and z alone.
       const aim = pos => { let a0 = Infinity, a1 = -Infinity; for (const q of must) { const a = Math.atan2(pos.y - q.y, pos.z - q.z); a0 = Math.min(a0, a); a1 = Math.max(a1, a); } const yL = WHEEL_Y * .4; return new THREE.Vector3(cx, yL, pos.z - (pos.y - yL) / Math.tan((a0 + a1) / 2)); };
@@ -538,11 +611,14 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   function setQuality(q) {
     const was = quality; quality = q; st.setQuality(q);
     if (q.felt !== was.felt && L) repaintLayout();
-    setChipDetail(q.chipSegments); swapChipGeometry(scene); requestRender();
+    setChipDetail(q.chipSegments); swapChipGeometry(scene); chipBatch.refresh(); reserveBatch.refresh(); requestRender();
   }
 
   return {
     THREE, renderer, scene, camera, wheel, table, tickers, requestRender, frame, project, pick, highlight, anchor, chipMesh, chipLook, dolly, chipsG,
+    chipRest: m => chipBatch.park(m), chipLift: m => chipBatch.lift(m), chipRemove: m => chipBatch.remove(m),
+    showPlayerChips, playerHome, playerMarkers, playerReserve, reservePosition, afterFrame,
+    get reserveInfo() { return reserveInfo; }, get reserveFootprints() { return reserveInfo.flatMap(r => r?.footprint ? [r.footprint] : []); },
     shots, move, setPose, showcase, relayout, setQuality, fit: fitNow,
     get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CHIP_VALUES } from '../src/core/chips.mjs';
 import { stats } from '../src/roulette/rules.mjs';
+import { ROULETTE_PLAYERS } from '../src/roulette/players.mjs';
 import { seeded } from './helpers.mjs';
 
 const read = p => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -18,7 +19,7 @@ const lab = hex => {
 const dE = (a, b) => { const A = lab(a), B = lab(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]); };
 
 test('the other players\' colour chips: ΔE76 25 or more from every value chip, the brass and each other; inserts tell them apart too', () => {
-  const src = read('src/roulette/rgame.mjs'), rivals = [...src.slice(src.indexOf('const RIVALS'), src.indexOf('];', src.indexOf('const RIVALS'))).matchAll(/name: '([^']+)', color: '(#[0-9a-f]{6})', inserts: (\d+)/g)].map(([, name, color, n]) => ({ name, color, inserts: +n }));
+  const rivals = ROULETTE_PLAYERS;
   assert.equal(rivals.length, 4, 'four players, each with a colour and an insert count');
   const tex = read('src/scene/textures.mjs'), base = v => tex.match(new RegExp(`^\\s*${String(v).replace('.', '\\.')}: \\{ base: '(#[0-9a-f]{6})'`, 'm'))?.[1];
   const value = [.5, ...CHIP_VALUES].map(v => [v, base(v)]);   // (the ½ chip comes back with la partage on an odd stake)

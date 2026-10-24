@@ -806,6 +806,9 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 }
 .r-tag { position: absolute; left: 0; top: 0; translate: -50% -100%; display: flex; gap: 5px; align-items: baseline; padding: 3px 8px; border-radius: 99px; background: rgba(12, 12, 13, .82); white-space: nowrap; animation: tag-up 2.6s var(--ease) forwards; }
 .r-tag b { font: 700 11px/1 Inter, system-ui, sans-serif; color: var(--muted); } .r-tag span { font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
+.r-seat { position: absolute; left: 0; top: 0; translate: -50% 0; padding: 2px 4px; border-radius: 5px; background: rgba(12, 12, 13, .78); color: var(--ivory, #f1eadd); font: 600 10px/1.2 "Barlow Condensed", sans-serif; white-space: nowrap; pointer-events: none; }
+.rdock .r-hint, body[data-table] .rdock .r-hint { position: static; order: -2; flex: none; width: 100%; max-width: 100%; margin: 0; padding: 4px 10px; translate: none; font-size: 12px; }
+.rdock .r-hint.wheel-only { opacity: 0; }
 @keyframes tag-up { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
 
 /* sheets: the racetrack and the statistics rise over the table */

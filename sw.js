@@ -17,9 +17,9 @@ const n = (name, ...takes) => takes.map(t => `${name}-${t}`), to = k => Array.fr
 const CODE = ['./', 'manifest.webmanifest', 'src/app.css', 'src/fonts.css',
   ...['app', 'engine', 'sidebets', 'players', 'sound', 'ui-kit', 'ui-motion'].map(f => `src/${f}.mjs`),
   ...['bet-controls', 'brand', 'chips', 'feel', 'format', 'ledger', 'lobby', 'modes', 'rng', 'wallet'].map(f => `src/core/${f}.mjs`),
-  ...['stage', 'world', 'view', 'pieces', 'textures', 'lightning3d'].map(f => `src/scene/${f}.mjs`),
+  ...['stage', 'world', 'view', 'pieces', 'textures', 'lightning3d', 'chip-motion'].map(f => `src/scene/${f}.mjs`),
   ...['controller', 'book', 'lightning-ui', 'tray-icons'].map(f => `src/blackjack/${f}.mjs`),
-  ...['rgame', 'rules', 'physics', 'replay', 'rscene', 'wheel3d', 'roller'].map(f => `src/roulette/${f}.mjs`),
+  ...['rgame', 'rules', 'physics', 'replay', 'rscene', 'wheel3d', 'roller', 'chip-stacks', 'players', 'reserve-layout'].map(f => `src/roulette/${f}.mjs`),
   ...['three.module.min.js', 'RoomEnvironment.js', 'anime.mjs', 'confetti.mjs', 'torph.mjs', 'web-haptics.mjs', 'cuelume/index.js', 'cuelume/audio/engine.js',
     'cuelume/interactions/bind.js', ...['bubble', 'context', 'mech', 'press', 'recipes', 'themes'].map(f => `cuelume/sounds/${f}.js`)].map(f => `src/vendor/${f}`)];
 const BJ = ['place-bets', 'insurance', 'dealer-ace', 'blackjack', 'dealer-blackjack', ...n('dealer', 17, 18, 19, 20, 21), 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];

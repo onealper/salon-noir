@@ -123,8 +123,8 @@ bindToggle('#optFast', 'fast', on => each(r => r.setFast(on)));
 // How many others sit with you. Changes take effect between hands. The note names the blackjack table's players
 // (once it is built; before that, the wheel's).
 const playersSel = $('#optPlayers'); playersSel.value = String(settings.players);
-const playersNote = () => { const names = (rooms.blackjack ?? rooms.roulette)?.players() ?? []; $('#playersNote').textContent = names.length ? names.join(', ') : 'A private table'; };
-playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); rooms.blackjack?.setPlayers(); playersNote(); };
+const playersNote = () => { const names = (rooms[room] ?? rooms.blackjack ?? rooms.roulette)?.players() ?? []; $('#playersNote').textContent = names.length ? names.join(', ') : 'A private table'; };
+playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); each(r => r.setPlayers()); playersNote(); };
 $('#settings').addEventListener('click', playersNote);
 $('#settings').addEventListener('click', () => renderBook());   // Last hands, drawn fresh as the sheet opens
 // Open the sheet at one of its sections (the side-bet tray's (i) opens it at the paytables).

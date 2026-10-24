@@ -9,7 +9,7 @@ const code = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$
 const modules = dir => fs.readdirSync(new URL(`src/${dir}`, root)).filter(f => f.endsWith('.mjs')).map(f => f.slice(0, -4));
 
 test('the rules engines and the helpers they share have no DOM: no document, window, storage or browser timing in them', () => {
-  for (const f of ['engine', 'sidebets', 'players', 'roulette/rules', 'roulette/physics', 'core/modes', 'core/chips', 'core/format', 'core/rng', 'blackjack/book']) {
+  for (const f of ['engine', 'sidebets', 'players', 'roulette/rules', 'roulette/physics', 'roulette/chip-stacks', 'roulette/players', 'roulette/reserve-layout', 'core/modes', 'core/chips', 'core/format', 'core/rng', 'blackjack/book']) {
     const hits = code(read(`src/${f}.mjs`)).match(/\b(document|window|localStorage|sessionStorage|navigator|location|requestAnimationFrame|addEventListener|fetch)\b/g);
     assert.equal(hits, null, `${f}.mjs uses ${hits}`);
   }

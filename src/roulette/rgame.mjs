@@ -14,27 +14,22 @@ import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALL
 import { plan, at, GEO, TUNE } from './physics.mjs';
 import { replayShot } from './replay.mjs';
 import { createRoller, prepareRoller } from './roller.mjs';
-import { Motion, ease } from '../scene/pieces.mjs';
+import { Motion, ease, tossChip, payoutCuts, pushChipStack } from '../scene/pieces.mjs';
 import { CHIP_H, CHIP_R } from '../scene/textures.mjs';
 import { wallet, inFlight } from '../core/wallet.mjs';
-import { breakDown } from '../core/chips.mjs';
+import { payoutChips, chipOffset } from './chip-stacks.mjs';
+import { ROULETTE_PLAYERS, RoulettePlayer } from './players.mjs';
 import { fmt, signed } from '../core/format.mjs';
 import { chipRack, hintLine, rebetSlot, goLabel, serialQueue, betKey } from '../core/bet-controls.mjs';
 
-// The other players' colour chips: no colour within ΔE76 25 of a value chip (the ½ chip too), of brass #c9a45c or of each
-// other (test/roulette-table.test.mjs measures it), and each its own count of edge inserts, to be told apart without colour.
-const RIVALS = [
-  { name: 'Olu', color: '#7fb3d9', inserts: 4, style: 'straights' },     // sky
-  { name: 'Marta', color: '#c25b86', inserts: 8, style: 'outside' },     // rose
-  { name: 'Kenji', color: '#1f8f8c', inserts: 12, style: 'sections' },   // teal
-  { name: 'Inès', color: '#8b5a2b', inserts: 16, style: 'dozens' },      // caramel
-];
+// Colour chips keep a player's assigned unit; their bank and pending wagers live in the pure player model.
 const OUT_ORDER = ['column', 'dozen', 'even'];   // paid first, then inside bets toward the wheel, straights last
 const H = CHIP_H;   // true size, as the scene draws them
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function createRoulette(ctx) {
   const { app, audio, settings, store, ui, kit, uiSound, sting } = ctx;
+  const rivals = ROULETTE_PLAYERS.map(profile => new RoulettePlayer(profile));
   const feel = ctx.feel ?? { tap() {}, cue() {}, confetti() {} };   // haptics and confetti, shared with blackjack
   await preloadRouletteArt();
   // ---- the stage and the dock ----------------------------------------------------------------------------------------
@@ -47,6 +42,7 @@ export async function createRoulette(ctx) {
       <div class="r-replay" hidden>Replay</div>
       <div class="r-win" role="status" hidden><small></small><b></b><em></em><span class="r-gross"></span></div>
       <div class="r-tags"></div>
+      <div class="r-seats" aria-label="Other players' chips"></div>
       <div class="r-sheet" id="rRaceSheet" role="region" hidden aria-label="Racetrack"></div>
       <div class="r-sheet" id="rStatsSheet" role="region" hidden aria-label="Statistics"></div>
     </div>
@@ -68,10 +64,12 @@ export async function createRoulette(ctx) {
   app.append(stage, dock);
   const $ = s => stage.querySelector(s) ?? dock.querySelector(s);
   const canvas = $('.rcanvas'), hintEl = $('.r-hint'), loupe = $('.r-loupe'), bubble = $('.r-bubble'), winEl = $('.r-win'), histEl = $('.r-history'), fadeEl = $('.r-fade'), tagsEl = $('.r-tags');
+  dock.prepend(hintEl);   // a dedicated line keeps betting hints clear of players' banks and chip values
 
   const hint = hintLine(hintEl);   // (the words morph in the line's own span: see .hint in app.css)
   const S = createRouletteScene(canvas, { quality: ctx.quality() }), motion = new Motion(S);
-  for (const r of RIVALS) S.chipLook(r.color, { inserts: r.inserts });
+  for (const r of rivals) S.chipLook(r.color, { inserts: r.inserts });
+  S.showPlayerChips(rivals.slice(0, Math.min(4, settings.players)));
   // A spin is paid into the wallet the moment bets close (the number is drawn then); the balance on
   // screen (and which chips you can afford) holds back until the ball lands, so the result isn't given away.
   let held = null;   // the balance as shown while a spin is under way
@@ -113,44 +111,127 @@ export async function createRoulette(ctx) {
 
   // ---- stacks of chips on the layout ------------------------------------------------------------------------------------------
   const stacks = new Map();   // "owner|spot" → meshes, bottom first
-  const slotOf = owner => owner === 'you' ? 0 : 1 + RIVALS.findIndex(r => r.name === owner);
+  const seatsEl = $('.r-seats');
+  // Counts describe the chips actually on the cloth, including a win being pushed home.
+  // The marker beside each name carries that colour's assigned unit.
+  function showSeats() {
+    seatsEl.hidden = stage.hidden || S.showcase.on || S.current?.name !== 'seat';
+    if (seatsEl.hidden) return;
+    const markers = S.playerMarkers.children;
+    if (seatsEl.children.length !== markers.length) seatsEl.replaceChildren(...markers.map(() => {
+      const el = document.createElement('span'); el.className = 'r-seat'; return el;
+    }));
+    const occupied = [];
+    markers.forEach((marker, i) => {
+      const { owner, value } = marker.userData, r = rivals.find(r => r.name === owner), el = seatsEl.children[i], p = S.project(marker.position);
+      let count = 0; for (const [k, list] of stacks) if (k.startsWith(`${owner}|`)) count += list.length;
+      const label = `${owner} ${r.reserveCount}`;
+      const aria = `${owner}: bank ${fmt(r.bankroll)}, ${r.reserveCount} reserve chips, ${fmt(value)} per colour chip, ${count} chips on the table, ${fmt(r.staked)} staked${r.rebuys ? `, ${r.rebuys} rebuys` : ''}`;
+      if (el.textContent !== label) el.textContent = label;
+      if (el.getAttribute('aria-label') !== aria) el.setAttribute('aria-label', aria);
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const x = Math.max(w / 2 + 4, Math.min(stage.clientWidth - w / 2 - 4, p.x));
+      let y = p.y + 8 + h <= stage.clientHeight - 4 ? p.y + 8 : p.y - h - 12;
+      for (const box of occupied) if (x - w / 2 < box.x1 + 2 && x + w / 2 > box.x0 - 2 && y < box.y1 + 2 && y + h > box.y0 - 2) y = box.y0 - h - 3;
+      y = Math.max(4, y); occupied.push({ x0: x - w / 2, x1: x + w / 2, y0: y, y1: y + h });
+      const pos = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      if (el.style.transform !== pos) el.style.transform = pos;
+    });
+  }
+  S.afterFrame.add(showSeats);
+  const payoutPlaces = () => S.playerMarkers.children.map(m => m.position.clone());
+  const slotOf = owner => owner === 'you' ? 0 : 1 + rivals.findIndex(r => r.name === owner);
   const key = (owner, id) => `${owner}|${id}`;
-  const approach = a => S.layout.orient === 'port' ? [S.layout.rect.x1 + 22 - a.x, 22, 0] : [0, 22, S.layout.rect.z1 + 22 - a.z];   // chips come over the armrest on your side
-  // One column per spot: every player's chips go on top of what is already there, in the order they come, each layer
-  // nudged a few millimetres by its owner's slot so the colours read as separate bets (stacks set side by side 1 cm apart
-  // passed through each other, and their faces flickered). A chip taken out lets the ones above it settle.
+  const homeOf = owner => owner === 'you'
+    ? S.layout.orient === 'port' ? new S.THREE.Vector3(S.layout.rect.x1 + 14, 9, 0) : new S.THREE.Vector3((S.layout.X(0) + S.layout.xEnd) / 2, 9, S.layout.rect.z1 + 14)
+    : S.reservePosition?.(owner, 0) ?? S.playerHome(slotOf(owner) - 1).setY(9);
+  const chipFor = (owner, value) => { const r = rivals.find(r => r.name === owner); return S.chipMesh(r && value === r.unit ? r.color : value); };
+  const offsetAt = (base, i) => { const d = chipOffset(i, { height: H }); return base.clone().add(new S.THREE.Vector3(d.x, d.y, d.z)); };
+  // A shared column per spot, twenty chips high before another column begins. Every player's chips go on top in
+  // order, their layers nudged by a few millimetres so the colours read as separate bets without intersecting faces.
+  // A chip taken out lets the ones above it settle; small breaks every five make the stack count readable.
   const cols = new Map();   // spot → meshes, bottom first, whoever's
-  const chipAt = m => { const { owner, id } = m.userData, c = cols.get(id) ?? []; return S.anchor(id, slotOf(owner)).setY(H * (Math.max(0, c.indexOf(m)) + .5)); };
+  const chipAt = m => { const { owner, id } = m.userData, c = cols.get(id) ?? []; return offsetAt(S.anchor(id, slotOf(owner)), Math.max(0, c.indexOf(m))); };
   const seat = m => { const id = m.userData.id; if (!cols.has(id)) cols.set(id, []); cols.get(id).push(m); return chipAt(m); };
   function unseat(ms) { for (const m of ms) { const c = cols.get(m.userData.id), i = c?.indexOf(m) ?? -1; if (i >= 0) c.splice(i, 1); if (c && !c.length) cols.delete(m.userData.id); } }
-  function settleCol(id) { for (const m of cols.get(id) ?? []) { if (m.userData.fly) continue; const y0 = m.position.y, y = chipAt(m).y; if (Math.abs(y - y0) > .01) motion.tween(120, t => { m.position.y = y0 + (y - y0) * t; }, ease.out); } }
-  async function addChip(owner, id, v, { ms = 300 } = {}) {
+  function settleCol(id) {
+    for (const m of cols.get(id) ?? []) {
+      if (m.userData.fly || m.userData.removing) continue;
+      const from = m.position.clone(), to = chipAt(m);
+      if (from.distanceTo(to) < .01) { S.chipRest(m); continue; }
+      S.chipLift(m); m.userData.fly = true;
+      const flight = motion.tween(120, t => m.position.lerpVectors(from, chipAt(m), t), ease.out).then(() => {
+        delete m.userData.fly; delete m.userData.flight;
+        if (m.userData.removing || !(cols.get(id) ?? []).includes(m)) return;
+        m.position.copy(chipAt(m)); S.chipRest(m);
+      });
+      m.userData.flight = flight;
+    }
+  }
+  async function addChip(owner, id, v, { ms = 440, from = homeOf(owner) } = {}) {
     const k = key(owner, id), list = stacks.get(k) ?? []; stacks.set(k, list);
-    const a = S.anchor(id, slotOf(owner)), m = S.chipMesh(v), [dx, dy, dz] = approach(a);
+    const a = S.anchor(id, slotOf(owner)), m = chipFor(owner, v);
     m.userData = { owner, id, v }; list.push(m);
-    const from = a.clone().add(new S.THREE.Vector3(dx, dy, dz)), to = seat(m);
-    m.position.copy(from); m.rotation.y = Math.random() * 6; m.userData.fly = true;
-    await motion.tween(ms, t => { m.position.lerpVectors(from, to, t); m.position.y = to.y + (1 - t) * dy * (1 - t) + Math.sin(t * Math.PI) * 3; }, ease.land);
-    delete m.userData.fly; settleCol(id);   // (a chip taken out from under it while it flew)
-    audio.play(list.length > 1 ? 'stack' : 'chip', { x: panX(a) });
+    const to = seat(m); m.userData.target = to; m.userData.fly = true;
+    const flight = tossChip(motion, m, from, to, { duration: ms, audio, onStack: (cols.get(id)?.length ?? 0) > 1, pan: panX(a) });
+    m.userData.flight = flight; await flight;
+    delete m.userData.fly; delete m.userData.flight; delete m.userData.target;
+    m.position.copy(chipAt(m)); if (!m.userData.removing) { S.chipRest(m); settleCol(id); }
   }
   async function dropStack(k, { to = null, ms = 260 } = {}) {
     const list = stacks.get(k); if (!list) return; stacks.delete(k); unseat(list);
-    await Promise.all(list.map((m, i) => { const from = m.position.clone(), end = to ? to.clone().setY(H * (i + .5)) : from.clone().add(new S.THREE.Vector3(0, 6, 0));
-      return motion.tween(ms, t => { m.position.lerpVectors(from, end, t); m.traverse(o => { if (o.material) o.material.opacity = 1; }); m.scale.setScalar(to ? 1 : 1 - t * .9); }, ease.inOut).then(() => { S.chipsG.remove(m); }); }));
+    for (const m of list) m.userData.removing = true;
+    await Promise.all(list.map(m => m.userData.flight));
+    const from = list.map(m => m.position.clone()), base = from[0]; if (!base) return;
+    list.forEach(m => S.chipLift(m));
+    await motion.tween(ms, t => list.forEach((m, i) => {
+      const end = to ? to.clone().add(from[i]).sub(base) : from[i].clone().add(new S.THREE.Vector3(0, 6, 0));
+      m.position.lerpVectors(from[i], end, t); m.scale.setScalar(to ? 1 : 1 - t * .9);
+    }), ease.inOut);
+    list.forEach(m => S.chipRemove(m));
+    for (const id of new Set(list.map(m => m.userData.id))) settleCol(id);
     S.requestRender();
   }
   // your stacks follow the table after undo, clear or a removed chip
   async function syncYours() {
-    const want = new Map([...table.bets].map(([id, vs]) => [id, vs])), jobs = [];
+    const want = new Map([...table.bets].map(([id, vs]) => [id, [...vs]])), jobs = [];
     // a chip taken off rises 6 cm as it goes (by the tween's time, so at any frame rate) and what stood on it settles
-    for (const [k, list] of stacks) { const [owner, id] = k.split('|'); if (owner !== 'you') continue; const w = want.get(id) ?? []; if (list.length > w.length) { const extra = list.splice(w.length); unseat(extra); settleCol(id); for (const m of extra) { const y0 = m.position.y; jobs.push(motion.tween(160, t => { m.position.y = y0 + t * 6; m.scale.setScalar(1 - t); }).then(() => S.chipsG.remove(m))); } if (!list.length) stacks.delete(k); } }
-    for (const [id, vs] of want) { const have = stacks.get(key('you', id))?.length ?? 0; for (let i = have; i < vs.length; i++) jobs.push(addChip('you', id, vs[i], { ms: 220 })); }
+    for (const [k, list] of stacks) {
+      const [owner, id] = k.split('|'); if (owner !== 'you') continue;
+      const w = want.get(id) ?? [];
+      let keep = 0;
+      while (keep < list.length && keep < w.length && list[keep].userData.v === w[keep]) keep++;
+      if (list.length > keep) {
+        const extra = list.splice(keep); unseat(extra); extra.forEach(m => { m.userData.removing = true; });
+        settleCol(id);
+        for (const m of extra) jobs.push((async () => {
+          await m.userData.flight; S.chipLift(m); const y0 = m.position.y;
+          await motion.tween(160, t => { m.position.y = y0 + t * 6; m.scale.setScalar(1 - t); }); S.chipRemove(m);
+        })());
+        if (!list.length) stacks.delete(k);
+      }
+    }
     await Promise.all(jobs);
+    const additions = [];
+    for (const [id, vs] of want) {
+      const have = stacks.get(key('you', id))?.length ?? 0;
+      for (let i = have; i < vs.length; i++) {
+        additions.push(addChip('you', id, vs[i]));
+        await motion.wait(55);
+      }
+    }
+    await Promise.all(additions);
   }
   function relayoutStacks() {
-    const taken = [];
-    for (const [k, list] of stacks) { const id = k.split('|')[1], pay = k.endsWith('|pay'), p = pay ? payAt(id, taken) : null; list.forEach((m, i) => m.position.copy(pay ? p.clone().setY(H * (i + .5)) : chipAt(m))); }
+    const taken = payoutPlaces();
+    for (const [k, list] of stacks) {
+      const id = k.split('|')[1], pay = k.endsWith('|pay'), p = pay ? payAt(id, taken, list.length) : null;
+      list.forEach((m, i) => {
+        const to = pay ? payPosition(p, i) : chipAt(m);
+        if (m.userData.target) m.userData.target.copy(to);
+        if (!m.userData.fly) { m.position.copy(to); S.chipRest(m); }
+      });
+    }
     if (S.dolly.visible && restIdx != null) placeDolly(WHEEL[restIdx], 0);
     if (mode === 'betting' && !hovered) restGlow();   // (a new cloth has its tiles dark)
     S.requestRender();
@@ -202,7 +283,7 @@ export async function createRoulette(ctx) {
     const why = table.place(adds);
     if (why) { refuse(name ? `${name} at ${fmt(rack.value)} a chip: ${why[0].toLowerCase()}${why.slice(1)}` : why); return; }
     clearResult(); refresh(); if (!quiet) feel.tap('chip'); if (!quiet) othersWake();
-    serial(async () => { for (const [id, v] of adds) await Promise.race([addChip('you', id, v), sleep(70)]); });
+    serial(syncYours);   // reconcile current values, including rapid place → clear → place gestures
   }
   // (a result still up gives way, so the reason is seen where it shows on an upright phone)
   function refuse(why, el = $('#rChips')) { clearResult(); hint(why); sheetSay(why); kit.shake(el); audio.cue('ui-click-2', { bus: 'ui', rate: .7, gain: .6 }); feel.tap('refuse'); }
@@ -228,25 +309,58 @@ export async function createRoulette(ctx) {
   kit.shimmer($('#rSpin'));
 
   // ---- the other players --------------------------------------------------------------------------------------------------------
-  let rivalJobs = [];
-  const rivalsHere = () => RIVALS.slice(0, Math.min(4, settings.players));
+  let rivalJobs = [], rivalGeneration = 0;
+  const rivalsHere = () => rivals.slice(0, Math.min(4, settings.players));
+  function stopRivals() { rivalGeneration++; for (const j of rivalJobs) j.hurry(); rivalJobs = []; }
   function rivalBets(r) {
-    const u = [5, 10, 25][Math.floor(Math.random() * 3)], pick = a => a[Math.floor(Math.random() * a.length)], n = () => Math.floor(Math.random() * 37);
+    const u = r.unit, pick = a => a[Math.floor(Math.random() * a.length)], n = () => Math.floor(Math.random() * 37);
     if (r.style === 'straights') return Array.from({ length: 2 + Math.floor(Math.random() * 4) }, () => [`n${n()}`, u]);
     if (r.style === 'outside') return [[pick(['red', 'black']), u * 4], ...(Math.random() < .5 ? [[pick(['odd', 'even', 'low', 'high']), u * 2]] : [])];
-    if (r.style === 'dozens') return [[pick(['doz1', 'doz2', 'doz3']), u * 2], [pick(['col1', 'col2', 'col3']), u], ...(Math.random() < .4 ? [[`n${n()}`, 5]] : [])];
-    const call = CALLS[pick(['voisins', 'tiers', 'orphelins', 'zero'])]; return call.chips.map(([id, k]) => [id, 5 * k]);
+    if (r.style === 'dozens') return [[pick(['doz1', 'doz2', 'doz3']), u * 2], [pick(['col1', 'col2', 'col3']), u], ...(Math.random() < .4 ? [[`n${n()}`, u]] : [])];
+    const call = CALLS[pick(['voisins', 'tiers', 'orphelins', 'zero'])]; return call.chips.map(([id, k]) => [id, u * k]);
   }
   function othersWake() {
     if (rivalJobs.length || mode !== 'betting' || !active) return;
-    rivalJobs = rivalsHere().filter(() => Math.random() < .85).map(r => {
+    S.showPlayerChips(rivalsHere());
+    const generation = rivalGeneration;
+    rivalJobs = rivalsHere().filter(r => !r.bets?.length && Math.random() < .85).map(r => {
       let fire; const go = new Promise(res => { fire = res; setTimeout(res, 700 + Math.random() * 3800); });
-      const job = go.then(async () => { if (mode !== 'betting' || !active) return; for (const [id, v] of rivalBets(r)) { r.bets ??= []; r.bets.push([id, v]); await addChip(r.name, id, r.color, { ms: 280 }); await sleep(60 + Math.random() * 160); } });
+      const job = go.then(async () => {
+        if (generation !== rivalGeneration || mode !== 'betting' || !active) return;
+        for (const [id, amount] of rivalBets(r)) {
+          for (const value of payoutChips(amount, r.unit)) {
+            if (generation !== rivalGeneration || !active) return;
+            const from = S.reservePosition?.(r.name, r.reserveValues.lastIndexOf(value)) ?? homeOf(r.name);
+            if (!r.place(id, value)) break;
+            S.showPlayerChips(rivalsHere());
+            await addChip(r.name, id, value, { from });
+            await motion.wait(50);
+          }
+        }
+      });
       return { hurry: fire, job };
     });
   }
   async function othersReady() { for (const j of rivalJobs) j.hurry(); await Promise.all(rivalJobs.map(j => j.job)); }
-  function clearRivals() { for (const r of RIVALS) { r.bets = []; for (const k of [...stacks.keys()]) if (k.startsWith(r.name + '|')) dropStack(k); } rivalJobs = []; for (const id of cols.keys()) settleCol(id); }   // (your chips that stood on theirs come down)
+  function refundRival(r, number = null) {
+    if (r.busy && number != null) r.settle(number); else r.cancel();
+    r.beginRound();
+    for (const [k, list] of [...stacks]) if (k.startsWith(`${r.name}|`)) {
+      stacks.delete(k); unseat(list);
+      for (const m of list) { m.userData.removing = true; S.chipRemove(m); }
+    }
+  }
+  function clearRivals(number = null) {
+    stopRivals(); for (const r of rivals) refundRival(r, number);
+    S.showPlayerChips(rivalsHere()); for (const id of cols.keys()) settleCol(id);
+  }
+  function setPlayers() {
+    if (mode !== 'betting') return;   // a running round keeps its players through settlement
+    stopRivals(); const here = new Set(rivalsHere()); S.showPlayerChips([...here]);
+    for (const r of rivals) if (!here.has(r)) refundRival(r);
+    framed = ''; reframe();
+    othersWake();
+  }
 
   // ---- the wheel at rest: the wheelhead keeps turning slowly, the last ball riding in its pocket -------------------------
   // The drift is drawn at 30 frames a second (the ticker asks for its own frames), the shadows of the frets, turret
@@ -290,7 +404,7 @@ export async function createRoulette(ctx) {
   // a wait that a tap (or Space) cuts short
   const untilSkip = p => Promise.race([p, new Promise(res => { skipWake = res; })]).finally(() => { skipWake = null; });
   // while the ball drops and in the replay the picture is the wheel's alone: the recent numbers and the hint stand aside
-  const wheelOnly = on => stage.classList.toggle('r-wheelonly', on);
+  const wheelOnly = on => { stage.classList.toggle('r-wheelonly', on); hintEl.classList.toggle('wheel-only', on); };
   // the croupier calls the number: its bubble shows as he starts to say it, or at once with no voice to wait for (sound
   // off, or the clip not there in time). `done`: the call is over.
   function callNumber(n, onCall) {
@@ -307,13 +421,14 @@ export async function createRoulette(ctx) {
       // The number is drawn and paid as bets close, and written down with the stake gone: the spin only
       // shows it, so a reload or a closed tab mid-spin keeps the win and can't undo a loss.
       const n = rigged ?? draw(); rigged = null; held = wallet.balance;
-      r = table.settle(n); r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage }; inFlight.set('spin', r.rec);
+      r = table.settle(n); for (const r2 of rivals) r2.close();
+      r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage }; inFlight.set('spin', r.rec);
       audio.preload([numberClip(n)]);   // its call decoded while the ball runs
       await spinRound(r);
     } catch (err) {
       console.error('roulette round', err); if (spinTick) S.tickers.delete(spinTick); S.wheel.setTrail(0, 0, 0, 0); rollLoop?.stop(.1);
       const back = table.abandon(); if (r) paid(r); else held = null;   // a stake taken without a number goes back
-      clearRivals(); hideBubble(); wheelOnly(false); running = false; await syncYours().catch(() => {}); await cameraTo('seat', 0).catch(() => {});   // your stacks match the table again: cleared once paid, as they were if not
+      clearRivals(r?.n ?? null); hideBubble(); wheelOnly(false); running = false; await syncYours().catch(() => {}); await cameraTo('seat', 0).catch(() => {});   // your stacks match the table again: cleared once paid, as they were if not
       mode = 'betting'; document.body.dataset.rmode = 'bet'; refresh(); setIdle(true);
       hint(r ? `The wheel stopped on ${r.n} ${colorName(r.n)}: ${r.back > 0 ? `${fmt(r.back)} paid` : 'no win'}.` : back ? 'The spin was void. Your stake is back.' : 'The spin could not start. Your bets are still on.');
     }
@@ -332,7 +447,7 @@ export async function createRoulette(ctx) {
     inFlight.set('spin', null); held = null; ctx.showBalance(); refresh();
   }
   async function spinRound(r) {
-    mode = 'spinning'; hurry = 1; skipLevel = 0; running = true; clearResult(); refresh();   // "Tap to hurry the ball." while it runs
+    mode = 'spinning'; stageAt = ''; hurry = 1; skipLevel = 0; running = true; clearResult(); refresh();   // "Tap to hurry the ball." while it runs
     document.body.dataset.rmode = 'spin';
     const n = r.n, f = fast(); dir = -dir; store.set('rouletteDir', dir);
     // the croupier releases the ball on his side of the bowl, the far side from the camera's wheel shot
@@ -437,20 +552,45 @@ export async function createRoulette(ctx) {
   // straight; it comes up again with the chips as they go home (payout's end), so it never hovers over an empty cell
   function placeDolly(n, ms = 240) {
     const d = S.dolly, a = S.anchor(`n${n}`); d.visible = true;
-    const tall = cols.get(`n${n}`)?.length ?? 0, y = H * tall;   // (every player's chips there are one column)
+    const tall = Math.min(20, cols.get(`n${n}`)?.length ?? 0), y = tall ? chipOffset(tall - 1, { height: H }).y + H / 2 : 0;
     if (ms <= 0) { d.position.set(a.x, y, a.z); S.requestRender(); return Promise.resolve(); }
     return motion.tween(ms, t => d.position.set(a.x, y + (1 - t) * 10, a.z), ease.land).then(() => audio.play(tall ? 'stack' : 'chip', { gain: .6, x: panX(a) }));
   }
   function liftDolly() { const d = S.dolly; if (!d.visible) return; const y0 = d.position.y; motion.tween(220, t => { d.position.y = y0 + t * 10; }).then(() => { d.visible = false; S.requestRender(); }); }
+  // A full twenty-chip column travels as one stack. Remainders are cut in fives, so a large win
+  // never becomes a spray of individual chips or a shortened stand-in for the amount paid.
+  function payPosition(base, i) { return offsetAt(base, i); }
+  async function pushPayout(owner, id, values, sweepTo, base = null) {
+    const pk = base ? `${owner}|${id}|pay` : key(owner, id), list = [], cuts = [];
+    stacks.set(pk, list);
+    for (const { index, size } of payoutCuts(values)) {
+      const cut = [];
+      for (let j = 0; j < size; j++) {
+        const i = index + j, v = values[i], m = chipFor(owner, v); m.userData = { owner, id, v, fly: true };
+        const to = base ? payPosition(base, i) : seat(m);
+        m.userData.target = to; m.position.copy(sweepTo).setY(5 + (to.y - H / 2));
+        list.push(m); cut.push(m);
+      }
+      cuts.push(cut);
+    }
+    await Promise.all(cuts.map(async (cut, i) => {
+      await pushChipStack(motion, cut, sweepTo.clone().setY(5), cut.map(m => m.userData.target), { duration: 480, delay: i * 70, audio, pan: panX(sweepTo), gain: i ? .5 : 1, active: () => stacks.get(pk) === list });
+      if (stacks.get(pk) !== list) return;
+      for (const m of cut) {
+        m.position.copy(m.userData.target); delete m.userData.target; delete m.userData.fly; S.chipRest(m);
+      }
+    }));
+    return pk;
+  }
   async function payout(r, n) {
     stageAt = 'dolly'; await placeDolly(n); stageAt = 'lose';
     // the number lights from under the cloth, its edge brightest so the numeral keeps its ink, and the outside boxes it
     // wins with more softly (as an LED-lit layout does): one fade up, no pulse to keep the picture redrawing
     S.highlight([n, ...[...SPOTS].filter(([, sp]) => OUT_ORDER.includes(sp.kind) && sp.nums.includes(n)).map(([id]) => [id, .25])], { level: .6, color: '#ffe4a6', fade: reduced() ? 0 : 240 });
     const sweepTo = S.layout.tray ? S.layout.tray.clone() : S.anchor('n0').clone().add(new S.THREE.Vector3(-22, 0, 0)), kindOf = k => SPOTS.get(k.split('|')[1]).kind;   // losing chips go to the croupier's float
-    const stakeOf = k => { const [owner, id] = k.split('|'); return stacks.get(k).reduce((a, m) => a + (typeof m.userData.v === 'number' ? m.userData.v : 0), 0) || (RIVALS.find(x => x.name === owner)?.bets ?? []).filter(([b]) => b === id).reduce((a, [, v]) => a + v, 0); };
+    const stakeOf = k => stacks.get(k).reduce((a, m) => a + m.userData.v, 0);
     // la partage: on zero the even-money stacks go with the losers, and half of each is pushed back from the float
-    const halves = n === 0 ? [...stacks.keys()].filter(k => kindOf(k) === 'even').map(k => ({ k, stake: stakeOf(k), count: stacks.get(k).length })) : [];
+    const halves = n === 0 ? [...stacks.keys()].filter(k => kindOf(k) === 'even').map(k => ({ k, stake: stakeOf(k) })) : [];
     // losing chips first, outside bets before inside
     const lose = [...stacks.keys()].filter(k => !SPOTS.get(k.split('|')[1]).nums.includes(n)).sort((a, b) => OUT_ORDER.includes(kindOf(b)) - OUT_ORDER.includes(kindOf(a)));
     if (lose.length) audio.play('collect', { x: panX(sweepTo) });
@@ -459,21 +599,20 @@ export async function createRoulette(ctx) {
     // then the winners: outside first, then inside toward the wheel, straights last
     const wins = [...stacks.keys()].sort((a, b) => rank(kindOf(a)) - rank(kindOf(b)));
     function rank(kd) { return OUT_ORDER.includes(kd) ? 0 : kd === 'straight' ? 2 : 1; }
-    const paidStacks = [], taken = [];
+    const taken = payoutPlaces();
     for (const [i, k] of wins.entries()) {
       const [owner, id] = k.split('|'), s = SPOTS.get(id), stake = stakeOf(k);
-      const pay = stake * s.pays, a = S.anchor(id, slotOf(owner)), pa = payAt(id, taken);
-      const chips = owner === 'you' ? breakDown(pay).slice(0, 12) : Array.from({ length: Math.min(8, Math.ceil(pay / 25)) }, () => RIVALS.find(x => x.name === owner).color);
-      const pk = `${owner}|${id}|pay`, list = []; stacks.set(pk, list); paidStacks.push(pk);
-      await sleep(i ? 90 : 0); audio.play('payout', { x: panX(sweepTo) });   // (cut from the float)
-      chips.forEach((v, j) => { const m = S.chipMesh(v), to = pa.clone().setY(H * (j + .5)), from = sweepTo.clone().setY(8); m.userData = { owner, id, v }; list.push(m); m.position.copy(from); motion.tween(480, t => { m.position.lerpVectors(from, to, t); m.position.y += Math.sin(t * Math.PI) * 6; }, ease.out); });
+      const pay = stake * s.pays, a = S.anchor(id, slotOf(owner));
+      const chips = payoutChips(pay, rivals.find(x => x.name === owner)?.unit ?? null), pa = payAt(id, taken, chips.length);
+      await motion.wait(i ? 90 : 0);
+      await pushPayout(owner, id, chips, sweepTo, pa);
       if (owner !== 'you') tag(owner, `+${fmt(pay)}`, a);
     }
-    for (const [i, { k, stake, count }] of halves.entries()) {
-      const [owner, id] = k.split('|'), a = S.anchor(id, slotOf(owner)), list = []; stacks.set(k, list);
-      const chips = owner === 'you' ? breakDown(stake / 2).slice(0, 12) : Array.from({ length: Math.max(1, Math.ceil(count / 2)) }, () => RIVALS.find(x => x.name === owner).color);
-      await sleep(i ? 90 : 120); audio.play('payout', { x: panX(sweepTo) });
-      chips.forEach((v, j) => { const m = S.chipMesh(v); m.userData = { owner, id, v }; const to = seat(m), from = sweepTo.clone().setY(8); list.push(m); m.position.copy(from); motion.tween(480, t => { m.position.lerpVectors(from, to, t); m.position.y += Math.sin(t * Math.PI) * 6; }, ease.out); });
+    for (const [i, { k, stake }] of halves.entries()) {
+      const [owner, id] = k.split('|'), a = S.anchor(id, slotOf(owner));
+      const chips = payoutChips(stake / 2, rivals.find(x => x.name === owner)?.unit ?? null);
+      await motion.wait(i ? 90 : 120);
+      await pushPayout(owner, id, chips, sweepTo);
       tag(owner === 'you' ? 'La partage' : owner, `${fmt(stake / 2)} back`, a);
     }
     // the winnings down beside their stakes: your balance and this visit catch up, and the result banner says it
@@ -483,24 +622,33 @@ export async function createRoulette(ctx) {
     if (r.net > 0) { if (bigWin(r)) { feel.tap('big'); feel.confetti({ size: r.back >= r.staked * 20 ? 2 : 1, from: { x: .5, y: .3 } }); } else feel.tap('win'); }
     if (r.net > 0) { sting(r.straight ? 'big' : 'small', .8); if (r.back >= r.staked * 20) { audio.cue(`crowd-cheer-${1 + Math.floor(Math.random() * 2)}`, { gain: .45 }); setTimeout(() => say('congrats', { prio: 1 }), 900); } }
     await sleep(skipLevel ? 250 : fast() ? 900 : 1600);
-    // everything on the layout goes home: yours toward you, the others' taken up where they stand (they have no seats
-    // to go to yet), and the dolly comes up with them: the payout is done, and the table opens for bets
-    const home = S.layout.orient === 'port' ? new S.THREE.Vector3(S.layout.rect.x1 + 14, 0, 0) : new S.THREE.Vector3((S.layout.X(0) + S.layout.xEnd) / 2, 0, S.layout.rect.z1 + 14);
+    // Every player's stacks slide home to their seat; the value marker remains on the rail.
+    const home = homeOf('you').setY(0);
     const keys = [...stacks.keys()]; if (keys.length) audio.play('collect', { x: panX(home) });
     stageAt = 'home'; liftDolly();
-    await Promise.all(keys.map((k, i) => sleep(i * 25).then(() => dropStack(k, k.startsWith('you|') ? { to: home, ms: 380 } : { ms: 380 }))));
-    for (const r2 of RIVALS) r2.bets = [];
+    await Promise.all(keys.map((k, i) => motion.wait(i * 25).then(() => {
+      const owner = k.split('|')[0], to = homeOf(owner); if (owner === 'you') to.y = 0;
+      return dropStack(k, { to, ms: 380 });
+    })));
+    for (const r2 of rivals) { r2.settle(n); r2.beginRound(); }
+    S.showPlayerChips(rivalsHere());
     lastLit = n; restGlow();
   }
   // Where a win is paid: pushed to the players' edge of the cloth (+z, the long side) in line with its bet, as dealers at
   // North American tables push it to the player. Set beside the bet it sat on the next line or box and read as a bet of
   // its own (a straight up's on the split line), and a column's ran off the layout. Each payout takes the nearest free
   // place along the edge, a chip and a little apart from the others; a row further out when the edge is full.
-  function payAt(id, taken) {
+  function payAt(id, taken, count = 1) {
     const L = S.layout, a = S.anchor(id), gap = 2 * CHIP_R + .4, x0 = L.X(-1) + CHIP_R, x1 = L.xEnd - CHIP_R;
+    const offsets = Array.from({ length: Math.ceil(count / 20) }, (_, i) => chipOffset(i * 20).x);
     for (const reach of [gap, x1 - x0]) for (let row = 0; row < 3; row++) {   // near its bet in any row before far along the first
-      const z = L.zNear + 1.6 + CHIP_R + .5 + row * gap, free = x => taken.every(p => p.z !== z || Math.abs(p.x - x) > gap - .01);
-      for (let k = 0; Math.ceil(k / 2) * .5 <= reach; k++) { const x = Math.min(x1, Math.max(x0, a.x + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * .5)); if (free(x)) { const p = new S.THREE.Vector3(x, 0, z); taken.push(p); return p; } }
+      const z = L.zNear + 1.6 + CHIP_R + .5 + row * gap;
+      const free = x => offsets.every(dx => x + dx >= x0 && x + dx <= x1 && taken.every(p => Math.hypot(p.x - x - dx, p.z - z) > gap - .01)
+        && (S.reserveFootprints ?? []).every(p => x + dx < p.x0 - CHIP_R || x + dx > p.x1 + CHIP_R || z < p.z0 - CHIP_R || z > p.z1 + CHIP_R));
+      for (let k = 0; Math.ceil(k / 2) * .5 <= reach; k++) {
+        const x = Math.min(x1, Math.max(x0, a.x + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * .5));
+        if (free(x)) { const p = new S.THREE.Vector3(x, 0, z); offsets.forEach(dx => taken.push(p.clone().add(new S.THREE.Vector3(dx, 0, 0)))); return p; }
+      }
     }
     return a.clone();
   }
@@ -652,6 +800,7 @@ export async function createRoulette(ctx) {
     const bar = ctx.barCover(stage), strip = histEl.offsetHeight ? histEl.offsetHeight + 10 : 0, top = bar + strip, k = `${w}x${h}x${top}`;
     stage.style.setProperty('--top-h', `${bar}px`);
     if (k === framed) return; framed = k; const was = S.layout?.orient; S.frame(w, h, top);
+    stage.dataset.orient = S.layout.orient;
     if (was !== S.layout.orient) renderHistory();
     if (bubble.dataset.on) placeBubble(true);
   }
@@ -695,21 +844,22 @@ export async function createRoulette(ctx) {
       if (mode === 'betting' && table.total > wallet.balance) { table.clear(); serial(syncYours); hint('Your bets were cleared: your balance changed at another table.'); }
       ctx.showInPlay(table.total); refresh();
     },
-    hide() { stage.hidden = dock.hidden = true; setIdle(false); S.pause(true); active = false; closeSheets(); hover(null); for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
+    hide() { stage.hidden = dock.hidden = true; setIdle(false); S.pause(true); active = false; closeSheets(); hover(null); if (mode === 'betting') clearRivals(); else stopRivals(); },
     showcase: { start(still) { S.showcase.start(still); framed = ''; reframe(); S.requestRender(); }, stop: ms => S.showcase.stop(ms) },
     // you sit down: the camera flies into your chair
     async enter(ms) { active = true; framed = ''; reframe(); await S.showcase.stop(ms); if (!S.current) S.setPose(S.shots.seat); refresh(); if (welcome) { hint(welcome); welcome = null; } if (mode === 'betting') { say('place-bets', { prio: 2, fresh: 3000 }); othersWake(); } },
-    leave() { active = false; for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
+    leave() { active = false; if (mode === 'betting') clearRivals(); else stopRivals(); },
     toLobby() { api.leave(); api.showcase.start(settings.reduced); },   // the lobby opens over the wheel: it turns slowly behind the menu
     round: 'spin',
     players: () => rivalsHere().map(r => r.name),
     callBets: () => say('place-bets', { prio: 3 }),   // hear the voice level you set
     setReduced(on) { motion.reduced = on; setIdle(idleWant); },   // the drift stops or resumes only where it belongs (never mid-spin)
     setFast(on) { motion.slow = on ? .62 : 1; },
+    setPlayers,
     setQuality(q) { S.setQuality(q); setIdle(idleWant); },   // the battery saver stands the wheel still
     refresh, reframe: () => { framed = ''; reframe(); },
     // for the browser checks, only in a testing session (?test or salonnoir.dev): rig() fixes the next number
-    test: ctx.dev ? { plan, at, get history() { return history; }, place: (id, units = 1) => placeOn([[id, units]]), rig: n => { rigged = n; }, set turbo(v) { turbo = v; }, stacks, get skipLevel() { return skipLevel; }, get stageAt() { return stageAt; }, motion, showWin, showBubble } : undefined,
+    test: ctx.dev ? { plan, at, get history() { return history; }, place: (id, units = 1) => placeOn([[id, units]]), rig: n => { rigged = n; }, set turbo(v) { turbo = v; }, stacks, get rivals() { return rivalsHere(); }, get skipLevel() { return skipLevel; }, get stageAt() { return stageAt; }, motion, showWin, showBubble } : undefined,
   };
   return api;
 }

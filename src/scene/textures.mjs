@@ -369,19 +369,29 @@ function spotBars(ctx, st, x, w, y, h, horizontal = true) {
   for (const [o, l, col] of parts) { ctx.fillStyle = col; if (horizontal) ctx.fillRect(x + o * w, y, l * w + .5, h); else ctx.fillRect(x, y + o * h, w, l * h + .5); }
 }
 const chipTop = new Map(), chipSide = new Map(), chipBump = new Map();
-export function chipFaceTexture(v) {
-  if (chipTop.has(v)) return chipTop.get(v);
-  const S = 512, c = canvas(S, S), ctx = c.getContext('2d'), m = S / 2, st = chipStyle(v), label = chipLabel(v);
+const colourKey = (v, look) => look ? `colour:${look.color}:${look.inserts}:${v ?? ''}` : v;
+const colourStyle = color => ({ base: color, spot: ['#f3eee2', shade(color, -.32)], text: '#28282d' });
+// Roulette colour chips use the very same clay, edge inserts, inlay and mould as value chips.
+// Their insert count identifies a player even without colour vision. Only the denomination
+// marker carries a number: an ordinary colour chip's value is set at the dealer's rack.
+export function colourChipTextures(color, { inserts = CHIP_SPOTS, value = null } = {}) {
+  const look = { color, inserts };
+  return { face: chipFaceTexture(value, look), rim: chipEdgeTexture(value, look), bump: chipBumpTexture(value, look) };
+}
+export function chipFaceTexture(v, look = null) {
+  const key = colourKey(v, look); if (chipTop.has(key)) return chipTop.get(key);
+  const S = 512, c = canvas(S, S), ctx = c.getContext('2d'), m = S / 2, st = look ? colourStyle(look.color) : chipStyle(v), label = v == null ? '' : chipLabel(v), n = look?.inserts ?? CHIP_SPOTS;
   // clay body with a faint radial sheen
   const g = ctx.createRadialGradient(m * .8, m * .7, 20, m, m, m); g.addColorStop(0, shade(st.base, .1)); g.addColorStop(1, shade(st.base, -.08));
   ctx.beginPath(); ctx.arc(m, m, m, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
   // edge spots, running in from the rim
-  for (let i = 0; i < CHIP_SPOTS; i++) { ctx.save(); ctx.translate(m, m); ctx.rotate(i / CHIP_SPOTS * Math.PI * 2); spotBars(ctx, st, -30, 60, -m, 50); ctx.restore(); }
+  const spotW = look ? Math.PI * 2 * m * .3 / n : 60;
+  for (let i = 0; i < n; i++) { ctx.save(); ctx.translate(m, m); ctx.rotate(i / n * Math.PI * 2); spotBars(ctx, st, -spotW / 2, spotW, -m, 50); ctx.restore(); }
   // moulded ring: suits pressed into the clay between the spots
   ctx.fillStyle = st.mould ?? shade(st.base, .16);
-  for (let i = 0; i < CHIP_SPOTS * 3; i++) {
+  for (let i = 0; i < n * 3; i++) {
     if (i % 3 === 0) continue;
-    const a = i / (CHIP_SPOTS * 3) * Math.PI * 2; drawSuit(ctx, '♠♥♣♦'[i % 4], m + Math.cos(a) * 186, m + Math.sin(a) * 186, 34, st.mould ?? shade(st.base, .18), a + Math.PI / 2);
+    const a = i / (n * 3) * Math.PI * 2; drawSuit(ctx, '♠♥♣♦'[i % 4], m + Math.cos(a) * 186, m + Math.sin(a) * 186, 34, st.mould ?? shade(st.base, .18), a + Math.PI / 2);
   }
   ctx.beginPath(); ctx.arc(m, m, 204, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = shade(st.base, -.22); ctx.stroke();
   ctx.beginPath(); ctx.arc(m, m, 168, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = shade(st.base, -.22); ctx.stroke();
@@ -392,38 +402,39 @@ export function chipFaceTexture(v) {
   ctx.beginPath(); ctx.arc(m, m, 142, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = st.text; ctx.stroke();
   ctx.fillStyle = st.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `800 ${label.length > 2 ? 132 : label.length > 1 ? 160 : 176}px "Barlow Condensed", "Arial Narrow", sans-serif`; ctx.fillText(label, m, m + 8);
+  if (!label) drawSuit(ctx, '♠', m, m + 4, 102, st.text);
   ctx.font = '700 18px Inter, system-ui, sans-serif'; ctx.letterSpacing = '4px'; ctx.fillStyle = shade(st.text, .15);
   ctx.fillText(BRAND, m + 2, m - 98); ctx.letterSpacing = '0px';
   { const sz = 34; ctx.save(); ctx.translate(m - sz / 2, m + 104 - sz / 2); ctx.scale(sz / 100, sz / 100); ctx.fillStyle = '#b8954f'; ctx.fill(new Path2D(SPADE)); ctx.fillStyle = '#f3eee2'; ctx.fill(new Path2D(KEYHOLE)); ctx.restore(); }   // the house mark
-  const t = texture(c); chipTop.set(v, t); return t;
+  const t = texture(c); chipTop.set(key, t); return t;
 }
 // The chip's face as a small picture for the chip row (shown at about 50 CSS px): a 160 px copy encodes in
 // a tenth of the time of the full face.
 export function chipIcon(v, px = 160) { const c = canvas(px, px); c.getContext('2d').drawImage(chipFaceTexture(v).image, 0, 0, px, px); return c.toDataURL('image/png'); }
 // Height map for the face: spots flush, mould ring raised, inlay slightly recessed.
-export function chipBumpTexture(v) {
-  if (chipBump.has(v)) return chipBump.get(v);
-  const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), m = S / 2, k = S / 512;
+export function chipBumpTexture(v, look = null) {
+  const key = colourKey(v, look); if (chipBump.has(key)) return chipBump.get(key);
+  const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), m = S / 2, k = S / 512, n = look?.inserts ?? CHIP_SPOTS;
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, S, S);
   ctx.fillStyle = '#9a9a9a';
-  for (let i = 0; i < CHIP_SPOTS * 3; i++) { if (i % 3 === 0) continue; const a = i / (CHIP_SPOTS * 3) * Math.PI * 2; drawSuit(ctx, '♠♥♣♦'[i % 4], m + Math.cos(a) * 186 * k, m + Math.sin(a) * 186 * k, 34 * k, '#a8a8a8', a + Math.PI / 2); }
+  for (let i = 0; i < n * 3; i++) { if (i % 3 === 0) continue; const a = i / (n * 3) * Math.PI * 2; drawSuit(ctx, '♠♥♣♦'[i % 4], m + Math.cos(a) * 186 * k, m + Math.sin(a) * 186 * k, 34 * k, '#a8a8a8', a + Math.PI / 2); }
   for (const r of [204, 168]) { ctx.beginPath(); ctx.arc(m, m, r * k, 0, Math.PI * 2); ctx.lineWidth = 3 * k; ctx.strokeStyle = '#5a5a5a'; ctx.stroke(); }
   ctx.beginPath(); ctx.arc(m, m, 158 * k, 0, Math.PI * 2); ctx.fillStyle = '#707070'; ctx.fill(); ctx.lineWidth = 4 * k; ctx.strokeStyle = '#8c8c8c'; ctx.stroke();
-  const t = new THREE.CanvasTexture(c); chipBump.set(v, t); return t;
+  const t = new THREE.CanvasTexture(c); chipBump.set(key, t); return t;
 }
 // The rim: u runs once round the chip, v across its thickness. Spots line up with the face.
-export function chipEdgeTexture(v) {
-  if (chipSide.has(v)) return chipSide.get(v);
-  const W = 1024, H = 64, c = canvas(W, H), ctx = c.getContext('2d'), st = chipStyle(v);
+export function chipEdgeTexture(v, look = null) {
+  const key = colourKey(v, look); if (chipSide.has(key)) return chipSide.get(key);
+  const W = 1024, H = 64, c = canvas(W, H), ctx = c.getContext('2d'), st = look ? colourStyle(look.color) : chipStyle(v), n = look?.inserts ?? CHIP_SPOTS;
   const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, shade(st.base, -.25)); g.addColorStop(.18, st.base); g.addColorStop(.82, st.base); g.addColorStop(1, shade(st.base, -.25));
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   // face angle a sits at u = a / 2pi; the face draws spot i centred at angle i*60deg - 90deg
-  for (let i = 0; i < CHIP_SPOTS; i++) {
-    let u = ((i / CHIP_SPOTS) - .25 + 1) % 1; const w = W * (60 / (2 * Math.PI * 256)) * 1.02;
+  for (let i = 0; i < n; i++) {
+    let u = ((i / n) - .25 + 1) % 1; const w = look ? W * .3 / n : W * (60 / (2 * Math.PI * 256)) * 1.02;
     for (const x of [u * W - w / 2, u * W - w / 2 - W, u * W - w / 2 + W]) spotBars(ctx, st, x, w, 0, H);
   }
   ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(0, 0, W, 3); ctx.fillRect(0, H - 3, W, 3);
-  const t = texture(c); t.wrapS = THREE.RepeatWrapping; chipSide.set(v, t); return t;
+  const t = texture(c); t.wrapS = THREE.RepeatWrapping; chipSide.set(key, t); return t;
 }
 
 // A free-bet marker ("lammer"): a brass-rimmed disc the house puts down in place of chips.

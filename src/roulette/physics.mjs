@@ -210,9 +210,13 @@ export function plan(result, { dir = 1, phiNow = 0, fast = false, seed = (Math.r
 }
 // Where things are at time t (seconds since launch), interpolated from the samples.
 export function at(spin, t) {
-  const S = spin.samples, i = Math.min(S.length - 2, Math.max(0, Math.floor(t * 60))), a = S[i], b = S[i + 1], f = Math.min(1, Math.max(0, (t - a[0]) / (b[0] - a[0] || 1)));
+  // Fixed integration steps do not always fall on the exact 60 Hz sampling boundary. Find the
+  // real bracket: indexing by t * 60 can jump ahead of the next sample and visibly snap the ball.
+  const S = spin.samples; let lo = 0, hi = S.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (S[mid][0] <= t) lo = mid; else hi = mid; }
+  const a = S[lo], b = S[hi], f = Math.min(1, Math.max(0, (t - a[0]) / (b[0] - a[0] || 1)));
   const lerp = (x, y) => x + (y - x) * f;
-  const phi = lerp(a[4], b[4]) + spin.rotorAt(t);
+  const phi = lerp(a[4], b[4]) + (spin.rotorAt?.(t) ?? 0);   // raw simulations need no drawn-number correction
   // the ball keeps its own path: the correction is whole pockets, so the frets it meets are where they were
   return { theta: lerp(a[1], b[1]), r: lerp(a[2], b[2]), y: lerp(a[3], b[3]), phi, phase: a[5], speed: lerp(a[6], b[6]) };
 }

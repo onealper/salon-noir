@@ -2,6 +2,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { CARD_W, CARD_H, CARD_R, faceTexture, backTexture, markerFaceTexture } from './textures.mjs';
 import { chipMaterials, chipGeometry, CARD_T } from './world.mjs';
+export { tossChip, payoutCuts, pushChipStack, RestingChipBatch } from './chip-motion.mjs';
 
 // ---- orientation vocabulary -------------------------------------------------------------
 // A card's local frame: x across the short side, y along the long side (its top), face +z.

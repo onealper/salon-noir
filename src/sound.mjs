@@ -87,13 +87,15 @@ export class TableAudio {
   setEnabled(on) {
     this.enabled = on;
     if (!this.available) return;
-    for (const b of ['room', 'music']) this.bus[b].gain.setTargetAtTime(on ? this.target(b) : 0, this.ctx.currentTime, .15);
+    // A sound already in flight (the roulette roll or a dealer call) bypasses the next play()
+    // guard. Fade every bus so the Sound switch also silences those active sources.
+    this.applyLevels(.05);
     if (this.musicEl) { if (on && this.unlocked) this.musicEl.play().catch(() => {}); else this.musicEl.pause(); }
   }
   // ---- the mixer -------------------------------------------------------------------------------
   // `levels`: your sliders, 0-1, for table, voice and music (the room follows the table slider).
   setLevels(l) { Object.assign(this.levels, l); this.applyLevels(.05); }
-  target(b) { const lv = b === 'room' || b === 'ui' ? this.levels.table : this.levels[b]; return BUS[b] * lv * (this.ducked && (b === 'room' || b === 'music') ? DUCK : 1) * (this.enabled || b === 'table' || b === 'voice' || b === 'ui' ? 1 : 0); }
+  target(b) { const lv = b === 'room' || b === 'ui' ? this.levels.table : this.levels[b]; return BUS[b] * lv * (this.ducked && (b === 'room' || b === 'music') ? DUCK : 1) * (this.enabled ? 1 : 0); }
   applyLevels(tc = .05) { if (!this.bus) return; const t = this.ctx.currentTime; for (const b of Object.keys(this.bus)) this.bus[b].gain.setTargetAtTime(this.target(b), t, tc); }
   duck(on) { if (this.ducked === on) return; this.ducked = on; for (const b of ['room', 'music']) this.bus[b].gain.setTargetAtTime(this.target(b), this.ctx.currentTime, on ? .08 : .45); }
   // ---- kit clips: fetched and decoded once, on first use (or ahead, with preload) ----------------
