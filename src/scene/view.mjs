@@ -3,7 +3,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { LAYOUT, CARD_T, SHOE, toSeat, seatAngle } from './world.mjs';
 import { CARD_W, CARD_H, CHIP_H } from './textures.mjs';
-import { createCard, createChip, createMarker, cardQuat, headingOf, ease } from './pieces.mjs';
+import { createCard, createChip, createMarker, cardQuat, headingOf, ease, chipToss } from './pieces.mjs';
 import { breakDown } from '../engine.mjs';
 
 export const TIMING = { dealPlayer: 720, dealDealer: 640, reveal: 620, peek: 560, chip: 300, chipToss: 440, chipMove: 460, payout: 500, square: 180, gather: 300, discard: 620, toPlayer: 560, split: 440, shoeFill: 1100 };
@@ -98,22 +98,10 @@ export class TableView {
   // gravity arc, lands flat with a click, and settles with one small bounce and a fading wobble.
   addChip(key, value, from = null) {
     const chips = this.chipsOf(key), c = createChip(value), to = this.chipSlot(key, chips.length);
-    const k = seatOf(key), start = from ?? (k == null ? V(to.x * .5 + (Math.random() - .5) * 2, 9, 70) : this.home(key, (Math.random() - .5) * 2)), top = Math.max(start.y, to.y) + 3.4, LAND = .76;
-    const spin0 = Math.random() * Math.PI * 2, spin = (Math.random() - .5) * 1.4, a = Math.random() * Math.PI * 2, tx = Math.sin(a), tz = Math.cos(a);
-    c.rotation.set(0, spin0, 0); c.position.copy(start); this.T.add(c); chips.push(c);
-    const onStack = chips.length > 1; let landed = false;
-    const flight = this.motion.tween(TIMING.chipToss, t => {
-      if (t < LAND) {
-        const u = t / LAND, e = 1 - (1 - u) ** 2.4, w = 1 - u;
-        c.position.set(start.x + (to.x - start.x) * e, w * w * start.y + 2 * w * u * top + u * u * to.y, start.z + (to.z - start.z) * e);
-        c.rotation.set(tx * .42 * w, spin0 + spin * e, tz * .42 * w);
-      } else {
-        if (!landed) { landed = true; this.audio?.play(onStack ? 'stack' : 'chip', { x: to.x }); }
-        const v = (t - LAND) / (1 - LAND), damp = (1 - v) ** 2, wob = Math.cos(v * Math.PI * 3) * .07 * damp;
-        c.position.set(to.x, to.y + Math.sin(v * Math.PI) * .22 * (1 - v), to.z);
-        c.rotation.set(tx * wob, spin0 + spin, tz * wob);
-      }
-    }).then(() => { c.position.copy(to); c.rotation.set(0, spin0 + spin, 0); if (!landed) this.audio?.play(onStack ? 'stack' : 'chip', { x: to.x }); c.userData.flight = null; });
+    const k = seatOf(key), start = from ?? (k == null ? V(to.x * .5 + (Math.random() - .5) * 2, 9, 70) : this.home(key, (Math.random() - .5) * 2));
+    this.T.add(c); chips.push(c);
+    const onStack = chips.length > 1, toss = chipToss(c, start, to, { onLand: () => this.audio?.play(onStack ? 'stack' : 'chip', { x: to.x }) });   // (pieces.mjs, shared with the roulette table)
+    const flight = this.motion.tween(TIMING.chipToss, toss).then(() => { toss.finish(); c.userData.flight = null; });
     c.userData.flight = flight; return flight;
   }
   // Chips for an amount, largest first, dropped one after another on top of the stack.

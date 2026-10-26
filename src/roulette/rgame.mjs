@@ -5,28 +5,32 @@
 // New Jersey and Singapore filings):
 //   betting (no timer)  ·  Spin: the camera glides to the wheel as the ball is launched against the
 //   wheelhead  ·  "No more bets" while the ball still runs  ·  push-in as it drops  ·  a beat of quiet,
-//   the click, the number beside the ball and the croupier's call  ·  a slow-motion replay for a straight
-//   up win  ·  back to the layout: the dolly on the number, losing chips swept, winners paid, outside
-//   bets first and straights last  ·  "Place your bets".
-import { createRouletteScene, preloadRouletteArt } from './rscene.mjs';
+//   the click, then the croupier's call, the number beside the ball as he says it  ·  a slow-motion replay
+//   for a straight up win  ·  back to the layout: the dolly on the number, losing chips swept, winners
+//   paid, outside bets first and straights last (your balance moves only now)  ·  the chips go home and
+//   the dolly comes up  ·  "Place your bets".
+import { createRouletteScene, preloadRouletteArt, RAKE_W } from './rscene.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
-import { plan, at, GEO } from './physics.mjs';
+import { plan, at, GEO, TUNE } from './physics.mjs';
+import { replayShot } from './replay.mjs';
 import { createRoller, prepareRoller } from './roller.mjs';
-import { Motion, ease } from '../scene/pieces.mjs';
-import { CHIP_H } from '../scene/textures.mjs';
+import { Motion, ease, chipToss } from '../scene/pieces.mjs';
+import { CHIP_H, CHIP_R } from '../scene/textures.mjs';
 import { wallet, inFlight } from '../core/wallet.mjs';
 import { breakDown } from '../core/chips.mjs';
 import { fmt, signed } from '../core/format.mjs';
 import { chipRack, hintLine, rebetSlot, goLabel, serialQueue, betKey } from '../core/bet-controls.mjs';
 
+// The other players' colour chips: no colour within ΔE76 25 of a value chip (the ½ chip too), of brass #c9a45c or of each
+// other (test/roulette-table.test.mjs measures it), and each its own count of edge inserts, to be told apart without colour.
 const RIVALS = [
-  { name: 'Olu', color: '#2f78c9', style: 'straights' },
-  { name: 'Marta', color: '#b8402c', style: 'outside' },
-  { name: 'Kenji', color: '#2f9464', style: 'sections' },
-  { name: 'Inès', color: '#9b6fd6', style: 'dozens' },
+  { name: 'Olu', color: '#7fb3d9', inserts: 4, style: 'straights' },     // sky
+  { name: 'Marta', color: '#c25b86', inserts: 8, style: 'outside' },     // rose
+  { name: 'Kenji', color: '#1f8f8c', inserts: 12, style: 'sections' },   // teal
+  { name: 'Inès', color: '#8b5a2b', inserts: 16, style: 'dozens' },      // caramel
 ];
 const OUT_ORDER = ['column', 'dozen', 'even'];   // paid first, then inside bets toward the wheel, straights last
-const H = CHIP_H * .92;
+const H = CHIP_H;   // true size, as the scene draws them
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function createRoulette(ctx) {
@@ -67,6 +71,7 @@ export async function createRoulette(ctx) {
 
   const hint = hintLine(hintEl);   // (the words morph in the line's own span: see .hint in app.css)
   const S = createRouletteScene(canvas, { quality: ctx.quality() }), motion = new Motion(S);
+  for (const r of RIVALS) S.chipLook(r.color, { inserts: r.inserts });
   // A spin is paid into the wallet the moment bets close (the number is drawn then); the balance on
   // screen (and which chips you can afford) holds back until the ball lands, so the result isn't given away.
   let held = null;   // the balance as shown while a spin is under way
@@ -75,57 +80,122 @@ export async function createRoulette(ctx) {
   let history = store.get('rouletteHistory', []).filter(n => Number.isInteger(n) && n >= 0 && n <= 36).slice(0, 500);
   const colorName = n => colorOf(n) === 'green' ? 'Zero' : colorOf(n) === 'red' ? 'Red' : 'Black';
   // a spin a closed or reloaded page left mid-flight was paid when its bets closed: its number joins the
-  // history, and you hear how it went (over the lobby, or as you sit down)
+  // history (unless the croupier had called it), and you hear how it went (over the lobby, or as you sit down)
   let welcome = null;
   await inFlight.take('spin', s => {
     if (!Number.isInteger(s?.n) || s.n < 0 || s.n > 36) return;
-    history.unshift(s.n); history = history.slice(0, 500); store.set('rouletteHistory', history);
+    if (!s.seen) { history.unshift(s.n); history = history.slice(0, 500); store.set('rouletteHistory', history); }   // (seen: called before the page went, so already written down)
     if (Number.isFinite(s.net)) ctx.record?.({ n: s.n, color: colorName(s.n), staked: s.staked, back: s.back, partage: s.partage, net: s.net });   // in Last hands too
     ctx.notice?.(`Your last spin landed on ${s.n} ${colorName(s.n)}: ${s.back > 0 ? `${fmt(s.back)} was paid to your balance` : 'no win'}.`, t => { welcome = t; });
   });
   let mode = 'betting', dir = store.get('rouletteDir', 1), phi = Math.random() * Math.PI * 2, rotorW = 1, restIdx = null, hurry = 1, active = false;
   const reduced = () => settings.reduced, fast = () => settings.fast;
+  // chips can still go down: before the spin, and while the ball runs until the croupier calls "No more bets" ('running')
+  const open = () => mode === 'betting' || mode === 'running';
   Object.assign(motion, { reduced: reduced(), slow: fast() ? .62 : 1 });
 
   // ---- sound --------------------------------------------------------------------------------------------------------------
-  let clickTurn = 0; const click = (gain, rate = 1) => audio.cue(`ball-click-${(clickTurn++ % 6) + 1}`, { gain, rate: rate * (.96 + Math.random() * .08) });
+  // left and right as you see it: how far a point (world cm) lies to the camera's right, for the pan (sound.mjs: x/70).
+  // At the seat that is along the table on the long side and across it at the foot (an upright phone, right = -z).
+  const camRight = new S.THREE.Vector3(), camRel = new S.THREE.Vector3();
+  const panX = p => { const c = S.camera; camRight.set(1, 0, 0).applyQuaternion(c.quaternion); return camRel.copy(p).sub(c.position).dot(camRight) * .5; };
+  const ballW = new S.THREE.Vector3(), ballX = () => panX(ballW.copy(S.wheel.ball.position).add(S.wheel.group.position));   // where the ball is
+  // the camera's bearing round the wheel, in the wheel's own angles (physics.mjs): the near side of the bowl
+  const camAz = (c = S.camera.position) => { const w = S.wheel.group.position; return Math.atan2(-(c.z - w.z), c.x - w.x); };
+  let clickTurn = 0; const click = (gain, rate = 1) => audio.cue(`ball-click-${(clickTurn++ % 6) + 1}`, { gain, rate: rate * (.96 + Math.random() * .08), x: ballX() });
   const say = (line, opts) => audio.say(`voice/james-${line}`, opts);
+  const numberClip = n => `voice/james-n${n}`;
   audio.preload([...[1, 2, 3, 4, 5, 6].map(i => `ball-click-${i}`), 'voice/james-place-bets', 'voice/james-no-more-bets', 'voice/james-good-luck', 'voice/james-winning-number', 'voice/james-congrats']);   // not the music: it streams (decoded, it would be 17 MB nobody plays)
-  if (audio.available) { const go = () => prepareRoller(audio.ctx); window.requestIdleCallback ? requestIdleCallback(go, { timeout: 3000 }) : setTimeout(go, 1500); }   // the rolling sound's loops, made while you place bets
+  // while you place bets: the rolling sound's loops, and the bytes of the 37 numbers (the drawn one is decoded as bets
+  // close, so the croupier's call is never late or lost to a slow first fetch)
+  if (audio.available) { const go = () => { prepareRoller(audio.ctx); audio.prefetch(WHEEL.map(numberClip)); }; window.requestIdleCallback ? requestIdleCallback(go, { timeout: 3000 }) : setTimeout(go, 1500); }
 
   // ---- chips in hand ----------------------------------------------------------------------------------------------------------
   const rack = chipRack($('#rChips'), { store, uiSound });
 
   // ---- stacks of chips on the layout ------------------------------------------------------------------------------------------
-  const stacks = new Map();   // "owner|spot" → meshes, bottom first
+  const stacks = new Map();   // "owner|spot" → meshes, bottom first ("owner|spot|pay": a payout, in its columns, list.cols)
   const slotOf = owner => owner === 'you' ? 0 : 1 + RIVALS.findIndex(r => r.name === owner);
   const key = (owner, id) => `${owner}|${id}`;
-  const approach = a => S.layout.orient === 'port' ? [S.layout.rect.x1 + 22 - a.x, 22, 0] : [0, 22, S.layout.rect.z1 + 22 - a.z];   // chips come over the armrest on your side
-  async function addChip(owner, id, v, { ms = 300 } = {}) {
-    const k = key(owner, id), list = stacks.get(k) ?? []; stacks.set(k, list);
-    const a = S.anchor(id, slotOf(owner)), m = S.chipMesh(v), y = H * (list.length + .5), [dx, dy, dz] = approach(a);
-    m.userData = { owner, id, v }; list.push(m);
-    const from = a.clone().add(new S.THREE.Vector3(dx, dy, dz)), to = a.clone().setY(y);
-    m.position.copy(from); m.rotation.y = Math.random() * 6;
-    await motion.tween(ms, t => { m.position.lerpVectors(from, to, t); m.position.y = to.y + (1 - t) * dy * (1 - t) + Math.sin(t * Math.PI) * 3; }, ease.land);
-    audio.play(list.length > 1 ? 'stack' : 'chip', { x: a.x * .3 });
+  const V = (x, y, z) => new S.THREE.Vector3(x, y, z);
+  // Where each player sits: you in the middle of the players' side, two others either side of you and two round the
+  // foot (on an upright phone your side is the foot). Their chips come from their places and go back there.
+  function seatAt(owner) {
+    const L = S.layout, R = L.rect, i = Math.max(0, slotOf(owner));
+    if (L.orient === 'port') { const x = R.x1 + 12; return [V(x, 0, 0), V(x, 0, -30), V(x, 0, 30), V(R.x1 - 34, 0, R.z0 - 10), V(R.x1 - 34, 0, R.z1 + 10)][i]; }
+    const z = R.z1 + 12, xm = (L.X(0) + L.xEnd) / 2, cz = (L.zFar + L.zNear) / 2;
+    return [V(xm, 0, z), V(xm - 50, 0, z), V(xm + 50, 0, z), V(R.x1 + 10, 0, cz + 14), V(R.x1 + 10, 0, cz - 14)][i];
   }
+  // the hand that sets a chip down: just over the rail at the player's place, reaching toward the spot
+  const handAt = (owner, a) => { const s = seatAt(owner), d = a.clone().sub(s).setY(0), n = d.length(); return s.clone().addScaledVector(d, n > 8 ? 6 / n : 0).setY(8); };
+  // the tallest column within a chip's width of a straight path across the cloth (a chip carried over must clear it)
+  function tallestAlong(p, q, r = 2 * CHIP_R + .2) {
+    let top = 0; const dx = q.x - p.x, dz = q.z - p.z, len2 = dx * dx + dz * dz || 1;
+    for (const c of cols.values()) { const a = c[0]?.position; if (!a) continue; const u = Math.max(0, Math.min(1, ((a.x - p.x) * dx + (a.z - p.z) * dz) / len2)); if (Math.hypot(p.x + u * dx - a.x, p.z + u * dz - a.z) < r) top = Math.max(top, c.length * H); }
+    return top;
+  }
+  // One column per spot: every player's chips go on top of what is already there, in the order they come, each layer
+  // nudged a few millimetres by its owner's slot so the colours read as separate bets (stacks set side by side 1 cm apart
+  // passed through each other, and their faces flickered). A chip taken out lets the ones above it settle. A chip at rest
+  // is drawn with all the others of its kind at once (rscene: S.chips), and taken out of that batch to move.
+  const cols = new Map();   // spot → meshes, bottom first, whoever's
+  const chipAt = m => { const { owner, id } = m.userData, c = cols.get(id) ?? []; return S.anchor(id, slotOf(owner)).setY(H * (Math.max(0, c.indexOf(m)) + .5)); };
+  const seat = m => { const id = m.userData.id; if (!cols.has(id)) cols.set(id, []); cols.get(id).push(m); return chipAt(m); };
+  function unseat(ms) { for (const m of ms) { const c = cols.get(m.userData.id), i = c?.indexOf(m) ?? -1; if (i >= 0) c.splice(i, 1); if (c && !c.length) cols.delete(m.userData.id); } }
+  function settleCol(id) { for (const m of cols.get(id) ?? []) { if (m.userData.fly) continue; const y0 = m.position.y, y = chipAt(m).y; if (Math.abs(y - y0) > .01) { S.chips.free(m); motion.tween(120, t => { m.position.y = y0 + (y - y0) * t; }, ease.out).then(() => { if (m.parent) S.chips.rest(m); }); } } }
+  // A chip set down from a player's hand, the toss the blackjack table uses (pieces.mjs): a gravity arc high enough to
+  // clear the columns on its way, the click as it lands, one small settle.
+  // An announced bet (a call bet from the racetrack) is placed by the croupier: `croupier` slides each chip out from his
+  // side of the cloth, flat on the felt and lifted only over the columns in its way.
+  async function addChip(owner, id, v, { ms = 360, croupier = false } = {}) {
+    const k = key(owner, id), list = stacks.get(k) ?? []; stacks.set(k, list);
+    const a = S.anchor(id, slotOf(owner)), m = S.chipMesh(v); m.userData = { owner, id, v }; list.push(m);
+    const to = seat(m), onStack = cols.get(id).length > 1, land = () => audio.play(onStack ? 'stack' : 'chip', { x: panX(a) });
+    m.userData.fly = true;
+    if (croupier) {
+      const start = gatherAt().setY(H / 2), clear = Math.max(0, tallestAlong(start, to) + .4 - (to.y - H / 2)); m.position.copy(start); m.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      await motion.tween(ms * 1.4, t => { const e = ease.inOut(t); m.position.lerpVectors(start, to, e); m.position.y += clear * bump(t); }); m.position.copy(to); land();
+    } else { const start = handAt(owner, a), toss = chipToss(m, start, to, { top: Math.max(Math.max(start.y, to.y) + 3.4, tallestAlong(start, to) + 4), onLand: land }); await motion.tween(ms, toss); toss.finish(); }
+    delete m.userData.fly;
+    if (m.parent) { S.chips.rest(m); settleCol(id); }   // (a chip taken out from under it while it flew lets it settle)
+  }
+  // Chips moved together as one stack, the way a croupier pushes a stack or lifts one over another: they glide low,
+  // lifted only as far as the columns on their way need (flat where the way is clear), and are set down as a neat stack
+  // at `to` (its foot `ground` above the felt). `lift`: at least this much (a stack cut from the float comes up first).
+  const bump = t => Math.min(1, ease.smooth(Math.min(1, t / .18)), ease.smooth(Math.min(1, (1 - t) / .18)));
+  function moveStack(list, to, { ms = 420, lift = 0, ground = 0 } = {}) {
+    if (!list.length) return Promise.resolve();
+    for (const m of list) S.chips.free(m);
+    const from = list.map(m => m.position.clone()), end = list.map((m, i) => V(to.x, ground + H * (i + .5), to.z));
+    const low = Math.min(from[0].y, end[0].y) - H / 2, clear = Math.max(lift, tallestAlong(from[0], to) + .4 - low);
+    return motion.tween(ms, t => { const e = ease.inOut(t), b = clear * bump(t); list.forEach((m, i) => { m.position.lerpVectors(from[i], end[i], e); m.position.y += b; }); });
+  }
+  // a stack leaves the layout: carried to `to` (the float, a player's place) and put away there, or, with nowhere to go
+  // (a void spin), lifted and faded where it stands
   async function dropStack(k, { to = null, ms = 260 } = {}) {
-    const list = stacks.get(k); if (!list) return; stacks.delete(k);
-    await Promise.all(list.map((m, i) => { const from = m.position.clone(), end = to ? to.clone().setY(H * (i + .5)) : from.clone().add(new S.THREE.Vector3(0, 6, 0));
-      return motion.tween(ms, t => { m.position.lerpVectors(from, end, t); m.traverse(o => { if (o.material) o.material.opacity = 1; }); m.scale.setScalar(.92 * (to ? 1 : 1 - t * .9)); }, ease.inOut).then(() => { S.chipsG.remove(m); }); }));
+    const list = stacks.get(k); if (!list) return; stacks.delete(k); unseat(list);
+    if (to) { const parts = list.cols ?? [list]; await Promise.all(parts.map((c, j) => moveStack(c, to.clone().add(V((j % 3 - 1) * 4.2, 0, (Math.floor(j / 3) % 2) * 4.2)), { ms }))); }
+    else { for (const m of list) S.chips.free(m); await Promise.all(list.map(m => { const y0 = m.position.y; return motion.tween(ms, t => { m.position.y = y0 + t * 6; m.scale.setScalar(1 - t * .9); }, ease.inOut); })); }
+    for (const m of list) S.chips.drop(m);
     S.requestRender();
   }
   // your stacks follow the table after undo, clear or a removed chip
   async function syncYours() {
     const want = new Map([...table.bets].map(([id, vs]) => [id, vs])), jobs = [];
-    for (const [k, list] of stacks) { const [owner, id] = k.split('|'); if (owner !== 'you') continue; const w = want.get(id) ?? []; if (list.length > w.length) { const extra = list.splice(w.length); for (const m of extra) jobs.push(motion.tween(160, t => { m.position.y += .6; m.scale.setScalar(.92 * (1 - t)); }).then(() => S.chipsG.remove(m))); if (!list.length) stacks.delete(k); } }
-    for (const [id, vs] of want) { const have = stacks.get(key('you', id))?.length ?? 0; for (let i = have; i < vs.length; i++) jobs.push(addChip('you', id, vs[i], { ms: 220 })); }
+    // a chip taken off rises 6 cm as it goes (by the tween's time, so at any frame rate) and what stood on it settles
+    for (const [k, list] of stacks) { const [owner, id] = k.split('|'); if (owner !== 'you') continue; const w = want.get(id) ?? []; if (list.length > w.length) { const extra = list.splice(w.length); unseat(extra); settleCol(id); for (const m of extra) { S.chips.free(m); const y0 = m.position.y; jobs.push(motion.tween(160, t => { m.position.y = y0 + t * 6; m.scale.setScalar(1 - t); }).then(() => S.chips.drop(m))); } if (!list.length) stacks.delete(k); } }
+    for (const [id, vs] of want) { const have = stacks.get(key('you', id))?.length ?? 0; for (let i = have; i < vs.length; i++) jobs.push(addChip('you', id, vs[i], { ms: 260 })); }
     await Promise.all(jobs);
   }
   function relayoutStacks() {
-    for (const [k, list] of stacks) { const [owner, id] = k.split('|'), a = S.anchor(id, slotOf(owner)); list.forEach((m, i) => m.position.set(a.x, H * (i + .5), a.z)); }
+    const taken = [];
+    for (const [k, list] of stacks) {
+      const id = k.split('|')[1];
+      if (list.cols) for (const c of list.cols) { const p = payAt(id, taken); c.forEach((m, i) => { m.position.copy(p).setY(H * (i + .5)); S.chips.sync(m); }); }
+      else for (const m of list) { m.position.copy(chipAt(m)); S.chips.sync(m); }
+    }
     if (S.dolly.visible && restIdx != null) placeDolly(WHEEL[restIdx], 0);
+    if (mode === 'betting' && !hovered) restGlow();   // (a new cloth has its tiles dark)
     S.requestRender();
   }
   S.relayout.add(() => relayoutStacks());
@@ -134,28 +204,50 @@ export async function createRoulette(ctx) {
   let hovered = null, press = null, sheetOpen = null;
   const localXY = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   function covered(id) { const s = SPOTS.get(id); if (!s) return []; return ['column', 'dozen', 'even'].includes(s.kind) ? [id, ...s.nums] : s.nums; }
+  // the last number keeps a soft glow on the layout once the dolly is lifted, until your next chip (lit once: no
+  // breathing, which would keep the stage drawing while you think)
+  let lastLit = null;
+  const restGlow = () => S.highlight(lastLit == null ? [] : [lastLit], { level: .2, color: '#ffe4a6' });
+  // the printed racetrack (scene.pick): 'race:17' bets 17 and its neighbours, as many each side as the Racetrack sheet is
+  // set to; 'call:tiers' a section's call bet. Placed by the croupier, as at the sheet.
+  const onTrack = id => /^(race|call):/.test(id ?? '');
+  function trackBet(id) {
+    const [k, v] = id.split(':');
+    if (k === 'race') { const ns = neighbours(+v, nbK); return { nums: ns, units: ns.map(x => [`n${x}`, 1]), name: `${v} and ${nbK} neighbours` }; }
+    return { nums: callNumbers(v), units: CALLS[v].chips, name: CALLS[v].name };
+  }
   function hover(id, xy) {
     if (id === hovered && !xy) return; hovered = id;
-    if (!id) { loupe.hidden = true; if (mode === 'betting') S.highlight([]); return; }
-    S.highlight(covered(id), { level: .26 });
-    const stake = table.on(id); loupe.querySelector('b').textContent = describe(id); loupe.querySelector('span').textContent = stake ? `Your bet ${fmt(stake)}` : `Max ${fmt(SPOTS.get(id).max)}`;
+    if (!id) { loupe.hidden = true; if (open()) restGlow(); return; }
+    if (onTrack(id)) {
+      const b = trackBet(id), c = b.units.reduce((a, [, u]) => a + u, 0); S.highlight(b.nums, { level: .26 });
+      loupe.querySelector('b').textContent = b.name; loupe.querySelector('span').textContent = `${c} chips · ${fmt(c * rack.value)}`;
+    } else {
+      S.highlight(covered(id), { level: .26 });
+      const stake = table.on(id); loupe.querySelector('b').textContent = describe(id); loupe.querySelector('span').textContent = stake ? `Your bet ${fmt(stake)}` : `Max ${fmt(SPOTS.get(id).max)}`;
+    }
     if (xy) { const [x, y] = xy, touch = press?.touch; loupe.style.transform = `translate(${Math.round(x)}px, ${Math.round(y - (touch ? 74 : 40))}px)`; }
     loupe.hidden = false;
   }
   canvas.addEventListener('pointermove', e => {
-    if (mode !== 'betting' || sheetOpen) return; if (e.pointerType !== 'mouse' && !press) return;
+    if (!open() || sheetOpen) return; if (e.pointerType !== 'mouse' && !press) return;
     const xy = localXY(e), id = S.pick(...xy); hover(id, xy); if (press) { press.id = id; if (Math.hypot(xy[0] - press.x, xy[1] - press.y) > 12) clearTimeout(press.timer); }
   });
   canvas.addEventListener('pointerdown', e => {
     if (e.button > 0) return;
-    if (mode !== 'betting') { skip(); return; }
+    if (!open()) { skip(); return; }
     if (sheetOpen) { closeSheets(); return; }
     const xy = localXY(e), id = S.pick(...xy);
+    if (!id && mode === 'running') { skip(); return; }   // off the layout while the ball runs: hurry it
     press = { id, x: xy[0], y: xy[1], touch: e.pointerType !== 'mouse', held: false };
     press.timer = setTimeout(() => { if (press?.id && table.on(press.id)) { press.held = true; takeOff(press.id); } }, 480);
     hover(id, xy);
   });
-  const endPress = e => { if (!press) return; clearTimeout(press.timer); const p = press; press = null; if (e.type === 'pointerup' && !p.held && p.id) placeOn([[p.id, 1]]); if (e.pointerType !== 'mouse') hover(null); };
+  const endPress = e => {
+    if (!press) return; clearTimeout(press.timer); const p = press; press = null;
+    if (e.type === 'pointerup' && !p.held && p.id) { if (onTrack(p.id)) { const b = trackBet(p.id); placeOn(b.units, { name: b.name, call: true }); } else placeOn([[p.id, 1]]); }
+    if (e.pointerType !== 'mouse') hover(null);
+  };
   canvas.addEventListener('pointerup', endPress); canvas.addEventListener('pointercancel', endPress);
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hover(null); });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); if (mode !== 'betting') return; const id = S.pick(...localXY(e)); if (id && table.on(id)) takeOff(id); });
@@ -165,16 +257,17 @@ export async function createRoulette(ctx) {
   // units: [[spot, units]]; a call bet is one gesture (one undo)
   // a unit is one chip of the value in hand: a doubled spot takes two real chips, not one chip of a value that doesn't
   // exist. `name`: the call bet asked for, so a refusal says which one and why.
-  function placeOn(units, { quiet = false, name = '' } = {}) {
-    if (mode !== 'betting') return;
+  function placeOn(units, { quiet = false, name = '', call = false } = {}) {
+    if (!open()) return;
     const adds = units.flatMap(([id, u]) => Array.from({ length: u }, () => [id, rack.value]));
     const why = table.place(adds);
     if (why) { refuse(name ? `${name} at ${fmt(rack.value)} a chip: ${why[0].toLowerCase()}${why.slice(1)}` : why); return; }
-    clearResult(); refresh(); if (!quiet) feel.tap('chip'); if (!quiet) othersWake();
-    serial(async () => { for (const [id, v] of adds) await Promise.race([addChip('you', id, v), sleep(70)]); });
+    clearResult(); refresh(); if (!quiet) feel.tap('chip'); if (!quiet && mode === 'betting') othersWake();
+    serial(async () => { for (const [id, v] of adds) await Promise.race([addChip('you', id, v, { croupier: call }), sleep(70)]); });
   }
   // (a result still up gives way, so the reason is seen where it shows on an upright phone)
   function refuse(why, el = $('#rChips')) { clearResult(); hint(why); sheetSay(why); kit.shake(el); audio.cue('ui-click-2', { bus: 'ui', rate: .7, gain: .6 }); feel.tap('refuse'); }
+  // (a chip comes off only before the spin: once the ball goes, bets may be added until the call but not taken back)
   function takeOff(id) { if (mode !== 'betting' || !table.takeFrom(id)) return; refresh(); serial(syncYours); hover(null); }
   // out of chips with nothing on the layout: the gold button offers a fresh 1,000 (there is nothing left to lose)
   const broke = () => mode === 'betting' && !table.total && wallet.balance < CHIP_VALUES[0] && !!ctx.resetBalance;
@@ -182,15 +275,15 @@ export async function createRoulette(ctx) {
     undo() { if (mode !== 'betting' || !table.undo()) return; refresh(); serial(syncYours); },
     clear() { if (mode !== 'betting' || !table.clear()) return; refresh(); serial(syncYours); },
     rebet() { if (mode !== 'betting') return; const why = table.rebet(); if (why) { refuse(why, $('#rRebet')); return; } clearResult(); refresh(); serial(syncYours); },
-    double() { if (mode !== 'betting') return; const why = table.double(); if (why) { hint(why); return; } refresh(); serial(syncYours); },
+    double() { if (!open()) return; const why = table.double(); if (why) { hint(why); return; } refresh(); serial(syncYours); },
     spin() {
       if (mode !== 'betting') return; feel.tap('press');
       if (broke()) { ctx.resetBalance(); return; }
       if (!table.bets.size && table.last?.length) { const why = table.rebet(); if (why) { refuse(why, $('#rSpin')); return; } clearResult(); refresh(); serial(syncYours); }
       if (!table.bets.size) { refuse('Place a bet on the layout first.', $('#rSpin')); return; }
       if (table.total > wallet.balance) { refuse('Not enough balance for these bets.', $('#rSpin')); return; }
-      // the table is claimed at once: a second press, or a chip tapped before the round starts, finds bets closed
-      mode = 'closing'; refresh(); hover(null); closeSheets(); serial(round);
+      // the croupier spins: the bets stay open while the ball runs, until he calls "No more bets"
+      mode = 'running'; refresh(); hover(null); closeSheets(); round();
     },
   };
   $('#rUndo').onclick = actions.undo; $('#rClear').onclick = actions.clear; $('#rRebet').onclick = actions.rebet; $('#rX2').onclick = actions.double; $('#rSpin').onclick = actions.spin;
@@ -199,39 +292,58 @@ export async function createRoulette(ctx) {
   // ---- the other players --------------------------------------------------------------------------------------------------------
   let rivalJobs = [];
   const rivalsHere = () => RIVALS.slice(0, Math.min(4, settings.players));
+  // Each buys in with chips of their own colour, each worth a set amount for the visit (shown by the marker on the wood
+  // beside the wheel), and bets in whole chips: a call bet is as many chips as it has parts. [[spot, chips]]
+  for (const r of RIVALS) r.unit = [5, 10, 25][Math.floor(Math.random() * 3)];
+  const markRivals = () => S.setMarkers(rivalsHere().map(r => ({ color: r.color, unit: r.unit })));
   function rivalBets(r) {
-    const u = [5, 10, 25][Math.floor(Math.random() * 3)], pick = a => a[Math.floor(Math.random() * a.length)], n = () => Math.floor(Math.random() * 37);
+    const pick = a => a[Math.floor(Math.random() * a.length)], n = () => Math.floor(Math.random() * 37), u = 1 + Math.floor(Math.random() * 2);
     if (r.style === 'straights') return Array.from({ length: 2 + Math.floor(Math.random() * 4) }, () => [`n${n()}`, u]);
-    if (r.style === 'outside') return [[pick(['red', 'black']), u * 4], ...(Math.random() < .5 ? [[pick(['odd', 'even', 'low', 'high']), u * 2]] : [])];
-    if (r.style === 'dozens') return [[pick(['doz1', 'doz2', 'doz3']), u * 2], [pick(['col1', 'col2', 'col3']), u], ...(Math.random() < .4 ? [[`n${n()}`, 5]] : [])];
-    const call = CALLS[pick(['voisins', 'tiers', 'orphelins', 'zero'])]; return call.chips.map(([id, k]) => [id, 5 * k]);
+    if (r.style === 'outside') return [[pick(['red', 'black']), 2 + Math.floor(Math.random() * 3)], ...(Math.random() < .5 ? [[pick(['odd', 'even', 'low', 'high']), 2]] : [])];
+    if (r.style === 'dozens') return [[pick(['doz1', 'doz2', 'doz3']), 2], [pick(['col1', 'col2', 'col3']), 1], ...(Math.random() < .4 ? [[`n${n()}`, 1]] : [])];
+    return CALLS[pick(['voisins', 'tiers', 'orphelins', 'zero'])].chips;
   }
   function othersWake() {
-    if (rivalJobs.length || mode !== 'betting' || !active) return;
+    if (rivalJobs.length || mode !== 'betting' || !active) return;   // (they sit down to bet as you do)
     rivalJobs = rivalsHere().filter(() => Math.random() < .85).map(r => {
       let fire; const go = new Promise(res => { fire = res; setTimeout(res, 700 + Math.random() * 3800); });
-      const job = go.then(async () => { if (mode !== 'betting' || !active) return; for (const [id, v] of rivalBets(r)) { r.bets ??= []; r.bets.push([id, v]); await addChip(r.name, id, r.color, { ms: 280 }); await sleep(60 + Math.random() * 160); } });
+      const job = go.then(async () => {
+        const call = r.style === 'sections';   // (Kenji calls a section of the wheel: the croupier places it)
+        for (const [id, chips] of rivalBets(r)) { if (!open() || !active) return; r.bets ??= []; r.bets.push([id, chips * r.unit]); for (let i = 0; i < chips; i++) await Promise.race([addChip(r.name, id, r.color, { ms: 320, croupier: call }), sleep(call ? 70 : 110)]); await sleep(call ? 40 : 80 + Math.random() * 160); }
+      });
       return { hurry: fire, job };
     });
   }
-  async function othersReady() { for (const j of rivalJobs) j.hurry(); await Promise.all(rivalJobs.map(j => j.job)); }
-  function clearRivals() { for (const r of RIVALS) { r.bets = []; for (const k of [...stacks.keys()]) if (k.startsWith(r.name + '|')) dropStack(k); } rivalJobs = []; }
+  // once the ball runs, now and then one of them reaches in with a late chip on a number before the call
+  function lateBets(window) {
+    for (const r of rivalsHere()) if (Math.random() < .3) setTimeout(() => {
+      if (mode !== 'running' || !active) return; const id = `n${Math.floor(Math.random() * 37)}`;
+      r.bets ??= []; r.bets.push([id, r.unit]); addChip(r.name, id, r.color, { ms: 320 });
+    }, (.25 + Math.random() * .6) * window);
+  }
+  function clearRivals() { for (const r of RIVALS) { r.bets = []; for (const k of [...stacks.keys()]) if (k.startsWith(r.name + '|')) dropStack(k); } rivalJobs = []; for (const id of cols.keys()) settleCol(id); }   // (your chips that stood on theirs come down)
 
   // ---- the wheel at rest: the wheelhead keeps turning slowly, the last ball riding in its pocket -------------------------
   // The drift is drawn at 30 frames a second (the ticker asks for its own frames), the shadows of the frets, turret
   // and ball refreshed at 15. On the battery saver the wheelhead coasts to a stop and then nothing is drawn; with
   // reduced motion it stands at once. Either way the ball rests in its pocket.
   let idleOn = false, idleWant = false;
+  const DRIFT = .63;   // rad/s: the wheelhead's slowest drift between spins
   const settle = { a: 0, r: 0, y: 0 };   // how far the ball still sits off the middle of its pocket after a spin: eased away
   function restBall(dt = 0) {
     if (restIdx == null) return;
     const k = Math.exp(-6 * dt); settle.a *= k; settle.r *= k; settle.y *= k;   // the simulation's own rest easing
-    S.wheel.setBall(phi - restIdx * PITCH + settle.a, GEO.pocketMid + settle.r, GEO.pocketY + GEO.ball + settle.y);
+    S.wheel.setBall(phi - restIdx * PITCH + settle.a, GEO.restR + settle.r, GEO.pocketY + GEO.ball + settle.y);
   }
   const idle = now => {
     const dt = Math.min(.05, (now - (idle.last ?? now)) / 1000); idle.last = now;
     const stand = S.quality.name === 'saver';
-    rotorW += ((stand ? 0 : Math.sign(rotorW || 1) * .45) - rotorW) * (stand ? 1.2 : .06) * dt; phi += rotorW * dt; S.wheel.setRotor(phi); restBall(dt);
+    // the wheelhead coasts on from the spin, slowing as it does in the spin (about 2% a second) down to a slow drift of
+    // about 6 rpm, until the croupier spins it again; on the battery saver it runs down over some ten seconds and stands
+    if (stand) rotorW -= rotorW * .6 * dt;
+    else if (Math.abs(rotorW) > DRIFT) rotorW -= rotorW * TUNE.rotorDecay * dt;
+    else rotorW += (Math.sign(rotorW || 1) * DRIFT - rotorW) * .06 * dt;
+    phi += rotorW * dt; S.wheel.setRotor(phi); restBall(dt);
     if (stand && Math.abs(rotorW) < .004 && Math.abs(settle.r) < .004) { rotorW = 0; idleOn = false; S.tickers.delete(idle); S.requestRender(); return; }   // at rest: the last frame
     if (now - (idle.drawn ?? -1e9) < 31) return;
     const shade = now - (idle.shaded ?? -1e9) >= 64; idle.drawn = now; if (shade) idle.shaded = now;
@@ -248,106 +360,197 @@ export async function createRoulette(ctx) {
 
   // ---- the round -------------------------------------------------------------------------------------------------------------
   let skipLevel = 0, rigged = null, turbo = false, stageAt = '', spinTick = null, rollLoop = null;   // turbo (slow software-GL browsers) and rigged (a fixed number): for the browser checks, testing sessions only (api.test)
-  function skip() { if (mode === 'spinning') { hurry = hurry === 1 ? 3.5 : 12; } else if (mode === 'paying') motion.finishAll(); skipLevel++; }
+  let running = false, skipWake = null;   // running: the ball is still moving (a tap hurries it)
+  function skip() { if (mode === 'spinning' || mode === 'running') { hurry = hurry === 1 ? 3.5 : 12; } else if (mode === 'paying') motion.finishAll(); skipLevel++; skipWake?.(); }
+  // a wait that a tap (or Space) cuts short
+  const untilSkip = p => Promise.race([p, new Promise(res => { skipWake = res; })]).finally(() => { skipWake = null; });
+  // while the ball drops and in the replay the picture is the wheel's alone: the recent numbers and the hint stand aside
+  const wheelOnly = on => stage.classList.toggle('r-wheelonly', on);
+  // the croupier calls the number: its bubble shows as he starts to say it, or at once with no voice to wait for (sound
+  // off, or the clip not there in time). `done`: the call is over.
+  function callNumber(n, onCall) {
+    let start; const started = new Promise(res => { start = res; });
+    const done = audio.say(numberClip(n), { prio: 4, late: 600, onStart: start });   // (above "the winning number is…": hurried, it cuts that short)
+    return { shown: Promise.race([started, done, sleep(700)]).then(() => { onCall(); showBubble(n); }), done };
+  }
+  // The round: the croupier spins and the ball runs with the bets still open; at his call they close, the number is drawn
+  // and paid as they do (the spin only shows it, so a reload or a closed tab from there keeps the win and can't undo a
+  // loss). Before the call nothing has left your balance: a page closed then simply loses the layout.
   async function round() {
-    if (mode !== 'closing') return;   // spin() claimed the table: no more chips from here, the rivals finish, then bets close
-    let r = null;
-    try {
-      await othersReady(); rivalJobs = [];
-      if (!table.close()) { mode = 'betting'; clearRivals(); refresh(); return; }
-      // The number is drawn and paid as bets close, and written down with the stake gone: the spin only
-      // shows it, so a reload or a closed tab mid-spin keeps the win and can't undo a loss.
-      const n = rigged ?? draw(); rigged = null; held = wallet.balance;
-      r = table.settle(n); inFlight.set('spin', { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage });
-      await spinRound(r);
-    } catch (err) {
-      console.error('roulette round', err); if (spinTick) S.tickers.delete(spinTick); rollLoop?.stop(.1);
-      const back = table.abandon(); if (r) landed(r); else held = null;   // a stake taken without a number goes back
-      clearRivals(); hideBubble(); await syncYours().catch(() => {}); await cameraTo('seat', 0).catch(() => {});   // your stacks match the table again: cleared once paid, as they were if not
+    if (mode !== 'running') return;
+    const ctl = { r: null };
+    try { await spinRound(ctl); }
+    catch (err) {
+      const { r } = ctl;
+      console.error('roulette round', err); hush(false); if (spinTick) S.tickers.delete(spinTick); S.wheel.setTrail(0, 0, 0, 0); rollLoop?.stop(.1);
+      const back = table.abandon(); if (r?.rec) paid(r); else held = null;   // a stake taken without a number goes back
+      clearRivals(); hideBubble(); wheelOnly(false); S.wheel.mark(null); S.mood(false, 0); running = false; await syncYours().catch(() => {}); await cameraTo('seat', 0).catch(() => {});   // your stacks match the table again: cleared once paid, as they were if not
       mode = 'betting'; document.body.dataset.rmode = 'bet'; refresh(); setIdle(true);
-      hint(r ? `The wheel stopped on ${r.n} ${colorName(r.n)}: ${r.back > 0 ? `${fmt(r.back)} paid` : 'no win'}.` : back ? 'The spin was void. Your stake is back.' : 'The spin could not start. Your bets are still on.');
+      hint(r?.rec ? `The wheel stopped on ${r.n} ${colorName(r.n)}: ${r.back > 0 ? `${fmt(r.back)} paid` : 'no win'}.` : back ? 'The spin was void. Your stake is back.' : 'The spin could not finish. Your bets are still on.');
     }
   }
-  // the number is out: into the history, the record of the spin closed, and the balance on screen catches up
+  // every number your layout covers, at its strongest: 3 straight up, 2 another inside bet, 1 an outside one
+  function coverage() {
+    const m = new Map();
+    for (const id of table.bets.keys()) { const sp = SPOTS.get(id), k = sp.kind === 'straight' ? 3 : sp.nums.length <= 6 ? 2 : 1; for (const n of sp.nums) m.set(n, Math.max(k, m.get(n) ?? 0)); }
+    return m;
+  }
+  // "No more bets": the layout closes, the number is drawn and the bets settle, all at once (rule 7: money moves as bets
+  // close). A layout the balance no longer covers (spent in another window while the ball ran) is void and comes off.
+  function closeBets(p, ctl) {
+    mode = 'spinning'; hover(null); closeSheets(); for (const j of rivalJobs) j.hurry(); rivalJobs = [];
+    const n = rigged ?? draw(); rigged = null;
+    if (table.close()) {
+      S.wheel.mark(coverage());   // what you have riding, lit on the wheel's numbers for the last rounds and the drop
+      held = wallet.balance;
+      const r = ctl.r = table.settle(n); r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage }; inFlight.set('spin', r.rec);
+    } else {
+      ctl.r = { n, staked: 0, back: 0, net: 0, partage: 0, wins: [], losses: [], void: true };
+      table.clear(); serial(syncYours);
+    }
+    p.aim(n); audio.preload([numberClip(n)]);   // its call decoded while the ball makes its last rounds
+    document.body.dataset.rmode = 'spin'; refresh();
+  }
+  // the croupier has called the number: it goes into the history (the strip shows it)
   function landed(r) {
     if (r.landed) return; r.landed = true;
     history.unshift(r.n); history = history.slice(0, 500); store.set('rouletteHistory', history); renderHistory(true);
-    if (!inFlight.lost('spin')) ctx.record?.({ n: r.n, color: colorName(r.n), staked: r.staked, back: r.back, partage: r.partage, net: r.net });   // the salon's book of last rounds (a window that took this spin over wrote it already)
+    if (r.rec) inFlight.set('spin', { ...r.rec, seen: true });   // (a void layout staked nothing: there is no record)
+  }
+  // the winnings have reached your places: the record of the spin is closed, and the balance and this visit's net on
+  // screen catch up (they hold until now, as your stack grows only when the croupier pushes the chips)
+  function paid(r) {
+    landed(r); if (r.paid) return; r.paid = true;
+    if (r.rec && !inFlight.lost('spin')) ctx.record?.({ n: r.n, color: colorName(r.n), staked: r.staked, back: r.back, partage: r.partage, net: r.net });   // the salon's book of last rounds (a window that took this spin over wrote it already)
     inFlight.set('spin', null); held = null; ctx.showBalance(); refresh();
   }
-  async function spinRound(r) {
-    mode = 'spinning'; hurry = 1; skipLevel = 0; refresh(); clearResult(); hint('');
-    document.body.dataset.rmode = 'spin';
-    const n = r.n, f = fast(); dir = -dir; store.set('rouletteDir', dir);
-    const p = plan(n, { dir, phiNow: phi, fast: f });
-    S.highlight([]); liftDolly();
-    // the camera goes to the wheel as the croupier spins the wheelhead and launches the ball. Broadcast grammar:
-    // locked-off shots joined by cuts, never a drifting camera; the wheel turns on until the picture is black and
-    // the spin starts in the dip, so the stop and the change of direction are never seen
-    let spun; const launch = () => { setIdle(false); restIdx = null; spun = playSpin(p, f); if (Math.random() < .4) say('good-luck', { prio: 1 }); };
-    await cutTo('wheel', launch); if (!spun) launch();
-    await spun;
+  let hushed = false; const hush = on => { if (hushed !== on) { hushed = on; audio.hold?.(on); } };
+  async function spinRound(ctl) {
+    hurry = 1; skipLevel = 0; running = true; clearResult(); refresh();   // "Bets are open until the call." while the ball runs to it
+    const f = fast(); dir = -dir; store.set('rouletteDir', dir);
+    // from your seat you see the croupier stop the wheelhead and spin it the other way (it changes direction every spin),
+    // then release the ball on his side of the bowl, the far side from the camera's wheel shot
+    const speed = 1.6 + Math.random() * .5, pre = preroll(rotorW, Math.sign(-dir) * speed);
+    const p = plan(null, { dir, phiNow: phi + pre.angle, fast: f, rotorSpeed: speed, theta0: camAz(S.shots.wheel?.pos) + Math.PI + (Math.random() - .5) * .6 });
+    S.highlight([]); liftDolly(); setIdle(false);
+    lateBets((pre.T + p.callAt) * 1000 / (f ? 1.25 : 1));
+    await playSpin(p, f, pre, () => closeBets(p, ctl)); running = false; refresh();
+    const r = ctl.r, n = r.n;
     // the result: the wheelhead turns on from the spin's own speed, the ball easing into the middle of its pocket
     restIdx = WHEEL_INDEX[n]; rotorW = (p.samples.at(-1)[4] - p.samples.at(-2)[4]) * 60;
-    { const b = S.wheel.ball.position, d = Math.atan2(-b.z, b.x) - (phi - restIdx * PITCH); settle.a = d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI; settle.r = Math.hypot(b.x, b.z) - GEO.pocketMid; settle.y = b.y - (GEO.pocketY + GEO.ball); }
+    { const b = S.wheel.ball.position, d = Math.atan2(-b.z, b.x) - (phi - restIdx * PITCH); settle.a = d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI; settle.r = Math.hypot(b.x, b.z) - GEO.restR; settle.y = b.y - (GEO.pocketY + GEO.ball); }
     setIdle(true);
-    if (!f && !skipLevel) say('winning-number', { prio: 3 });   // "the winning number is..." as the ball settles; the number follows it
-    await sleep(skipLevel ? 60 : 220);
-    showBubble(n); say(`n${n}`, { prio: 3, fresh: 2500 });
-    landed(r); setIdle(true);
-    const yourStraight = r.wins.some(w => w.kind === 'straight');
-    await sleep(skipLevel ? 150 : f ? 700 : 1300);
-    if (yourStraight && !reduced() && !skipLevel) await replay(p, n);
-    hideBubble();
+    // The call, as the dealer procedure has it: once the ball is at rest, "the winning number is…", then the number, its
+    // bubble showing as he starts to say it (nothing on screen gives it away before him). The shot holds until he is done.
+    if (!f && !skipLevel) await untilSkip(say('winning-number', { prio: 3 }));
+    const call = callNumber(n, () => { landed(r); wheelOnly(false); ringPulse(n); }); await call.shown;   // (the strip and the ring light take the number with him)
+    await untilSkip(skipLevel ? sleep(150) : Promise.all([f ? Promise.race([call.done, sleep(1000)]) : call.done.then(() => sleep(150)), sleep(f ? 700 : 1300)]));
+    hush(false);
+    // the replay (Settings: your straight-up wins, every spin, or none): your straight up gets the camera that rides behind
+    // the ball, any other spin the slow look from beside the pocket
+    const yourStraight = r.wins.some(w => w.kind === 'straight'), want = settings.replays ?? 'mine';
+    if ((want === 'all' || (want === 'mine' && yourStraight)) && !reduced() && !skipLevel) await replay(p, n, { chase: yourStraight });
+    hideBubble(); audio.forget(numberClip(n));
     mode = 'paying'; refresh();
-    await cutTo('seat');
+    await cutTo('seat', () => S.mood(false, 0));
     await payout(r, n);
     mode = 'betting'; document.body.dataset.rmode = 'bet'; rivalJobs = []; refresh();
     say('place-bets', { prio: 2, fresh: 3000 }); othersWake();
   }
-  // play the simulated spin: the wheelhead, the ball and its sound, frame by frame
-  function playSpin(p, f) {
+  // The ring light answers the number as the croupier calls it: a flash in its colour (red, a cold white for black, green
+  // for zero) fading back to the gold over a second and a bit. With Flashing effects on Soft, only a gentle tint; Off, none.
+  function ringPulse(n) {
+    const f = settings.flash; if (f === 'off') return;
+    const C = S.THREE.Color, base = new C(S.wheel.glow.base), hit = new C({ red: '#ff2a3a', black: '#e4ecff', green: '#2be27a' }[colorOf(n)]), c = new C(), soft = f === 'soft', t0 = performance.now(), ms = 1300;
+    const tick = now => {
+      const k = Math.min(1, (now - t0) / ms), a = soft ? .45 * Math.sin(Math.PI * k) : k < .1 ? k / .1 : 1 - (k - .1) / .9;
+      S.wheel.glow.set(c.copy(base).lerp(hit, a), 1 + (soft ? 0 : .7 * a)); if (k >= 1) { S.tickers.delete(tick); S.wheel.glow.set(base); }
+    };
+    tick.still = true; S.tickers.add(tick); S.requestRender(false);
+  }
+  // The croupier's hand on the wheelhead before the throw: it turns at w0 (rad/s) and is to turn at w1, the other way, so
+  // he stops it (the ball comes out of its pocket meanwhile) and pushes it round. T: how long that takes; angle: how far it
+  // turns meanwhile; at(s): how far it has turned s seconds in.
+  function preroll(w0, w1) {
+    const T1 = w0 * w1 < 0 ? .3 + Math.min(.25, Math.abs(w0) * .12) : 0, v1 = T1 ? 0 : w0, T2 = .35, a1 = w0 * T1 / 2;
+    return { T: T1 + T2, T1, angle: a1 + (v1 + w1) * T2 / 2, at: s => s < T1 ? w0 * s - w0 * s * s / (2 * T1) : a1 + v1 * (s - T1) + (w1 - v1) * (s - T1) ** 2 / (2 * T2) };
+  }
+  // play the spin, frame by frame: the croupier's hand on the wheelhead, then the simulated throw (the wheelhead, the ball
+  // and its sound). `onCall`: "No more bets" (the bets close); the picture dips to the wheel then, and in the black the
+  // wheelhead is turned on by the whole pockets that bring the drawn number under the ball (physics.mjs, plan)
+  function playSpin(p, f, pre, onCall) {
     return new Promise(done => {
-      const roll = rollLoop = audio.available && audio.enabled ? createRoller(audio.ctx, audio.bus.table) : { update() {}, stop() {} }, dur = p.settledAt + .12, evs = p.events;
-      let t = 0, last = performance.now(), ev = 0, called = false, pushed = false;
-      S.wheel.ball.visible = true; click(.45, .8); audio.cue('whoosh', { bus: 'table', gain: .18, rate: 1.7 });
+      let roll = { update() {}, stop() {} }; const dur = p.settledAt + .12, evs = p.events, phi0 = phi;
+      let t = -pre.T, last = performance.now(), ev = 0, launched = false, called = false, pushed = false;
+      const pace = f ? 1.25 : 1;   // fast play: the softer throw, run a little quicker
+      const fix = () => { p.fixed = true; };
       const tick = now => {
-        const dt = Math.min(turbo ? .5 : .05, (now - last) / 1000) * hurry; last = now; t = Math.min(dur, t + dt);
+        const dt = Math.min(turbo ? .5 : .05, (now - last) / 1000) * hurry * pace; last = now; t = Math.min(dur, t + dt);
+        if (t < 0) {   // his hand on the wheelhead: the ball rides in its pocket until he stops it, then he takes it out
+          phi = phi0 + pre.at(t + pre.T); S.wheel.setRotor(phi);
+          if (t + pre.T < pre.T1) restBall(); else if (restIdx != null) { restIdx = null; S.wheel.ball.visible = false; }
+          return;
+        }
+        if (!launched) {   // the throw
+          launched = true; restIdx = null; S.wheel.ball.visible = true; click(.45, .8); audio.cue('whoosh', { bus: 'table', gain: .18, rate: 1.7 });
+          roll = rollLoop = audio.available && audio.enabled ? createRoller(audio.ctx, audio.bus.table) : roll;
+          if (Math.random() < .4) say('good-luck', { prio: 1 });
+        }
         const st = at(p, t); phi = st.phi; S.wheel.setRotor(phi); S.wheel.setBall(st.theta, st.r, st.y);
+        S.wheel.setTrail(st.theta, st.r, st.y, st.phase < 2 && hurry === 1 ? st.speed : 0, p.dir);
         while (ev < evs.length && evs[ev].t <= t) {
           const e = evs[ev++], pw = e.power ?? .5;
           if (hurry > 3 && e.type === 'fret') continue;
-          if (e.type === 'deflector') click(.35 + .75 * pw, .74);
+          if (e.type === 'deflector') { click(.35 + .75 * pw, .74); if (pw > .6 && hurry < 3) feel.tap('knock'); }
           else if (e.type === 'land') click(.5 + .4 * pw, .9);
           else if (e.type === 'fret') click(.18 + .62 * pw, 1.04 + Math.random() * .16);
           else if (e.type === 'bounce') click(.12 + .3 * pw, 1.1);
-          else if (e.type === 'settle') click(.3, .86);
+          else if (e.type === 'settle') { click(.3, .86); feel.tap('chip'); }   // (in your hand, on a phone: the ball drops into its pocket)
         }
         // the roll: a smooth whirr that follows the ball, falling in pitch as it slows (made live, see roller.mjs)
         const v = st.speed;
-        roll.update({ speed: v, theta: st.theta, phase: st.phase, level: hurry > 1 ? .6 : 1 });
-        if (!called && p.dropAt && t > p.dropAt - (f ? 1.6 : 2.6)) { called = true; say('no-more-bets', { prio: 2 }); }
-        if (!pushed && p.dropAt && t >= p.dropAt) { pushed = true; if (hurry === 1) cutTo('push'); }
-        if (t >= dur) { S.tickers.delete(tick); roll.stop(.2); done(); }
+        roll.update({ speed: v, theta: st.theta, phase: st.phase, level: hurry > 1 ? .6 : 1, near: camAz(), pan: Math.max(-.7, Math.min(.7, ballX() / 70)) });
+        if (!called && t >= p.callAt) {   // as it is about to make its last two rounds
+          called = true; hush(true); S.mood(true); say('no-more-bets', { prio: 2 }); onCall();   // the room and the music stay down until the number is called: the rattle is heard
+          cutTo(hurry === 1 ? 'wheel' : 'push', fix).then(fix);   // (a shot that isn't there makes no dip: the turn is made all the same)
+        }
+        if (!pushed && p.dropAt && t >= p.dropAt) { pushed = true; wheelOnly(true); if (hurry === 1 && S.current !== S.shots.push) cutTo('push'); }
+        if (t >= dur) { S.tickers.delete(tick); S.wheel.setTrail(0, 0, 0, 0); roll.stop(.2); done(); }
       };
       spinTick = tick; S.tickers.add(tick); S.requestRender();
     });
   }
-  // the last moments again, slowly, close to the pocket
-  async function replay(p, n) {
-    const t1 = p.settledAt + .35, t0 = Math.max(p.dropAt ?? 0, t1 - 1.6), wc = S.wheel.group.position, THREE = S.THREE;
-    const endA = at(p, p.settledAt).theta, eye = wc.clone().add(new THREE.Vector3(...[Math.cos(endA) * 50, 21, -Math.sin(endA) * 50])), look = wc.clone().add(new THREE.Vector3(Math.cos(endA) * 22, -9, -Math.sin(endA) * 22));
-    const m = new THREE.Matrix4().lookAt(eye, look, new THREE.Vector3(0, 1, 0)), pose = { pos: eye, quat: new THREE.Quaternion().setFromRotationMatrix(m), fov: 34, name: 'replay' };
-    const tag = $('.r-replay'); tag.hidden = false; hideBubble(); setIdle(false);
-    await fadeCut(() => S.setPose(pose));
+  // The last moments again, slowly: from a camera placed for the screen beside the pocket (replay.mjs), or, `chase`, from
+  // one riding 12 cm behind the ball and 6 cm above it, looking along its path (eased, so a bounce doesn't shake it). The
+  // clicks play again, slower and softer, and the ring light is turned down.
+  async function replay(p, n, { chase = false } = {}) {
+    const wc = S.wheel.group.position, THREE = S.THREE, V = a => wc.clone().add(new THREE.Vector3(...a));
+    const shot = replayShot(p, (pos, look, pts, mx, my) => S.fit(V(pos), V(look), pts.map(V), mx, my)?.fov ?? null), { t0, t1 } = shot, eye = V(shot.pos);
+    const poseAt = (pos, look, fov) => ({ pos, quat: new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(pos, look, new THREE.Vector3(0, 1, 0))), fov, name: 'replay' });
+    const ballAt = t => { const st = at(p, Math.min(t, p.settledAt + 2.9)); S.wheel.setBall(st.theta, st.r, st.y); return S.wheel.ball.position.clone().add(wc); };
+    const ride = { dir: null, pos: null }, rider = t => {
+      const b = ballAt(t), d = b.clone().sub(ballAt(t - .12)).setY(0); ballAt(t);
+      if (d.length() > .3) { d.normalize(); ride.dir = ride.dir ? ride.dir.lerp(d, .12).normalize() : d; }
+      const dir = ride.dir ?? new THREE.Vector3(1, 0, 0), want = b.clone().addScaledVector(dir, -12).add(new THREE.Vector3(0, 6, 0));
+      ride.pos = ride.pos ? ride.pos.lerp(want, .18) : want;
+      return poseAt(ride.pos.clone(), b.clone().addScaledVector(dir, 5).add(new THREE.Vector3(0, -1.5, 0)), 52);
+    };
+    const tag = $('.r-replay'); tag.hidden = false; hideBubble(); setIdle(false); wheelOnly(true); S.wheel.glow.set(S.wheel.glow.base, .5);
+    await fadeCut(() => { const st = at(p, t0); S.wheel.setRotor(st.phi); S.setPose(chase ? rider(t0) : poseAt(eye, V(shot.look), shot.fov)); });
     await new Promise(done => {
-      let t = t0, last = performance.now();
-      const tick = now => { const dt = Math.min(turbo ? .5 : .05, (now - last) / 1000) * (skipLevel > 1 ? 6 : .34); last = now; t += dt; const st = at(p, Math.min(t, p.settledAt + 2.9)); S.wheel.setRotor(st.phi); S.wheel.setBall(st.theta, st.r, st.y); if (t >= t1) { S.tickers.delete(tick); done(); } };
+      let t = t0, last = performance.now(), ev = p.events.findIndex(e => e.t >= t0); if (ev < 0) ev = p.events.length;
+      const tick = now => {
+        const dt = Math.min(turbo ? .5 : .05, (now - last) / 1000) * (skipLevel > 1 ? 6 : chase ? .3 : .34); last = now; t += dt;
+        const st = at(p, Math.min(t, p.settledAt + 2.9)); S.wheel.setRotor(st.phi); S.wheel.setBall(st.theta, st.r, st.y);
+        if (chase) S.setPose(rider(t));
+        while (ev < p.events.length && p.events[ev].t <= t) { const e = p.events[ev++], pw = e.power ?? .5; if (skipLevel < 2 && e.type !== 'launch' && e.type !== 'drop') click(.15 + .45 * pw, .6); }
+        if (t >= t1) { S.tickers.delete(tick); done(); }
+      };
       S.tickers.add(tick); S.requestRender();
     });
     // back to now: the wheelhead where it would be by now
     phi = at(p, p.settledAt + 2.9).phi; tag.hidden = true;
-    await fadeCut(() => { S.setPose(S.shots.push); setIdle(true); }); showBubble(n); await sleep(700);   // in the black: no jump of the wheelhead seen
+    await fadeCut(() => { S.setPose(S.shots.push); setIdle(true); wheelOnly(false); S.wheel.glow.set(S.wheel.glow.base); }); showBubble(n); await sleep(700);   // in the black: no jump of the wheelhead seen
   }
   // a cut: a dip to black of a few frames, the way a vision mixer cuts between cameras
   // `onCut` runs while the picture is black
@@ -362,61 +565,179 @@ export async function createRoulette(ctx) {
   // ---- the number beside the ball -----------------------------------------------------------------------------------------------
   function showBubble(n) {
     const c = colorOf(n); bubble.className = `r-bubble ${c}`; bubble.querySelector('b').textContent = n; bubble.querySelector('small').textContent = c === 'green' ? 'Zero' : `${c === 'red' ? 'Red' : 'Black'} · ${n % 2 ? 'Odd' : 'Even'} · ${n <= 18 ? '1–18' : '19–36'}`;
-    bubble.hidden = false; bubble.dataset.on = '1'; placeBubble(); ui.pop(bubble, { from: .4 });
+    bubble.hidden = false; bubble.dataset.on = '1'; placeBubble(true); ui.pop(bubble, { from: .4 });
   }
   function hideBubble() { bubble.hidden = true; delete bubble.dataset.on; }
-  function placeBubble() { const b = S.wheel.ball, p = S.project(S.wheelToWorld(b.position.toArray())); bubble.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`; }
+  // over the ball, or under it where the bar or the recent numbers would cover it (`measure`: the room is taken again)
+  let bubbleRoom = 0;
+  function placeBubble(measure = false) {
+    if (measure) bubbleRoom = Math.max(ctx.barCover(stage), histEl.offsetHeight ? histEl.offsetTop + histEl.offsetHeight : 0) + 6 + bubble.offsetHeight + 22;
+    const b = S.wheel.ball, p = S.project(S.wheelToWorld(b.position.toArray()));
+    bubble.classList.toggle('below', p.y < bubbleRoom); bubble.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+  }
 
   // ---- the dolly and the payout -----------------------------------------------------------------------------------------------------
+  // the dolly: in the middle of the number, standing on the tallest stack there (on the felt when it is bare), set down
+  // straight; it comes up again with the chips as they go home (payout's end), so it never hovers over an empty cell
   function placeDolly(n, ms = 240) {
     const d = S.dolly, a = S.anchor(`n${n}`); d.visible = true;
-    if (ms <= 0) { d.position.set(a.x + 1.4, H, a.z - 1.2); S.requestRender(); return Promise.resolve(); }
-    return motion.tween(ms, t => d.position.set(a.x + 1.4, H + (1 - t) * 14, a.z - 1.2), ease.land).then(() => audio.play('chip', { gain: .6 }));
+    const tall = cols.get(`n${n}`)?.length ?? 0, y = H * tall;   // (every player's chips there are one column)
+    if (ms <= 0) { d.position.set(a.x, y, a.z); S.requestRender(); return Promise.resolve(); }
+    return motion.tween(ms, t => d.position.set(a.x, y + (1 - t) * 10, a.z), ease.land).then(() => audio.play(tall ? 'stack' : 'chip', { gain: .6, x: panX(a) }));
   }
   function liftDolly() { const d = S.dolly; if (!d.visible) return; const y0 = d.position.y; motion.tween(220, t => { d.position.y = y0 + t * 10; }).then(() => { d.visible = false; S.requestRender(); }); }
   async function payout(r, n) {
     stageAt = 'dolly'; await placeDolly(n); stageAt = 'lose';
-    S.highlight([n], { level: .5, color: '#ffe4a6' });
-    const sweepTo = S.layout.tray ? S.layout.tray.clone() : S.anchor('n0').clone().add(new S.THREE.Vector3(-22, 0, 0)), kindOf = k => SPOTS.get(k.split('|')[1]).kind;   // losing chips go to the croupier's float
+    // the number lights from under the cloth, its edge brightest so the numeral keeps its ink, and the outside boxes it
+    // wins with more softly (as an LED-lit layout does): one fade up, no pulse to keep the picture redrawing
+    S.highlight([n, ...[...SPOTS].filter(([, sp]) => OUT_ORDER.includes(sp.kind) && sp.nums.includes(n)).map(([id]) => [id, .25])], { level: .6, color: '#ffe4a6', fade: reduced() ? 0 : 240 });
+    const float = S.layout.tray ? S.layout.tray.clone() : S.anchor('n0').clone().add(V(-22, 0, 0)), kindOf = k => SPOTS.get(k.split('|')[1]).kind;   // the croupier's float
     const stakeOf = k => { const [owner, id] = k.split('|'); return stacks.get(k).reduce((a, m) => a + (typeof m.userData.v === 'number' ? m.userData.v : 0), 0) || (RIVALS.find(x => x.name === owner)?.bets ?? []).filter(([b]) => b === id).reduce((a, [, v]) => a + v, 0); };
-    // la partage: on zero the even-money stacks go with the losers, and half of each is pushed back from the float
-    const halves = n === 0 ? [...stacks.keys()].filter(k => kindOf(k) === 'even').map(k => ({ k, stake: stakeOf(k), count: stacks.get(k).length })) : [];
-    // losing chips first, outside bets before inside
-    const lose = [...stacks.keys()].filter(k => !SPOTS.get(k.split('|')[1]).nums.includes(n)).sort((a, b) => OUT_ORDER.includes(kindOf(b)) - OUT_ORDER.includes(kindOf(a)));
-    if (lose.length) audio.play('collect');
-    await Promise.all(lose.map((k, i) => sleep(i * 35).then(() => dropStack(k, { to: sweepTo, ms: 420 }))));
+    // la partage: on zero each even-money stake is halved where it lies
+    const halves = n === 0 ? [...stacks.keys()].filter(k => kindOf(k) === 'even') : [];
+    // the losing bets first, outside before inside: drawn across the cloth to the croupier's corner, then into the float
+    const lose = [...stacks.keys()].filter(k => !halves.includes(k) && !SPOTS.get(k.split('|')[1]).nums.includes(n)).sort((a, b) => OUT_ORDER.includes(kindOf(b)) - OUT_ORDER.includes(kindOf(a)));
+    if (lose.length) { audio.play('collect', { x: panX(gatherAt()) }); await gather(lose, float); }
     stageAt = 'wins';
-    // then the winners: outside first, then inside toward the wheel, straights last
-    const wins = [...stacks.keys()].sort((a, b) => rank(kindOf(a)) - rank(kindOf(b)));
+    // your straight up has come in: the camera goes down low over the cloth to watch the croupier cut your winnings (the
+    // stacks of twenty pushed out, then the cuts of five), and back to your seat once they are down
+    const big = r.wins.find(w => w.kind === 'straight'), low = big && !reduced() && !skipLevel && !fast() ? lowShot(S.anchor(big.id)) : null;
+    if (low) await S.move(low, 900);
+    // then the winners: outside first, then inside toward the wheel, straights last, each payout a moment after the last
+    const wins = [...stacks.keys()].filter(k => !halves.includes(k)).sort((a, b) => rank(kindOf(a)) - rank(kindOf(b)));
     function rank(kd) { return OUT_ORDER.includes(kd) ? 0 : kd === 'straight' ? 2 : 1; }
-    const paidStacks = [];
-    for (const [i, k] of wins.entries()) {
-      const [owner, id] = k.split('|'), s = SPOTS.get(id), stake = stakeOf(k);
-      const pay = stake * s.pays, a = S.anchor(id, slotOf(owner)), side = S.layout.orient === 'port' ? new S.THREE.Vector3(0, 0, -3.9) : new S.THREE.Vector3(3.9, 0, 0);
-      const chips = owner === 'you' ? breakDown(pay).slice(0, 12) : Array.from({ length: Math.min(8, Math.ceil(pay / 25)) }, () => RIVALS.find(x => x.name === owner).color);
-      const pk = `${owner}|${id}|pay`, list = []; stacks.set(pk, list); paidStacks.push(pk);
-      await sleep(i ? 90 : 0); audio.play('payout');
-      chips.forEach((v, j) => { const m = S.chipMesh(v), to = a.clone().add(side).setY(H * (j + .5)), from = sweepTo.clone().setY(8); m.userData = { owner, id, v }; list.push(m); m.position.copy(from); motion.tween(480, t => { m.position.lerpVectors(from, to, t); m.position.y += Math.sin(t * Math.PI) * 6; }, ease.out); });
-      if (owner !== 'you') tag(owner, `+${fmt(pay)}`, a);
-    }
-    for (const [i, { k, stake, count }] of halves.entries()) {
-      const [owner, id] = k.split('|'), a = S.anchor(id, slotOf(owner)), list = []; stacks.set(k, list);
-      const chips = owner === 'you' ? breakDown(stake / 2).slice(0, 12) : Array.from({ length: Math.max(1, Math.ceil(count / 2)) }, () => RIVALS.find(x => x.name === owner).color);
-      await sleep(i ? 90 : 120); audio.play('payout');
-      chips.forEach((v, j) => { const m = S.chipMesh(v), to = a.clone().setY(H * (j + .5)), from = sweepTo.clone().setY(8); m.userData = { owner, id, v }; list.push(m); m.position.copy(from); motion.tween(480, t => { m.position.lerpVectors(from, to, t); m.position.y += Math.sin(t * Math.PI) * 6; }, ease.out); });
-      tag(owner === 'you' ? 'La partage' : owner, `${fmt(stake / 2)} back`, a);
-    }
-    // the result banner
-    stageAt = 'banner'; showWin(r, n);
+    const taken = [], jobs = [];
+    wins.forEach((k, i) => {
+      const [owner, id] = k.split('|'), pay = stakeOf(k) * SPOTS.get(id).pays;
+      jobs.push(sleep(i * 180).then(() => payStack(owner, id, payChips(owner, pay), float, taken, i)).then(() => { if (owner !== 'you') tag(owner, `+${fmt(pay)}`, S.anchor(id, slotOf(owner))); }));
+    });
+    halves.forEach((k, i) => jobs.push(sleep((wins.length + i) * 180 + 120).then(() => halve(k, stakeOf(k), float))));
+    await Promise.all(jobs);
+    // the winnings down beside their stakes: your balance and this visit catch up, and the result banner says it
+    while (motion.live.size) await sleep(40);
+    if (low) { await sleep(skipLevel ? 0 : 500); await S.move(S.shots.seat, skipLevel ? 300 : 800); }
+    paid(r);
+    stageAt = 'banner'; if (!r.void) showWin(r, n); else hint('Your bets were void: your balance changed in another window.');
     if (r.net > 0) { if (bigWin(r)) { feel.tap('big'); feel.confetti({ size: r.back >= r.staked * 20 ? 2 : 1, from: { x: .5, y: .3 } }); } else feel.tap('win'); }
     if (r.net > 0) { sting(r.straight ? 'big' : 'small', .8); if (r.back >= r.staked * 20) { audio.cue(`crowd-cheer-${1 + Math.floor(Math.random() * 2)}`, { gain: .45 }); setTimeout(() => say('congrats', { prio: 1 }), 900); } }
     await sleep(skipLevel ? 250 : fast() ? 900 : 1600);
-    // everything on the layout goes home: yours toward you, the others' to their places
-    const home = S.layout.orient === 'port' ? new S.THREE.Vector3(S.layout.rect.x1 + 14, 0, 0) : new S.THREE.Vector3((S.layout.X(0) + S.layout.xEnd) / 2, 0, S.layout.rect.z1 + 14);
-    const keys = [...stacks.keys()]; if (keys.length) audio.play('collect');
-    await Promise.all(keys.map((k, i) => sleep(i * 25).then(() => dropStack(k, { to: home, ms: 380 }))));
+    // everything on the layout goes home, each player's chips back to their own place (yours toward you), and the dolly
+    // comes up with them: the payout is done, and the table opens for bets
+    const keys = [...stacks.keys()]; if (keys.length) audio.play('collect', { x: panX(seatAt('you')) });
+    stageAt = 'home'; liftDolly(); S.wheel.mark(null);
+    await Promise.all(keys.map((k, i) => sleep(i * 25).then(() => dropStack(k, { to: seatAt(k.split('|')[0]), ms: 420 }))));
     for (const r2 of RIVALS) r2.bets = [];
-    S.highlight([]);
+    lastLit = n; restGlow();
+  }
+  // low over the cloth from your side: on the payout at the players' edge (payAt), the winning bet and the dolly behind it
+  function lowShot(a) {
+    const L = S.layout, look = V(a.x, 2, L.zNear + 3), c = S.shots.seat.pos, d = V(c.x - look.x, 0, c.z - look.z).normalize();
+    const pos = look.clone().addScaledVector(d, 30).setY(19), m = new S.THREE.Matrix4().lookAt(pos, look.clone().add(V(0, 0, -(L.zNear + 3 - a.z) * .3)), V(0, 1, 0));
+    return { pos, quat: new S.THREE.Quaternion().setFromRotationMatrix(m), fov: 46, name: 'low' };
+  }
+  // the croupier's corner of the cloth, by the wheel and the float: where losing chips are drawn together
+  function gatherAt() { const L = S.layout, R = L.rect, t = L.tray ?? S.anchor('n0'); return V(Math.max(R.x0 + 8, Math.min(R.x1 - 8, t.x)), 0, Math.max(R.z0 + 8, Math.min(R.z1 - 8, t.z))); }
+  // The losing bets come off: the croupier rakes them in toward his side of the layout, then lifts the piles into the
+  // float. With reduced motion (or hurried) each stack is drawn straight into a loose heap at the corner instead (lifted
+  // over any column in its way, flat where the way is clear), and the heap into the float in one move.
+  async function gather(keys, float) {
+    const lists = keys.map(k => { const list = stacks.get(k); if (!list) return null; stacks.delete(k); unseat(list); return list; }).filter(Boolean);
+    let piles = lists;
+    if (!reduced() && !skipLevel) await rake(lists);
+    else {
+      const g = gatherAt(); piles = [];
+      await Promise.all(lists.map((list, i) => sleep(i * 70).then(async () => {
+        const j = i % 16, spot = g.clone().add(V((j % 4 - 1.5) * 4.2 + (Math.random() - .5) * .8, 0, (Math.floor(j / 4) - 1.5) * 4.2 + (Math.random() - .5) * .8));
+        await moveStack(list, spot, { ms: 320, ground: Math.floor(i / 16) * 2 }); piles.push(list);
+      })));
+    }
+    await Promise.all(piles.map((list, j) => sleep(j * 18).then(() => moveStack(list, float.clone().add(V((j % 4 - 1.5) * 3, 0, (Math.floor(j / 4) % 3 - 1) * 3)), { ms: 280 }))));
+    for (const m of piles.flat()) S.chips.drop(m);
+  }
+  // The rake: the layout in strips a rake's head wide, the far end of the table first. For each, the head is lifted over
+  // the cloth and set down just behind the strip's nearest stack, then drawn toward the croupier past the layout's far line:
+  // each stack slides flat ahead of the head once it reaches it, and pushes on any stack in front of it (every player's
+  // chips on one spot are one column and move as one). A tap hurries the rest straight to the line.
+  async function rake(lists) {
+    if (!lists.length) return;
+    const L = S.layout, R = S.rake, line = L.zFar - 2.4, reach = L.zFar - 70, gap = 2 * CHIP_R + .05;
+    for (const list of lists) for (const m of list) S.chips.free(m);
+    const spots = new Map(); for (const list of lists) { const id = list[0].userData.id; if (!spots.has(id)) spots.set(id, { x: list[0].position.x, z: list[0].position.z, lists: [] }); spots.get(id).lists.push(list); }
+    const strips = new Map(), w = RAKE_W - 4, x0 = L.X(-1);
+    for (const c of spots.values()) { const b = Math.floor((c.x - x0) / w); if (!strips.has(b)) strips.set(b, []); strips.get(b).push(c); }
+    const put = (c, z) => { const dz = z - c.z; c.z = z; for (const list of c.lists) for (const m of list) m.position.z += dz; };
+    R.position.set((x0 + L.xEnd) / 2, 6, reach); R.rotation.set(0, 0, 0); R.visible = true;
+    for (const [, cs] of [...strips].sort((a, b) => b[0] - a[0])) {
+      if (skipLevel) { for (const c of cs) if (c.z > line - CHIP_R) put(c, line - CHIP_R - .6); continue; }
+      const xs = cs.map(c => c.x), cx = (Math.min(...xs) + Math.max(...xs)) / 2, z0 = Math.max(...cs.map(c => c.z)) + CHIP_R + .8;
+      const from = R.position.clone(), to = V(cx, 0, z0), over = Math.max(4, ...cs.map(c => c.lists.reduce((a, l) => a + l.length, 0) * H + 1.5));
+      await motion.tween(200, t => { const e = ease.inOut(t); R.position.lerpVectors(from, to, e); R.position.y = (1 - e) * from.y + over * Math.sin(Math.PI * Math.min(1, t * 1.15)); });
+      R.position.copy(to); audio.play('chip', { gain: .25, x: panX(to) });
+      const order = cs.sort((a, b) => b.z - a.z), starts = order.map(c => c.z), d = z0 - line;
+      await motion.tween(220 + d * 4, t => {
+        const zh = z0 - d * ease.inOut(t), face = zh - .55, done = []; R.position.z = zh;
+        order.forEach((c, i) => {
+          let z = Math.min(starts[i], face - CHIP_R);
+          for (const q of done) { const dx = Math.abs(q.x - c.x); if (dx < gap) z = Math.min(z, q.z - Math.sqrt(gap * gap - dx * dx)); }
+          put(c, z); done.push(c);
+        });
+      });
+      audio.play('stack', { gain: .3, x: panX(R.position) });
+      const up = R.position.clone(); await motion.tween(70, t => { R.position.y = up.y + t * 3; });
+    }
+    const from = R.position.clone(); await motion.tween(260, t => { R.position.lerpVectors(from, V(from.x, 6, reach), ease.inOut(t)); });
+    R.visible = false; S.requestRender();
+  }
+  // A payout in chips. Yours in the salon's values, largest at the bottom. Another player's in their colour, as many of
+  // their chips as it is worth, cut the way a croupier cuts them: stacks of twenty, then fives (four full stacks at most
+  // are drawn). Columns, bottom first.
+  function payChips(owner, amount) {
+    const out = [];
+    if (owner === 'you') { const v = breakDown(amount); for (let i = 0; i < v.length && out.length < 3; i += 20) out.push(v.slice(i, i + 20)); return out; }
+    const r = RIVALS.find(x => x.name === owner); let left = Math.round(amount / r.unit);
+    while (left >= 20 && out.length < 4) { out.push(Array(20).fill(r.color)); left -= 20; }
+    while (left > 0 && out.length < 8) { const c = Math.min(5, left); out.push(Array(c).fill(r.color)); left -= c; }
+    return out;
+  }
+  // The payout cut at the float and pushed out as one: lifted, carried low over the cloth (clearing the columns on its
+  // way) and set down at the players' edge in line with the bet, the click as it lands; its columns side by side.
+  async function payStack(owner, id, chipsCols, float, taken, j) {
+    const pk = `${owner}|${id}|pay`, list = []; list.cols = []; stacks.set(pk, list);
+    const from = float.clone().add(V((j % 3 - 1) * 4.2, 0, (Math.floor(j / 3) % 2) * 4.2));   // each from its own working stack in the float
+    await Promise.all(chipsCols.map((vals, c) => {
+      const col = vals.map((v, i) => { const m = S.chipMesh(v); m.userData = { owner, id, v }; list.push(m); m.position.set(from.x + c * (2 * CHIP_R + .3), H * (i + .5), from.z); return m; });
+      list.cols.push(col); return moveStack(col, payAt(id, taken), { ms: 520, lift: 1.5 });
+    }));
+    audio.play('payout', { x: panX(list[0].position) });
+    for (const m of list) S.chips.rest(m);
+  }
+  // La partage, done where the stake lies: the croupier takes the top half of the stack to the float. A stake that won't
+  // halve in whole chips is exchanged: taken in, and its half pushed back as one stack.
+  async function halve(k, stake, float) {
+    const [owner, id] = k.split('|'), list = stacks.get(k), a = S.anchor(id, slotOf(owner)); if (!list) return;
+    if (list.length % 2 === 0 && list.every(m => m.userData.v === list[0].userData.v)) {
+      const top = list.splice(list.length / 2); unseat(top); settleCol(id);
+      await moveStack(top, float, { ms: 360 }); for (const m of top) S.chips.drop(m);
+    } else {
+      stacks.delete(k); unseat(list); settleCol(id); await moveStack(list, float, { ms: 360 }); for (const m of list) S.chips.drop(m);
+      const back = owner === 'you' ? breakDown(stake / 2) : Array(Math.max(1, Math.floor(list.length / 2))).fill(RIVALS.find(x => x.name === owner).color);
+      const nl = back.map((v, i) => { const m = S.chipMesh(v); m.userData = { owner, id, v }; m.position.set(float.x, H * (i + .5), float.z); return m; }); stacks.set(k, nl);
+      const ground = (cols.get(id)?.length ?? 0) * H; nl.forEach(seat);
+      await moveStack(nl, a, { ms: 480, lift: 1.5, ground }); audio.play('payout', { x: panX(a) }); for (const m of nl) S.chips.rest(m);
+    }
+    tag(owner === 'you' ? 'La partage' : owner, `${fmt(stake / 2)} back`, a);
+  }
+  // Where a win is paid: pushed to the players' edge of the cloth (+z, the long side) in line with its bet, as dealers at
+  // North American tables push it to the player. Set beside the bet it sat on the next line or box and read as a bet of
+  // its own (a straight up's on the split line), and a column's ran off the layout. Each payout takes the nearest free
+  // place along the edge, a chip and a little apart from the others; a row further out when the edge is full.
+  function payAt(id, taken) {
+    const L = S.layout, a = S.anchor(id), gap = 2 * CHIP_R + .4, x0 = L.X(-1) + CHIP_R, x1 = L.xEnd - CHIP_R;
+    for (let row = 0; row < 3; row++) for (const reach of [gap, x1 - x0]) {   // along the first row (near its bet if it can) before a row further out
+      const z = L.zNear + 1.6 + CHIP_R + .5 + row * gap, free = x => taken.every(p => p.z !== z || Math.abs(p.x - x) > gap - .01);
+      for (let k = 0; Math.ceil(k / 2) * .5 <= reach; k++) { const x = Math.min(x1, Math.max(x0, a.x + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * .5)); if (free(x)) { const p = new S.THREE.Vector3(x, 0, z); taken.push(p); return p; } }
+    }
+    return a.clone();
   }
   function tag(name, text, at3) {
     const p = S.project(at3), t = document.createElement('div'); t.className = 'r-tag'; t.innerHTML = `<b></b><span></span>`; t.firstChild.textContent = name; t.lastChild.textContent = text;
@@ -426,7 +747,8 @@ export async function createRoulette(ctx) {
   const bigWin = r => r.straight || r.back >= r.staked * 10;
   // The result reads as the blackjack tag does: what the spin came to for you up front (+45, −15, Even), and under it
   // what the layout paid back against what was on it, la partage included. A spread of bets can pay something and
-  // still lose, so 'You win' is said only when you are up. It stays (with the dolly) until your next bet.
+  // still lose, so 'You win' is said only when you are up. It stays until your next bet, the number glowing softly on
+  // the layout; the dolly is lifted as the chips go home, as at a real table, before "Place your bets".
   function showWin(r, n) {
     const c = colorOf(n), net = r.net; winEl.className = `r-win ${net > 0 ? 'up' : net < 0 ? 'down' : 'even'} ${c}${net > 0 && bigWin(r) ? ' gild' : ''}`;
     winEl.querySelector('small').textContent = `${n} ${colorName(n)}`;
@@ -436,13 +758,18 @@ export async function createRoulette(ctx) {
     winEl.hidden = false; void winEl.offsetWidth; winEl.classList.add('show');   // a reflow, then the transition
     if (net) setTimeout(() => ui.morph(em, final), 140);   // the amount rolls up to the result
   }
-  function clearResult() { if (winEl.hidden) return; winEl.classList.remove('show'); setTimeout(() => { if (!winEl.classList.contains('show')) winEl.hidden = true; }, 380); if (mode === 'betting') { liftDolly(); } }
+  function clearResult() {
+    if (lastLit != null) { lastLit = null; if (!hovered && mode === 'betting') S.highlight([]); }
+    if (winEl.hidden) return; winEl.classList.remove('show'); setTimeout(() => { if (!winEl.classList.contains('show')) winEl.hidden = true; }, 380); if (mode === 'betting') { liftDolly(); }
+  }
 
   // ---- recent numbers ---------------------------------------------------------------------------------------------------------------
   function renderHistory(fresh = false) {
     const count = S.layout?.orient === 'port' ? 11 : 16;
     histEl.replaceChildren(...history.slice(0, count).map((n, i) => { const li = document.createElement('li'); li.className = colorOf(n); li.textContent = n; if (i === 0) li.classList.add('latest'); return li; }));
     if (fresh && histEl.firstChild) ui.pop(histEl.firstChild, { from: .2 });
+    S.setBoard(history);   // and the board by the wheel
+    reframe();   // the strip's room above the picture: the first number of a fresh table makes it appear (nothing when its height stands)
   }
 
   // ---- the racetrack and the statistics ------------------------------------------------------------------------------------------------
@@ -470,14 +797,14 @@ export async function createRoulette(ctx) {
     }).join('');
     svg.setAttribute('viewBox', `0 0 ${f1(g.w)} ${f1(g.h)}`); svg.style.setProperty('--fs', `${f1(g.rc * .8)}px`); svg.style.setProperty('--zfs', `${g.upright ? 15 : 16}px`);
     svg.innerHTML = `<path class="rt-band" d="${roundRect(g, -g.d)}"/><path class="rt-inner" d="${roundRect(g, g.d)}"/>${zones}${cells}`;
-    const nums = n => { const on = new Set(n); for (const e of raceSheet.querySelectorAll('.rt-num')) e.classList.toggle('lit', on.has(+e.dataset.n)); S.highlight(n, { level: .26 }); };
+    const nums = n => { const on = new Set(n); for (const e of raceSheet.querySelectorAll('.rt-num')) e.classList.toggle('lit', on.has(+e.dataset.n)); if (n.length) S.highlight(n, { level: .26 }); else restGlow(); };
     // Enter and Space press a number or a section moved to with the keyboard (the salon's key handler leaves them to it);
     // one that was clicked has already had the key taken as Spin, which marks it handled
     const pressed = (e, go) => { if ((e.key === 'Enter' || e.key === ' ') && !e.defaultPrevented) { e.preventDefault(); if (!e.repeat) go(); return true; } return false; };
     const label = () => { for (const e of raceSheet.querySelectorAll('.rt-num')) e.setAttribute('aria-label', `${e.dataset.n} and ${nbK} neighbours each side: ${2 * nbK + 1} chips`); };
     label();
     for (const e of raceSheet.querySelectorAll('.rt-num')) {
-      const n = +e.dataset.n, bet = () => { placeOn(neighbours(n, nbK).map(k => [`n${k}`, 1]), { name: `${n} and ${nbK} neighbours` }); nums(neighbours(n, nbK)); };
+      const n = +e.dataset.n, bet = () => { placeOn(neighbours(n, nbK).map(k => [`n${k}`, 1]), { name: `${n} and ${nbK} neighbours`, call: true }); nums(neighbours(n, nbK)); };
       e.addEventListener('pointerenter', () => nums(neighbours(n, nbK))); e.addEventListener('pointerleave', () => nums([]));
       e.addEventListener('focus', () => nums(neighbours(n, nbK))); e.addEventListener('blur', () => nums([]));
       e.addEventListener('click', bet);
@@ -490,7 +817,7 @@ export async function createRoulette(ctx) {
       });
     }
     for (const e of raceSheet.querySelectorAll('.rt-zone')) {
-      const k = e.dataset.call, bet = () => { placeOn(CALLS[k].chips, { name: CALLS[k].name }); nums(callNumbers(k)); };
+      const k = e.dataset.call, bet = () => { placeOn(CALLS[k].chips, { name: CALLS[k].name, call: true }); nums(callNumbers(k)); };
       e.addEventListener('pointerenter', () => nums(callNumbers(k))); e.addEventListener('pointerleave', () => nums([]));
       e.addEventListener('focus', () => nums(callNumbers(k))); e.addEventListener('blur', () => nums([]));
       e.addEventListener('click', bet); e.addEventListener('keydown', ev => pressed(ev, bet));
@@ -504,16 +831,17 @@ export async function createRoulette(ctx) {
   function buildStats() {
     const N = Math.min(history.length, 100), st = stats(history, 100);
     const chip = x => `<button class="st-n ${colorOf(x.n)}" data-n="${x.n}" aria-label="Bet ${x.n} straight up">${x.n}<small>${x.c}×</small></button>`;
+    const z = [st.zero, 'green', '0'];   // every bar has the zero's share in it, as the wheel does: each sums to 100%
     const bar = (label, parts) => `<div class="st-bar"><span>${label}</span><div>${parts.map(([v, cls, t]) => `<i class="${cls}" style="flex:${Math.max(v, .5)}"><em>${t} ${v}%</em></i>`).join('')}</div></div>`;
     statsSheet.innerHTML = `<header><h3>Statistics <small>${N ? `last ${N} spin${N > 1 ? 's' : ''}` : 'no spins yet'}</small></h3>${CLOSE}</header><p class="r-say" aria-hidden="true" hidden></p>
       ${N ? `<div class="st-hc"><div><h4>Hot</h4><div class="st-row">${st.hot.map(chip).join('')}</div></div><div><h4>Cold</h4><div class="st-row">${st.cold.map(chip).join('')}</div></div></div>
       ${bar('Colour', [[st.red, 'red', 'Red'], [st.zero, 'green', '0'], [st.black, 'black', 'Black']])}
-      ${bar('Odd · Even', [[st.odd, 'a', 'Odd'], [st.even, 'b', 'Even']])}
-      ${bar('Low · High', [[st.low, 'a', '1–18'], [st.high, 'b', '19–36']])}
-      ${bar('Dozens', st.dozens.map((v, i) => [v, ['a', 'b', 'c'][i], ['1st', '2nd', '3rd'][i]]))}
-      ${bar('Columns', st.columns.map((v, i) => [v, ['a', 'b', 'c'][i], `Col ${i + 1}`]))}
+      ${bar('Odd · Even', [[st.odd, 'a', 'Odd'], z, [st.even, 'b', 'Even']])}
+      ${bar('Low · High', [[st.low, 'a', '1–18'], z, [st.high, 'b', '19–36']])}
+      ${bar('Dozens', [z, ...st.dozens.map((v, i) => [v, ['a', 'b', 'c'][i], ['1st', '2nd', '3rd'][i]])])}
+      ${bar('Columns', [z, ...st.columns.map((v, i) => [v, ['a', 'b', 'c'][i], `Col ${i + 1}`])])}
       <p class="st-note">Every spin is independent: the wheel has no memory. Tap a number to bet it.</p>` : '<p class="st-note">Numbers you see come out will be counted here.</p>'}`;
-    for (const b of statsSheet.querySelectorAll('.st-n')) { b.onclick = () => placeOn([[`n${b.dataset.n}`, 1]]); b.onpointerenter = () => S.highlight([+b.dataset.n], { level: .3 }); b.onpointerleave = () => S.highlight([]); }
+    for (const b of statsSheet.querySelectorAll('.st-n')) { b.onclick = () => placeOn([[`n${b.dataset.n}`, 1]]); b.onpointerenter = () => S.highlight([+b.dataset.n], { level: .3 }); b.onpointerleave = restGlow; }
     statsSheet.querySelector('.r-close').onclick = closeSheets;
   }
   // `focus`: opened from the keyboard, so the keyboard goes into the sheet (and comes back to its button on close)
@@ -527,29 +855,30 @@ export async function createRoulette(ctx) {
   }
   function closeSheets() {
     if (!sheetOpen) return; const back = raceSheet.contains(document.activeElement) ? $('#rRace') : statsSheet.contains(document.activeElement) ? $('#rStats') : null;
-    raceSheet.hidden = statsSheet.hidden = true; sheetOpen = null; uiSound('close'); S.highlight([]); $('#rRace').setAttribute('aria-expanded', false); $('#rStats').setAttribute('aria-expanded', false);
+    raceSheet.hidden = statsSheet.hidden = true; sheetOpen = null; uiSound('close'); restGlow(); $('#rRace').setAttribute('aria-expanded', false); $('#rStats').setAttribute('aria-expanded', false);
     back?.focus();
   }
   $('#rRace').onclick = e => openSheet('race', { focus: e.detail === 0 }); $('#rStats').onclick = e => openSheet('stats', { focus: e.detail === 0 });   // (a click from the keyboard has no pointer count)
 
   // ---- the controls and the hint -----------------------------------------------------------------------------------------------------
   function refresh() {
-    const betting = mode === 'betting', total = table.total, bal = held ?? wallet.balance, out = broke();
-    const down = betting || mode === 'closing' ? total : table.staked ?? 0;   // in play: the layout, then the stake once bets close
+    const betting = mode === 'betting', live = open(), total = table.total, bal = held ?? wallet.balance, out = broke();
+    const down = live ? total : table.staked ?? 0;   // in play: the layout, then the stake once bets close
     $('#rUndo').disabled = !betting || !table.history.length; $('#rClear').disabled = !betting || !total;
     rebetSlot($('#rRebet'), $('#rX2'), !!down);
-    $('#rRebet').disabled = !betting || !table.canRebet; $('#rX2').disabled = !betting || !total || total * 2 > bal;
+    $('#rRebet').disabled = !betting || !table.canRebet; $('#rX2').disabled = !live || !total || total * 2 > bal;
     $('#rSpin').disabled = !betting || (!total && !table.canRebet && !out) || total > bal;
     goLabel($('#rSpin'), 'Spin', { out, rebet: betting && !total && table.canRebet });   // (once the ball goes the layout is empty: its bets closed)
-    rack.fit(bal - (betting ? total : 0));
-    for (const b of dock.querySelectorAll('.r-tool')) b.disabled = !betting;
+    rack.fit(bal - (live ? total : 0));
+    for (const b of dock.querySelectorAll('.r-tool')) b.disabled = !live;
     if (!stage.hidden) ctx.showInPlay(down);
     if (betting && active) {
       if (out) hint(`You are out of chips. Tap Reset for a fresh ${fmt(wallet.START)}.`);
       else if (!total) hint(table.canRebet ? `Place your bets, or rebet ${fmt(table.lastTotal)}.` : 'Choose a chip, then tap the layout.');
       else hint(`Bet ${fmt(total)}. Spin when ready.`);
-    } else if (mode === 'spinning') hint('Tap to hurry the ball.');
-    else if (mode === 'paying' || mode === 'closing') hint('');
+    } else if (mode === 'running') hint('Bets are open until “No more bets”.');
+    else if (mode === 'spinning') hint(running ? 'Tap to hurry the ball.' : '');   // (not over a ball at rest)
+    else if (mode === 'paying') hint('');
   }
 
   // ---- framing -------------------------------------------------------------------------------------------------------------------
@@ -561,7 +890,7 @@ export async function createRoulette(ctx) {
     stage.style.setProperty('--top-h', `${bar}px`);
     if (k === framed) return; framed = k; const was = S.layout?.orient; S.frame(w, h, top);
     if (was !== S.layout.orient) renderHistory();
-    if (bubble.dataset.on) placeBubble();
+    if (bubble.dataset.on) placeBubble(true);
   }
   new ResizeObserver(() => requestAnimationFrame(() => { reframe(); if (sheetOpen === 'race' && raceKey() !== raceFit) buildRace(); })).observe(stage);   // the track is laid out for its room: a turned phone gets it again
 
@@ -571,7 +900,7 @@ export async function createRoulette(ctx) {
     const k = e.key.toLowerCase(), go = k === ' ' || k === 'enter';
     if (go && e.target.matches?.('.r-sheet:not([hidden]) :focus-visible')) return false;   // the keyboard is in a sheet (the track opened with T, the numbers with S, or its Close): the press acts there
     if (k === 'escape' && sheetOpen) { closeSheets(); return true; }
-    if (mode !== 'betting') { if (go) { e.preventDefault(); skip(); return true; } return false; }   // held, it keeps hurrying the ball
+    if (mode !== 'betting' && (go || mode !== 'running')) { if (go) { e.preventDefault(); skip(); return true; } return false; }   // held, it keeps hurrying the ball (while bets are open the other keys still bet)
     if (e.repeat) { if (go) e.preventDefault(); return go; }   // a held key acts once: no rebet-and-spin the moment betting reopens
     if (go) { e.preventDefault(); actions.spin(); }
     else if (k === 't') openSheet('race', { focus: true });
@@ -601,7 +930,7 @@ export async function createRoulette(ctx) {
       ctx.title('EUROPEAN ROULETTE', 'Roulette'); ctx.showBalance(wallet.balance, false);
       // chips spent at another table since you left: the layout can't stay bigger than your balance
       if (mode === 'betting' && table.total > wallet.balance) { table.clear(); serial(syncYours); hint('Your bets were cleared: your balance changed at another table.'); }
-      ctx.showInPlay(table.total); refresh();
+      ctx.showInPlay(table.total); markRivals(); refresh();
     },
     hide() { stage.hidden = dock.hidden = true; setIdle(false); S.pause(true); active = false; closeSheets(); hover(null); for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
     showcase: { start(still) { S.showcase.start(still); framed = ''; reframe(); S.requestRender(); }, stop: ms => S.showcase.stop(ms) },
@@ -611,6 +940,7 @@ export async function createRoulette(ctx) {
     toLobby() { api.leave(); api.showcase.start(settings.reduced); },   // the lobby opens over the wheel: it turns slowly behind the menu
     round: 'spin',
     players: () => rivalsHere().map(r => r.name),
+    setPlayers: () => markRivals(),   // (the others join at the next round; their markers show at once)
     callBets: () => say('place-bets', { prio: 3 }),   // hear the voice level you set
     setReduced(on) { motion.reduced = on; setIdle(idleWant); },   // the drift stops or resumes only where it belongs (never mid-spin)
     setFast(on) { motion.slow = on ? .62 : 1; },
@@ -628,7 +958,7 @@ export async function createRoulette(ctx) {
 // least 32 px a number on a phone): on a phone held upright the loop stands on end. Each section is bounded by its own
 // numbers: a divider runs from the gap after the last number of one section across to the same gap on the other side,
 // as on the felt, and no section reaches into the ring of numbers.
-const TRACK_ZONES = [['zero', 'Zéro'], ['voisins', 'Voisins'], ['orphelins', 'Orphelins'], ['tiers', 'Tiers']];
+const TRACK_ZONES = [['zero', 'Zero'], ['voisins', 'Voisins'], ['orphelins', 'Orphelins'], ['tiers', 'Tiers']];
 const zoneNumbers = k => k === 'voisins' ? SECTIONS.voisins.filter(n => !SECTIONS.zero.includes(n)) : SECTIONS[k];   // Jeu zéro is the voisins' own heart
 // the stretches of the loop a set of numbers takes, counted in places from zero: [from, to], each from the gap before
 // its first number to the gap after its last

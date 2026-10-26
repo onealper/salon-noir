@@ -38,8 +38,9 @@ One chip balance follows you from table to table. A hand you leave unfinished (a
 - **Dealers with personalities.** James, Marco, Elena and Sofia each deal at their own pace and speak their calls (Marco with James's voice, Elena with Sofia's)
 - **AI players** at the table with their own bankrolls and styles, from basic strategy to gut feel
 - **Roulette ball physics** based on published research, simulated rather than animated
+- **A roulette table that plays like a real one:** bets stay open while the ball runs until the croupier calls "No more bets", the croupier rakes the losing chips in and cuts the winnings, your covered numbers light up on the wheel, and a straight-up win gets a camera that rides behind the ball
 - **Casino-grade sound:** spatial card and chip sounds, ducking music, a room you can hear
-- **Phone-first touches:** haptics, graphics presets, battery saver, reduced motion, and a Flashing effects setting (Full, Soft, Off) for the Lightning table
+- **Phone-first touches:** haptics, graphics presets, battery saver, reduced motion, and a Flashing effects setting (Full, Soft, Off) for the Lightning table and the roulette wheel's light
 - **Last hands:** every round at every table, with its cards, side bets and net, and this visit's running total
 - **Rules from real filings:** blackjack and side bets after Nevada and New Jersey, roulette after New Jersey, Singapore and Monte-Carlo
 

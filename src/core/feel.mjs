@@ -21,6 +21,7 @@ const PATTERNS = {
   win: 'success',                                      // a win
   big: [{ duration: 30, intensity: .6 }, { delay: 70, duration: 30, intensity: .8 }, { delay: 70, duration: 60, intensity: 1 }],   // blackjack, a big win
   refuse: 'error',                                     // a bet the table won't take
+  knock: [{ duration: 14, intensity: .45 }],             // the roulette ball striking a canoe
 };
 const GOLD = ['#e2c483', '#c9a45c', '#f6e7b8', '#8d7038', '#ece4d2'];
 

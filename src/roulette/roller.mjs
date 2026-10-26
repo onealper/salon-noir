@@ -1,11 +1,13 @@
 // The ball rolling round the wheel, made live rather than played from a recording: recordings (and generated
 // takes) of a ball on a track carry the grit of the track, every speck a click, while the sound wanted here is
-// a ball rolling on wood: a round, hollow roll with the low ring of a wooden bowl under it and nothing sharp
-// on top. Built from soft noise ringing a handful of wood modes, it speeds up and brightens with the
-// simulated ball and swells gently once a lap as the ball passes the near side.
+// a ball rolling on a studio wheel's polished stone track: a smooth, round whirr, a little bright, with the low
+// ring of the lacquered bowl and the table under it and nothing sharp on top. Built from soft noise ringing a
+// handful of the bowl's modes, it speeds up and brightens with the simulated ball, swells gently once a lap as
+// the ball passes the side of the bowl nearest the camera, and sits left or right where the ball is.
 //
 //   const roll = createRoller(audioContext, destinationNode)
-//   roll.update({ speed, theta, phase }, when)   // each frame; speed in cm/s, theta in radians, phase 0–3
+//   roll.update({ speed, theta, phase, near, pan }, when)   // each frame; speed in cm/s, theta and near (the
+//                                                           // camera's bearing) in radians, phase 0–3, pan -1…1
 //   roll.stop(fade)
 // The two loops are made once per audio context (about a million samples: a frame or more of work on a
 // phone, just as the ball is launched); each spin starts them at a random point, so no two sound alike.
@@ -36,18 +38,20 @@ export function createRoller(ctx, dest) {
   // the grain plays faster the faster the ball runs, like the ball's surface turning over on the wood
   const grain = ctx.createBufferSource(); grain.buffer = B.grain; grain.loop = true;
   const grainDepth = gain(0);
-  // the source: noise rounded off at the top, a ball rolling on wood has no hiss in it
-  const soft = node('lowpass', 1200, .5), soft2 = node('lowpass', 1600, .5);
+  // the source: noise rounded off at the top, a rolling ball has no hiss in it
+  const soft = node('lowpass', 1500, .5), soft2 = node('lowpass', 2000, .5);
   const tex = gain(1);                                                     // the grain rides on this
-  // the wood: a hollow bowl rings at a handful of low modes, plus the deep rumble of the table under it
-  const modes = [[150, 6, .3], [255, 7, .55], [410, 8, .7], [640, 8, .6], [980, 7, .4], [1450, 2, .12]].map(([f, q, g]) => { const n = node('bandpass', f, q), G = gain(g); return [n, G]; });
+  // the bowl rings at a handful of modes (a stone track on a lacquered bowl: brighter and less hollow than the old
+  // wooden wheels), plus the deep rumble of the table under it
+  const modes = [[190, 5, .22], [330, 6, .45], [560, 7, .65], [880, 8, .6], [1350, 7, .45], [2100, 3, .18]].map(([f, q, g]) => { const n = node('bandpass', f, q), G = gain(g); return [n, G]; });
   const rumble = node('lowpass', 200, .9), rumbleG = gain(.2);
   const bowl = gain(1), lap = gain(1), out = gain(0);
-  const top = node('lowpass', 2600, .6);                                   // keep it round: nothing sharp above
+  const top = node('lowpass', 3000, .6);                                   // keep it round: nothing sharp above
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;    // left or right, where the ball is
   src.connect(soft).connect(soft2).connect(tex);
   for (const [n, G] of modes) tex.connect(n).connect(G).connect(bowl);
   tex.connect(rumble).connect(rumbleG).connect(bowl);
-  bowl.connect(lap).connect(top).connect(out).connect(dest);
+  bowl.connect(lap).connect(top).connect(out); (pan ? out.connect(pan) : out).connect(dest);
   grain.connect(grainDepth).connect(tex.gain);
   src.start(0, Math.random() * 2); grain.start(0, Math.random() * 4);
 
@@ -55,11 +59,11 @@ export function createRoller(ctx, dest) {
   const to = (p, v, t, tc = .05) => p.setTargetAtTime(v, t, tc);
   let stopped = false;
   return {
-    update({ speed = 0, theta = 0, phase = 0, level = 1 }, when = ctx.currentTime) {
+    update({ speed = 0, theta = 0, phase = 0, level = 1, near = 0, pan: p = 0 }, when = ctx.currentTime) {
       if (stopped) return;
       const t = when, s = Math.max(0, Math.min(1.15, speed / 380));
       if (phase === 0) {                       // round the rim: a full wooden roll, a touch brighter and quicker when fast
-        to(soft.frequency, 700 + 900 * s, t); to(top.frequency, 1600 + 1400 * s, t);
+        to(soft.frequency, 900 + 1100 * s, t); to(top.frequency, 1900 + 1700 * s, t);
         to(grain.playbackRate, .6 + 1.6 * s, t, .1); to(grainDepth.gain, .14, t, .1); to(rumbleG.gain, .18 + .1 * s, t);
         to(out.gain, level * K * (.5 + 1.1 * s), t, .08);
       } else if (phase === 1) {                // down the cone: deeper, more of the bowl and the table
@@ -69,14 +73,15 @@ export function createRoller(ctx, dest) {
       } else if (phase === 2) {                // skittering on the wheelhead: the clicks carry it, the roll fades under
         to(out.gain, level * K * Math.min(.35, 1.2 * s), t, .12);
       } else to(out.gain, 0, t, .05);
-      // once a lap the ball passes the near side of the bowl: a soft swell
-      to(lap.gain, 1 + .14 * Math.cos(theta), t, .03);
+      // once a lap the ball passes the side of the bowl nearest the camera: a soft swell
+      to(lap.gain, 1 + .14 * Math.cos(theta - near), t, .03);
+      if (pan) to(pan.pan, Math.max(-1, Math.min(1, p)), t, .03);
     },
     stop(f = .25) {
       if (stopped) return; stopped = true; const t = ctx.currentTime;
       out.gain.cancelScheduledValues(t); out.gain.setTargetAtTime(0, t, f / 3);
       try { src.stop(t + f * 3); grain.stop(t + f * 3); } catch { /* already stopped */ }
-      setTimeout(() => out.disconnect(), f * 3000 + 50);   // the spent filters leave the table bus
+      setTimeout(() => { out.disconnect(); pan?.disconnect(); }, f * 3000 + 50);   // the spent filters leave the table bus
     },
   };
 }

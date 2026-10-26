@@ -48,7 +48,7 @@ export class TableAudio {
     this.bus.table = this.ctx.createGain(); this.bus.table.connect(this.dry); this.bus.table.connect(this.wet);
     for (const b of ['voice', 'room', 'music', 'ui']) { this.bus[b] = this.ctx.createGain(); this.bus[b].connect(b === 'voice' || b === 'ui' ? comp : this.master); }   // menus stay dry, out of the room
     this.applyLevels(0);
-    this.kit = new Map(); this.voiceNow = null; this.loops = {};
+    this.kit = new Map(); this.raw = new Map(); this.voiceNow = null; this.loops = {};
     this.ready = Promise.all(CLIPS.map(name => fetch(new URL(`./sounds/${name}.wav`, import.meta.url)).then(r => r.arrayBuffer()).then(b => this.decode(b)).then(buf => this.buffers.set(name, buf)).catch(() => null)));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.ctx.suspend(); this.musicEl?.pause(); }
@@ -95,16 +95,24 @@ export class TableAudio {
   setLevels(l) { Object.assign(this.levels, l); this.applyLevels(.05); }
   target(b) { const lv = b === 'room' || b === 'ui' ? this.levels.table : this.levels[b]; return BUS[b] * lv * (this.ducked && (b === 'room' || b === 'music') ? DUCK : 1) * (this.enabled || b === 'table' || b === 'voice' || b === 'ui' ? 1 : 0); }
   applyLevels(tc = .05) { if (!this.bus) return; const t = this.ctx.currentTime; for (const b of Object.keys(this.bus)) this.bus[b].gain.setTargetAtTime(this.target(b), t, tc); }
-  duck(on) { if (this.ducked === on) return; this.ducked = on; for (const b of ['room', 'music']) this.bus[b].gain.setTargetAtTime(this.target(b), this.ctx.currentTime, on ? .08 : .45); }
+  duck(on) { if (!on && this.holds) return; if (this.ducked === on || !this.bus) return; this.ducked = on; for (const b of ['room', 'music']) this.bus[b].gain.setTargetAtTime(this.target(b), this.ctx.currentTime, on ? .08 : .45); }
+  // a held duck, over the croupier's lines and between them (the ball's last rounds and its rattle, at roulette): the
+  // room and the music stay down until every hold is let go and no one is speaking
+  hold(on) { this.holds = Math.max(0, (this.holds ?? 0) + (on ? 1 : -1)); if (on) this.duck(true); else if (!this.holds && !this.voiceNow) this.duck(false); }
   // ---- kit clips: fetched and decoded once, on first use (or ahead, with preload) ----------------
   clip(path) {
     if (!this.available) return Promise.resolve(null);
     // the room beds (room-*) loop for the whole visit: their MP3s stop at 16 kHz, so at 32 kHz they keep every sound in a
     // third less memory (the casino bed: 7 MB, not 10)
-    if (!this.kit.has(path)) this.kit.set(path, fetch(new URL(`./sounds/kit/${path}.mp3`, import.meta.url)).then(r => r.ok ? r.arrayBuffer() : null).then(b => b && this.decode(b, path.startsWith('room-') ? 32000 : 0)).catch(() => null));
+    if (!this.kit.has(path)) { const raw = this.raw.get(path); this.kit.set(path, (raw ? raw.then(b => b ? b.slice(0) : this.bytes(path)) : this.bytes(path)).then(b => b && this.decode(b, path.startsWith('room-') ? 32000 : 0)).catch(() => null)); }   // (decoding takes the bytes it is given: a kept copy stays whole)
     return this.kit.get(path);
   }
+  bytes(path) { return fetch(new URL(`./sounds/kit/${path}.mp3`, import.meta.url)).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null); }
   preload(paths) { for (const p of paths) void this.clip(p); }
+  // A set of clips of which one plays now and then (the roulette numbers: half a megabyte as MP3, ten decoded): the
+  // bytes are fetched ahead and kept, each is decoded when it is wanted, and `forget` lets the decoded sound go again.
+  prefetch(paths) { if (this.available) for (const p of paths) if (!this.raw.has(p)) this.raw.set(p, this.bytes(p)); }
+  forget(path) { if (this.raw?.has(path)) this.kit.delete(path); }
   get live() { return this.enabled && this.available && !document.hidden && this.ctx.state === 'running'; }
   // A one-off kit sound on a bus: a sting, a menu tick, the table cheering.
   async cue(path, { bus = 'table', gain = 1, rate = 1, x = 0 } = {}) {
@@ -115,11 +123,13 @@ export class TableAudio {
     src.connect(g); out.connect(this.bus[bus] ?? this.bus.table); src.start(); return src;
   }
   // The dealer speaks one line at a time. A more important line cuts in; a lesser one waits its
-  // turn only if it is still worth saying (`fresh` ms), otherwise it is dropped.
-  async say(path, { prio = 1, gain = 1, fresh = 1200 } = {}) {
+  // turn only if it is still worth saying (`fresh` ms), otherwise it is dropped. `late`: dropped too if its clip
+  // takes longer than this to load (a call the picture won't wait for). `onStart` runs as the line starts; the
+  // promise resolves when it ends, or at once when it isn't said.
+  async say(path, { prio = 1, gain = 1, fresh = 1200, late = Infinity, onStart } = {}) {
     if (!this.live) return;
     const asked = performance.now(), buf = await this.clip(path);
-    if (!buf || !this.live) return;
+    if (!buf || !this.live || performance.now() - asked > late) return;
     const cur = this.voiceNow;
     if (cur && !cur.ended) {
       if (cur.prio > prio) return;
@@ -129,7 +139,7 @@ export class TableAudio {
     const src = this.ctx.createBufferSource(); src.buffer = buf;
     const g = this.ctx.createGain(); g.gain.value = gain; src.connect(g).connect(this.bus.voice);
     const v = { src, g, prio, ended: false }; v.done = new Promise(r => src.onended = () => { v.ended = true; if (this.voiceNow === v) { this.voiceNow = null; this.duck(false); } r(); });
-    this.voiceNow = v; this.duck(true); src.start(); return v.done;
+    this.voiceNow = v; this.duck(true); src.start(); onStart?.(); return v.done;
   }
   // The room: a looped bed of the casino around you, faded in and out.
   async ambience(path) {

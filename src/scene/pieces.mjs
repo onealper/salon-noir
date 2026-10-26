@@ -46,6 +46,29 @@ export function createChip(value) {
   const m = new THREE.Mesh(chipGeometry(), chipMaterials(value)); m.castShadow = m.receiveShadow = true; m.userData.value = value; return m;
 }
 
+// A chip set down from a hand, at either table: it decelerates across the felt on a gravity arc (its apex `top`, high
+// enough to clear what stands in the way), lands flat (`onLand`, for the click) and settles with one small bounce and
+// a fading wobble. Returns the update for Motion.tween; `finish()` puts it exactly in place at the end.
+export function chipToss(c, start, to, { top = Math.max(start.y, to.y) + 3.4, land = .76, onLand = null } = {}) {
+  const spin0 = Math.random() * Math.PI * 2, spin = (Math.random() - .5) * 1.4, a = Math.random() * Math.PI * 2, tx = Math.sin(a), tz = Math.cos(a);
+  c.rotation.set(0, spin0, 0); c.position.copy(start);
+  let landed = false;
+  const update = t => {
+    if (t < land) {
+      const u = t / land, e = 1 - (1 - u) ** 2.4, w = 1 - u;
+      c.position.set(start.x + (to.x - start.x) * e, w * w * start.y + 2 * w * u * top + u * u * to.y, start.z + (to.z - start.z) * e);
+      c.rotation.set(tx * .42 * w, spin0 + spin * e, tz * .42 * w);
+    } else {
+      if (!landed) { landed = true; onLand?.(); }
+      const v = (t - land) / (1 - land), damp = (1 - v) ** 2, wob = Math.cos(v * Math.PI * 3) * .07 * damp;
+      c.position.set(to.x, to.y + Math.sin(v * Math.PI) * .22 * (1 - v), to.z);
+      c.rotation.set(tx * wob, spin0 + spin, tz * wob);
+    }
+  };
+  update.finish = () => { c.position.copy(to); c.rotation.set(0, spin0 + spin, 0); if (!landed) { landed = true; onLand?.(); } };
+  return update;
+}
+
 // A free-bet marker: a slightly smaller, thicker brass-yellow disc that reads FREE BET.
 let markerMats;
 export function createMarker() {

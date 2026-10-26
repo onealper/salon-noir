@@ -39,6 +39,7 @@ const settings = {
   flash: ['full', 'soft', 'off'].includes(store.get('flash')) ? store.get('flash') : matchMedia('(prefers-reduced-motion: reduce)').matches ? 'soft' : 'full',
   haptics: store.get('haptics', true), sides: store.get('sides', true), fast: store.get('fast', false), gfx: store.get('gfx', 'auto'), dealer: store.get('dealer', 'rotate'),
   tray: store.get('tray', !matchMedia('(pointer: coarse)').matches), players: store.get('players', 4),
+  replays: ['mine', 'all', 'off'].includes(store.get('replays')) ? store.get('replays') : 'mine',   // roulette's slow-motion replays
   mode: MODES[store.get('mode', 'classic')] ? store.get('mode', 'classic') : 'classic',
   mix: { table: 1, voice: 1, music: .7, ...store.get('mix', {}) },
 };
@@ -113,6 +114,7 @@ let hapticsReady = false;   // a tap when you switch them on, not when the page 
 bindToggle('#optHaptics', 'haptics', on => { if (on && hapticsReady) feel.tap('press'); }); hapticsReady = true;
 bindToggle('#optReduced', 'reduced', on => { each(r => r.setReduced(on)); ui.setReduced(on); kit.setReduced(on); document.body.classList.toggle('reduced', on); });
 // Flashing effects: full, soft or off (the Lightning table's strikes; see blackjack/lightning-ui.mjs)
+const replaysSel = $('#optReplays'); replaysSel.value = settings.replays; replaysSel.onchange = () => { uiSound('toggle'); settings.replays = replaysSel.value; store.set('replays', settings.replays); };
 const flashSel = $('#optFlash'); flashSel.value = settings.flash; document.body.dataset.flash = settings.flash;
 flashSel.onchange = () => { uiSound('toggle'); settings.flash = flashSel.value; store.set('flash', settings.flash); document.body.dataset.flash = settings.flash; };
 const gfxSel = $('#optGfx'); gfxSel.value = settings.gfx;
@@ -124,7 +126,7 @@ bindToggle('#optFast', 'fast', on => each(r => r.setFast(on)));
 // (once it is built; before that, the wheel's).
 const playersSel = $('#optPlayers'); playersSel.value = String(settings.players);
 const playersNote = () => { const names = (rooms.blackjack ?? rooms.roulette)?.players() ?? []; $('#playersNote').textContent = names.length ? names.join(', ') : 'A private table'; };
-playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); rooms.blackjack?.setPlayers(); playersNote(); };
+playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); rooms.blackjack?.setPlayers(); rooms.roulette?.setPlayers(); playersNote(); };
 $('#settings').addEventListener('click', playersNote);
 $('#settings').addEventListener('click', () => renderBook());   // Last hands, drawn fresh as the sheet opens
 // Open the sheet at one of its sections (the side-bet tray's (i) opens it at the paytables).

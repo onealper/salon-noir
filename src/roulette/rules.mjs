@@ -72,7 +72,7 @@ export const CALLS = {
   voisins: { name: 'Voisins du zéro', short: 'Voisins', chips: [['tr0-2-3', 2], ['sp4-7', 1], ['sp12-15', 1], ['sp18-21', 1], ['sp19-22', 1], ['sp32-35', 1], ['co25', 2]] },
   tiers: { name: 'Tiers du cylindre', short: 'Tiers', chips: [['sp5-8', 1], ['sp10-11', 1], ['sp13-16', 1], ['sp23-24', 1], ['sp27-30', 1], ['sp33-36', 1]] },
   orphelins: { name: 'Orphelins', short: 'Orphelins', chips: [['n1', 1], ['sp6-9', 1], ['sp14-17', 1], ['sp17-20', 1], ['sp31-34', 1]] },
-  zero: { name: 'Jeu zéro', short: 'Zéro', chips: [['sp0-3', 1], ['sp12-15', 1], ['sp32-35', 1], ['n26', 1]] },
+  zero: { name: 'Jeu zéro', short: 'Zero', chips: [['sp0-3', 1], ['sp12-15', 1], ['sp32-35', 1], ['n26', 1]] },
 };
 // Numbers a call bet covers (for highlighting).
 export const callNumbers = key => [...new Set(CALLS[key].chips.flatMap(([id]) => SPOTS.get(id).nums))].sort((a, b) => a - b);

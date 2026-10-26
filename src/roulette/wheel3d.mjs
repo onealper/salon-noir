@@ -1,11 +1,12 @@
 // The wheel, modelled on the live-studio wheels (a TCS John Huxley Saturn, as filmed for bet365): an 83 cm bowl in
 // piano-black lacquer, a wide glassy ball track washed by a ring light hidden under the rim (warm gold here, where
-// bet365's glows green), eight small chrome ball stops, and the wheelhead in the proportions measured off that film:
+// bet365's glows green), eight chrome canoes (four across the ball's path, four along it), and the wheelhead in the
+// proportions measured off that film:
 // a wide number band with the numbers standing outward, long coloured pockets with chrome frets, a dark glossy cone
 // and a squat black turret with the house mark in its top.
 // Units are centimetres; y = 0 is the rim of the bowl. Angles follow the simulation (physics.mjs): a
 // point at angle a sits at (r cos a, -r sin a), and pocket i is i pitches clockwise of zero.
-import { GEO } from './physics.mjs';
+import { GEO, TRACK } from './physics.mjs';
 import { WHEEL, PITCH, POCKETS, colorOf } from './rules.mjs';
 
 export const polar = (r, a, y = 0) => [r * Math.cos(a), y, -r * Math.sin(a)];
@@ -23,11 +24,12 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
   const lathe = (pts, segs = 160) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
 
   // ---- the bowl: piano-black lacquer from the skirt over the rim and down the stator cone ------------------
-  const rim = new THREE.Mesh(lathe([[40.4, -1.4], [40.9, .35], [41.6, .8], [43.2, .9], [44.6, .55], [45.3, -.4], [45.6, -3], [45.6, -15]]), lacquerM('#070707', .16));
+  const W = GEO.wallR, WY = GEO.wallY, R = GEO.rimR;   // the wall's foot, where the ball rides; the bowl's outer edge
+  const rim = new THREE.Mesh(lathe([[W, WY], [W + .3, WY + 1.35], [W + .55, .45], [W + .85, .82], [R - .2, .75], [R, .3], [R, -3], [R, -15]]), lacquerM('#070707', .16));
   rim.material.side = THREE.DoubleSide; rim.receiveShadow = rim.castShadow = true; wheel.add(rim);
-  { const inlay = new THREE.Mesh(new THREE.TorusGeometry(43.3, .09, 6, 200), brass); inlay.rotation.x = Math.PI / 2; inlay.position.y = .93; wheel.add(inlay); }
-  // the ball track: a wide, glassy black running surface
-  const trackGeo = lathe([[35.6, GEO.coneY0], [37.6, -2.5], [39.3, -1.95], [40.1, -1.6], [40.4, -1.4]]);
+  { const inlay = new THREE.Mesh(new THREE.TorusGeometry(W + 1, .09, 6, 200), brass); inlay.rotation.x = Math.PI / 2; inlay.position.y = .86; wheel.add(inlay); }
+  // the ball track: a wide, glassy black running surface, its flare curving up into the wall (the simulation's own profile)
+  const trackGeo = lathe(TRACK.filter((_, i) => i % 3 === 0 || i === TRACK.length - 1));
   const track = new THREE.Mesh(trackGeo, lacquerM('#0a0a0a', .1)); track.material.side = THREE.DoubleSide; track.receiveShadow = true; wheel.add(track);
   // the stator cone, the same lacquer, down to the wheelhead
   const coneGeo = lathe([[GEO.coneR1 - .2, GEO.coneY1 - .1], [GEO.coneR1, GEO.coneY1], [GEO.coneR0, GEO.coneY0]]);
@@ -37,24 +39,28 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
   bead(GEO.coneR0, GEO.coneY0 + .05); bead(GEO.coneR1 + .08, GEO.coneY1 + .05, .16);
   // the ring light: an LED strip hidden under the rim's lip, its glow washing across the track and down the cone
   const glowC = new THREE.Color(glow);
-  { const strip = new THREE.Mesh(new THREE.TorusGeometry(40.5, .2, 8, 220), new THREE.MeshBasicMaterial({ color: glowC.clone().multiplyScalar(2.2), toneMapped: false })); strip.rotation.x = Math.PI / 2; strip.position.y = -1.25; wheel.add(strip);
+  const glowing = [];   // each lit material and how bright it takes the light's colour, so the colour can change (glow.set)
+  const lit = (m, k) => { m.color.copy(glowC).multiplyScalar(k); glowing.push([m, k]); return m; };
+  { const strip = new THREE.Mesh(new THREE.TorusGeometry(W + .1, .2, 8, 220), lit(new THREE.MeshBasicMaterial({ toneMapped: false }), 2.2)); strip.rotation.x = Math.PI / 2; strip.position.y = WY + .5; wheel.add(strip);
     // its bloom: a soft halo either side of the strip
     const hc = document.createElement('canvas'); hc.width = 4; hc.height = 128; const hg = hc.getContext('2d'), gr = hg.createLinearGradient(0, 0, 0, 128);
     gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); hg.fillStyle = gr; hg.fillRect(0, 0, 4, 128);
-    const halo = new THREE.Mesh(new THREE.RingGeometry(38.6, 42.4, 220, 1), new THREE.MeshBasicMaterial({ color: glowC.clone().multiplyScalar(.8), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
-    { const uv = halo.geometry.attributes.uv, pos = halo.geometry.attributes.position; for (let i = 0; i < uv.count; i++) { const r = Math.hypot(pos.getX(i), pos.getY(i)); uv.setXY(i, .5, (r - 38.6) / 3.8); } }
-    halo.material.map = new THREE.CanvasTexture(hc); halo.rotation.x = -Math.PI / 2; halo.position.y = -1.1; halo.renderOrder = 3; wheel.add(halo); }
+    const h0 = W - .5, h1 = R - .6, halo = new THREE.Mesh(new THREE.RingGeometry(h0, h1, 220, 1), lit(new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }), .8));
+    { const uv = halo.geometry.attributes.uv, pos = halo.geometry.attributes.position; for (let i = 0; i < uv.count; i++) { const r = Math.hypot(pos.getX(i), pos.getY(i)); uv.setXY(i, .5, (r - h0) / (h1 - h0)); } }
+    halo.material.map = new THREE.CanvasTexture(hc); halo.rotation.x = -Math.PI / 2; halo.position.y = WY + .3; halo.renderOrder = 3; wheel.add(halo); }
   const ramp = (stops) => { const c = document.createElement('canvas'); c.width = 4; c.height = 256; const g = c.getContext('2d'), gr = g.createLinearGradient(0, 256, 0, 0); for (const [o, a] of stops) gr.addColorStop(o, `rgba(255,255,255,${a})`); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); const t = new THREE.CanvasTexture(c); return t; };
-  const wash = (geo, stops, k) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: glowC.clone().multiplyScalar(k), map: ramp(stops), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false, side: THREE.DoubleSide })); m.renderOrder = 2; wheel.add(m); return m; };
+  const wash = (geo, stops, k) => { const m = new THREE.Mesh(geo, lit(new THREE.MeshBasicMaterial({ map: ramp(stops), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false, side: THREE.DoubleSide }), k)); m.renderOrder = 2; wheel.add(m); return m; };
   const glowTrack = wash(trackGeo, [[0, .04], [.55, .18], [.85, .55], [1, 1]], .55), glowCone = wash(coneGeo, [[0, 0], [.6, .05], [1, .22]], .5);
-  // the eight ball stops: small chrome lenses lying along the ball's path
-  const stopGeo = new THREE.SphereGeometry(1, 20, 10); stopGeo.scale(GEO.deflLen * .3, .32, .5);
+  // the eight canoes: chrome, 5.2 cm long, alternately lying across the ball's path (radial) and along it
+  // (tangential), as on the patented wheels (US 6,047,965) and in the simulation
+  const stopGeo = new THREE.SphereGeometry(1, 24, 10); stopGeo.scale(GEO.deflLen / 2, .5, GEO.deflW / 2);
   const coneY = r => GEO.coneY1 + (r - GEO.coneR1) / (GEO.coneR0 - GEO.coneR1) * (GEO.coneY0 - GEO.coneY1);
   const slope = Math.atan2(GEO.coneY0 - GEO.coneY1, GEO.coneR0 - GEO.coneR1);
   for (let j = 0; j < GEO.deflectors; j++) {
     const a = (j + .5) * Math.PI * 2 / GEO.deflectors, d = new THREE.Mesh(stopGeo, chrome);
     d.position.set(...polar(GEO.deflR, a, coneY(GEO.deflR) + .2));
-    d.rotation.order = 'YXZ'; d.rotation.y = a + Math.PI / 2; d.rotateX(-slope);
+    d.rotation.order = 'YXZ';
+    if (j % 2 === 0) { d.rotation.y = a; d.rotateZ(slope); } else { d.rotation.y = a + Math.PI / 2; d.rotateX(-slope); }   // radial: its length up the cone; tangential: along the path
     d.castShadow = true; wheel.add(d);
   }
 
@@ -69,19 +75,24 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
   }
-  // the number ring: coloured cells, ivory numbers in a tall condensed face, tops toward the rim
+  // the number ring: coloured cells, ivory numbers in a tall condensed face, tops toward the rim. `marks` (number → 1-3)
+  // lights the numbers your bets cover while the ball runs: a faint gold wash for an outside bet, a brass frame for an
+  // inside one, a bright frame for a straight up (the emissive map carries them, so they glow a little in the dark bowl)
   const numC = document.createElement('canvas'); numC.width = 4096; numC.height = 160;
   const numTex = new THREE.CanvasTexture(numC); numTex.colorSpace = THREE.SRGBColorSpace; numTex.anisotropy = aniso;
+  let marks = null;
   const paintNumbers = () => {
     const g = numC.getContext('2d'), w = numC.width / POCKETS;
     WHEEL.forEach((n, i) => {
       g.fillStyle = INK[colorOf(n)]; g.fillRect(i * w, 0, w + 1, 160);
+      const k = marks?.get(n) ?? 0; if (k) { g.fillStyle = `rgba(255,214,128,${[0, .16, .22, .3][k]})`; g.fillRect(i * w, 0, w + 1, 160); }
       g.save(); g.translate(i * w + w / 2, 84);
       g.fillStyle = INK.ivory; g.font = `700 ${n > 9 ? 104 : 112}px "Barlow Condensed", Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.scale(n > 9 ? .8 : .95, 1); g.fillText(String(n), 0, 2); g.restore();
     });
     g.fillStyle = 'rgba(232,206,150,.85)'; for (let i = 0; i <= POCKETS; i++) g.fillRect(i * w - 1.5, 0, 3, 160);   // fine lines between
     g.fillStyle = 'rgba(217,178,101,.95)'; g.fillRect(0, 0, numC.width, 7); g.fillRect(0, 153, numC.width, 7);
+    if (marks) WHEEL.forEach((n, i) => { const k = marks.get(n) ?? 0; if (k < 2) return; const t = k === 3 ? 14 : 8; g.strokeStyle = k === 3 ? '#ffe7a8' : 'rgba(226,190,112,.95)'; g.lineWidth = t; g.strokeRect(i * w + t / 2 + 2, t / 2 + 8, w - t - 4, 144 - t); });
     numTex.needsUpdate = true;
   };
   paintNumbers(); document.fonts?.load('700 100px "Barlow Condensed"').then(paintNumbers, () => {});
@@ -120,12 +131,24 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
   // ---- the ball ------------------------------------------------------------------------------------------
   const ball = new THREE.Mesh(new THREE.SphereGeometry(GEO.ball, 32, 20), shine(new THREE.MeshPhysicalMaterial({ color: '#f7f3e8', roughness: .16, clearcoat: 1, clearcoatRoughness: .04, emissive: '#fff1d6', emissiveIntensity: .12 })));
   ball.castShadow = true; ball.visible = false; wheel.add(ball);
+  // its trail: at launch the ball covers three of its own widths a frame, which on a screen reads as a strobe; a
+  // camera's shutter (and the eye) smear it into a streak. A few faint copies behind it along its path do the same.
+  const ghostGeo = new THREE.SphereGeometry(GEO.ball, 16, 10), ghosts = [.42, .26, .14, .07].map(o => { const g = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({ color: '#f7f3e8', transparent: true, opacity: o, depthWrite: false })); g.visible = false; g.userData.o = o; wheel.add(g); return g; });
 
   return {
-    group: wheel, rotor, ball, glow: { set(c) { glowC.set(c); } },
+    group: wheel, rotor, ball,
+    // the ring light's colour (its strip, bloom and the washes across the track and down the cone)
+    glow: { set(c, gain = 1) { glowC.set(c); for (const [m, k] of glowing) m.color.copy(glowC).multiplyScalar(k * gain); }, base: glow },
+    // light the numbers your bets cover (number → 1 outside, 2 inside, 3 straight up), or clear them (null): one repaint
+    mark(m) { if (!m && !marks) return; marks = m?.size ? m : null; paintNumbers(); },
     setRotor(phi) { rotor.rotation.y = phi; },
     setBall(theta, r, y) { ball.position.set(...polar(r, theta, y)); },
+    // the streak behind a fast ball: the arc it covered in the last frame, shown only while it runs fast
+    setTrail(theta, r, y, speed = 0, dir = 1) {
+      const on = speed > 80; const span = Math.min(7, speed / 60) / r;
+      ghosts.forEach((g, i) => { g.visible = on; if (on) { g.position.set(...polar(r, theta - dir * span * (i + 1) / ghosts.length, y)); g.material.opacity = g.userData.o * Math.min(1, (speed - 80) / 120); } });
+    },
     // where a pocket's centre is, in the wheel's frame, for a given wheelhead angle
-    pocketAt(i, phi, y = GEO.pocketY + GEO.ball) { return polar(GEO.pocketMid, phi - i * PITCH, y); },
+    pocketAt(i, phi, y = GEO.pocketY + GEO.ball) { return polar(GEO.restR, phi - i * PITCH, y); },
   };
 }
