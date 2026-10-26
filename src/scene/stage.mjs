@@ -45,6 +45,37 @@ const shadowType = q => q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 // The salon's two finishes, the same at every table: the padded leather of the armrests and the brass trim.
 export const leatherMaterial = () => new THREE.MeshPhysicalMaterial({ color: '#141312', roughness: .58, clearcoat: .35, clearcoatRoughness: .45, sheen: .4, sheenColor: new THREE.Color('#3a3530') });
 export const brassMaterial = () => new THREE.MeshStandardMaterial({ color: '#b98f45', metalness: 1, roughness: .28 });
+// ---- the salon round a table -----------------------------------------------------------------------------------------
+// Both rooms stand in the same salon: a panorama of it (generated for Salon Noir, then blurred out of focus) on the
+// inside of a wide cylinder round the table, so every shot has the room behind it, and the salon's carpet on the floor.
+// The picture goes round once and then mirrored, so its two joins are seamless; place() turns its middle to where the
+// seat looks. The floor it paints fades out below its horizon (`horizon`, down the picture) to where the wall meets the
+// room's own floor (`floorY`), which runs on under it into the dark; the horizon stands at `eye` over the table.
+// `level`: how bright it is drawn (the room's light on it; the rooms dim it with their lights).
+export function salonWall(img, { radius = 420, horizon = .45, eye = 90, floorY = -80, level = .62, aniso = 1 } = {}) {
+  const H = Math.PI * radius * img.height / img.width, meet = horizon + (eye - floorY) / H;   // (one picture round half the wall, true to its shape)
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  if (meet > horizon + .08) {   // (a wall hung low enough that the floor already hides its painted floor needs no fade)
+    g.globalCompositeOperation = 'destination-in';
+    const fade = g.createLinearGradient(0, 0, 0, c.height); fade.addColorStop(0, '#000'); fade.addColorStop(horizon + .06, '#000'); fade.addColorStop(Math.min(1, meet), 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = fade; g.fillRect(0, 0, c.width, c.height);
+  }
+  const t = new THREE.Texture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.MirroredRepeatWrapping; t.repeat.x = 2; t.anisotropy = aniso; t.needsUpdate = true;
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, H, 96, 1, true), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, transparent: true, depthWrite: false }));
+  mesh.material.color.setScalar(level);
+  // centred on (x, z), its middle facing along (dx, dz)
+  const place = (x, z, dx, dz) => { mesh.position.set(x, eye - (.5 - horizon) * H, z); mesh.rotation.y = Math.atan2(dx, dz) - Math.PI / 2; };
+  return { mesh, level, place };
+}
+// The salon's carpet on a room's floor plane: a 75 cm repeat mirrored at its edges, lit by the pendants round the table
+// and dark beyond them.
+export function carpetFloor(floor, img, { tile = 75, aniso = 1 } = {}) {
+  const t = new THREE.Texture(img), { width, height } = floor.geometry.parameters;
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.repeat.set(width / tile, height / tile); t.anisotropy = aniso; t.needsUpdate = true;
+  floor.material.map = t; floor.material.color.set('#5e5955'); floor.material.needsUpdate = true;
+}
+
 // The narrowest lens between `lo` and `hi` degrees (to within `tol`) for which fits(fov) holds; null when even the
 // widest leaves something out.
 export function fitFov(fits, lo, hi, tol) {

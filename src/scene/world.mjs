@@ -3,7 +3,7 @@
 //   chip rack · dealer's cards · wordmark · printed arcs · your cards ·
 //   side-bet crown · your main circle · padded armrest (radius 100).
 import * as THREE from '../vendor/three.module.min.js';
-import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov } from './stage.mjs';
+import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor } from './stage.mjs';
 import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, backTexture, setFaceDetail, onArtLanded, CARD_W, CARD_H, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
 
 export const EDGE_Z = -40, R = 100, CARD_T = .03;
@@ -52,16 +52,15 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   scene.add(key, key.target, hemi);
   const glow = new THREE.PointLight('#ffb866', 900, 260, 1.6); glow.position.set(0, 60, -130); scene.add(glow);
 
-  // ---- the room behind the dealer: dark panelling and warm lamps, out of focus ----
-  const roomArt = artImage('table:room'); let backdrop = null;
+  // ---- the room: the card salon round the table, out of focus (stage.mjs), the carpet underfoot. From the seat only a
+  // thin band of it shows past the chip tray, so the wall stands close behind the dealer (1.2 m past his edge, the
+  // circle's middle out past your seat) and hangs low, its row of sconces (a third of the way down the picture) in that
+  // band; its panelling meets the carpet. The lobby's sweep round the table sees it all round. Without the picture: a
+  // dark wall with two warm lamps.
+  const roomArt = artImage('table:salon'), FLOOR_Y = -78; let backdrop = null;
   if (roomArt) {
-    // The drawn room as an unlit backdrop just behind the dealer's edge. From the seat only a thin
-    // band shows past the chip tray, so the picture is placed to put its row of blurred lamps
-    // (about 45% down) in that band.
-    const t = new THREE.Texture(roomArt); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
-    const H = 315, W = H * roomArt.width / roomArt.height;
-    const room = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: t, color: '#c8c0b4' }));
-    room.position.set(0, -20 - H / 2 + .45 * H, -120); scene.add(room); backdrop = room;
+    const salon = salonWall(roomArt, { radius: 380, horizon: .59, eye: -140, floorY: FLOOR_Y, aniso });
+    salon.place(0, EDGE_Z - 120 + 380, 0, -1); scene.add(salon.mesh); backdrop = salon.mesh;
   } else {
     const wall = new THREE.Mesh(new THREE.PlaneGeometry(700, 320), new THREE.MeshStandardMaterial({ color: '#15130f', roughness: .9 }));
     wall.position.set(0, 60, -190); scene.add(wall);
@@ -70,8 +69,9 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       s.position.set(x, y, -180); s.scale.set(70, 70, 1); scene.add(s);
     }
   }
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(900, 600), new THREE.MeshStandardMaterial({ color: '#0e0d0c', roughness: 1 }));
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -78; scene.add(floor);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), new THREE.MeshStandardMaterial({ color: '#0e0d0c', roughness: 1 }));
+  if (artImage('table:carpet')) carpetFloor(floor, artImage('table:carpet'), { aniso });
+  floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y; scene.add(floor);
 
   // ---- the table ------------------------------------------------------------------
   const table = new THREE.Group(); scene.add(table);
