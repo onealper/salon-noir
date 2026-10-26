@@ -28,7 +28,7 @@ const ART = {};
 export function preloadRouletteArt() {
   const load = (k, src) => new Promise(r => { const i = new Image(); i.onload = () => { ART[k] = i; r(); }; i.onerror = () => r(); i.src = src; });
   const fonts = document.fonts ? Promise.all(['700 80px "Barlow Condensed"', '700 80px Cinzel', '700 40px Inter', '500 80px "Bodoni Moda"', 'italic 600 80px "Bodoni Moda"'].map(f => document.fonts.load(f).catch(() => {}))) : Promise.resolve();
-  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('roomTall', './assets/roulette/room-tall.webp'), fonts]);
+  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('salon', './assets/roulette/salon.webp'), load('carpet', './assets/roulette/carpet.webp'), fonts]);
 }
 
 export function createRouletteScene(canvas, { quality = detectQuality() } = {}) {
@@ -53,19 +53,37 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const LIT = { w: keyW.intensity, l: keyL.intensity, h: hemi.intensity };
   let moodJob = null;
   function mood(on, ms = 900) {
-    const from = { w: keyW.intensity, l: keyL.intensity, h: hemi.intensity }, to = on ? { w: LIT.w * 1.1, l: LIT.l * .75, h: LIT.h * .75 } : LIT;
+    const from = { w: keyW.intensity, l: keyL.intensity, h: hemi.intensity, s: salon?.material.color.r ?? 0 }, to = on ? { w: LIT.w * 1.1, l: LIT.l * .75, h: LIT.h * .75, s: SALON_DIM * .7 } : { ...LIT, s: SALON_DIM };
     if (moodJob) tickers.delete(moodJob);
     const t0 = performance.now();
     moodJob = now => {
       const k = ms > 0 ? Math.min(1, (now - t0) / ms) : 1, e = k * k * (3 - 2 * k);
       keyW.intensity = from.w + (to.w - from.w) * e; keyL.intensity = from.l + (to.l - from.l) * e; hemi.intensity = from.h + (to.h - from.h) * e;
+      salon?.material.color.setScalar(from.s + (to.s - from.s) * e);   // (the salon round the table too)
       if (k >= 1) { tickers.delete(moodJob); moodJob = null; }
     };
     moodJob.still = true; tickers.add(moodJob); requestRender(false);
   }
 
-  // ---- the room: the drawn salon behind the head of the table, out of focus ------------------------------
-  const roomImg = artImage('table:room');
+  // ---- the room: the salon round the table, out of focus ---------------------------------------------------------
+  // A panorama of the salon (generated for Salon Noir, then blurred) on the inside of a wide cylinder round the table, so
+  // every shot has the room behind it: the seat, the wheel from your side, the low look across the cloth, the lobby's
+  // sway. It goes round once and then mirrored, so its two joins are seamless, and its middle faces where your seat looks
+  // (placeBackdrop). The floor it paints fades out below its horizon, down to where it meets the room's own carpeted
+  // floor, which runs on under it into the dark. Should it not load, the blackjack room's picture stands behind the
+  // croupier's side instead.
+  const SALON_R = 420, SALON_DIM = .62, HORIZON = .45, FLOOR_Y = -80, EYE = 90;   // radius (cm); its brightness; the far wall's foot down the picture; the floor; the horizon's height
+  const salon = ART.salon ? (() => {
+    const img = ART.salon, H = Math.PI * SALON_R * img.height / img.width, meet = HORIZON + (EYE - FLOOR_Y) / H;   // (where the wall meets the floor, down the picture)
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d');
+    g.drawImage(img, 0, 0); g.globalCompositeOperation = 'destination-in';
+    const fade = g.createLinearGradient(0, 0, 0, c.height); fade.addColorStop(0, '#000'); fade.addColorStop(HORIZON + .06, '#000'); fade.addColorStop(Math.min(1, meet), 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = fade; g.fillRect(0, 0, c.width, c.height);
+    const t = new THREE.Texture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.MirroredRepeatWrapping; t.repeat.x = 2; t.anisotropy = aniso; t.needsUpdate = true;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(SALON_R, SALON_R, H, 96, 1, true), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, transparent: true, depthWrite: false }));   // (one picture round half the wall, true to its shape)
+    m.material.color.setScalar(SALON_DIM); m.userData.H = H; scene.add(m); return m;
+  })() : null;
+  const roomImg = salon ? null : artImage('table:room');
   const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#c8c0b4' }));
   const texOf = img => { const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; return t; };
   // the picture's edges melt into the dark room, so from any angle it reads as a far wall, never a hung poster
@@ -78,12 +96,14 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     }
     return c;
   };
-  // each is feathered when its seat first needs it (a phone that stays upright never builds the wide one)
-  let roomTex, tallTex; const room = () => roomTex ??= roomImg ? texOf(feather(roomImg)) : null, tall = () => tallTex ??= ART.roomTall ? texOf(feather(ART.roomTall)) : null;
+  let roomTex; const room = () => roomTex ??= roomImg ? texOf(feather(roomImg)) : null;
   backdrop.material.transparent = true; backdrop.material.depthWrite = false;
   scene.add(backdrop);
+  // the floor: the salon's carpet (generated for Salon Noir), a 75 cm repeat mirrored at its edges, lit by the pendants
+  // round the table and dark beyond them; plain dark wool should it not load
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: '#0b0a09', roughness: 1 }));
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -80; scene.add(floor);
+  if (ART.carpet) { const t = new THREE.Texture(ART.carpet); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.repeat.set(6000 / 75, 6000 / 75); t.anisotropy = aniso; t.needsUpdate = true; floor.material.map = t; floor.material.color.set('#5e5955'); }
+  floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y; scene.add(floor);
 
   // ---- the table ---------------------------------------------------------------------------------------------------
   const table = new THREE.Group(); scene.add(table);
@@ -390,11 +410,14 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     requestRender();
   }
   const tiles = new Map(), relayout = new Set();
+  // The salon's middle faces where your seat looks: the croupier's side from the long side, the head of the table from the
+  // foot. Its horizon (the far wall's foot, 45% down the picture) at a seated eye's height over the table.
   function placeBackdrop() {
-    const isTall = L.orient === 'port' && !!tall(), t = isTall ? tall() : room(); if (!t) return;
+    if (salon) { const H = salon.userData.H; salon.position.set((L.wheelX - WELL + L.rect.x1) / 2, EYE - (.5 - HORIZON) * H, (L.zFar + L.zNear) / 2); salon.rotation.y = L.orient === 'port' ? Math.PI : Math.PI / 2; backdrop.visible = false; return; }
+    const t = room(); if (!t) return;
     backdrop.material.map = t; backdrop.material.needsUpdate = true;
-    const img = t.image, H = isTall ? 600 : 420, W = H * img.width / img.height; backdrop.scale.set(W, H, 1);
-    if (isTall) { backdrop.position.set(L.wheelX - 190, -30 + H * .12, 0); backdrop.rotation.set(0, Math.PI / 2, 0); }     // behind the wheel, seen from the foot
+    const img = t.image, H = 420, W = H * img.width / img.height; backdrop.scale.set(W, H, 1);
+    if (L.orient === 'port') { backdrop.position.set(L.wheelX - 190, -30 + H * .12, 0); backdrop.rotation.set(0, Math.PI / 2, 0); }     // behind the wheel, seen from the foot
     else { backdrop.position.set(L.xEnd * .2, -20 - H / 2 + .45 * H + 30, L.zFar - 170); backdrop.rotation.set(0, 0, 0); }
   }
   // A lit box glows like a lamp under the cloth: brightest along its printed edge and fading in toward the middle, so

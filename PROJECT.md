@@ -122,7 +122,7 @@ src/                       All code, styles, fonts, sounds and libraries
 assets/
   cards/                   Court-card art: court-belt/ is the set in play; the top-level J/Q/K files (Howard Yeh, MIT) are the fallback
   table/                   Felt, leather, card back, room backdrop
-  roulette/                Wood veneers and the tall salon picture
+  roulette/                Wood veneer, the salon panorama (wrapped round the roulette table, out of focus) and its carpet
 ```
 
 ## Architecture rules (keep these)
