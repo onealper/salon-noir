@@ -24,14 +24,25 @@ const SHAPES = {
   land: { cu: 8.6, cv: 8.9, z0: 9.8, cc: 8.6, d: 7.4, e: 7.4 },
   port: { cu: 6.4, cv: 11.6, z0: 10.2, cc: 7.6, d: 6.6, e: 6.6 },
 };
+// The rooms the table stands in (setStudio): the salon's European table, green cloth on Macassar under warm pendants, and
+// the Lightning studio's, after Evolution's: black cloth ruled in gold on black lacquer, the wheel raised on a stepped gold
+// plinth, a black-and-gold art deco set round it under a cooler light. Mega Lightning is the same studio, its light red.
+const SALON = { studio: false, cloth: '#17533a', zero: '#0c4f30', line: 'rgba(238,226,190,.92)', sheen: '#3f8a63', game: 'EUROPEAN ROULETTE',
+  leather: '#8a847c', lacquer: '#16110d', lamp: '#ffd9a6', pool: 'rgba(255,200,140,.95)', fill: '#5b626e', glow: '#ffb866', key: '#fff1dc' };
+const STUDIO = { studio: true, cloth: '#0f1014', zero: '#0b2f22', line: 'rgba(214,180,104,.92)', sheen: '#7d6c48', game: 'LIGHTNING ROULETTE',
+  leather: '#4e4a46', lacquer: '#060607', lamp: '#ffe6b3', pool: 'rgba(255,214,150,.9)', fill: '#46557a', glow: '#6f9cff', key: '#f6f4ff', accent: '#9cc8ff' };
+export const DRESS = { european: SALON, lightning: STUDIO, mega: { ...STUDIO, game: 'MEGA LIGHTNING', glow: '#ff5636', accent: '#ff6a3d', lamp: '#ffd2b8' } };
 const ART = {};
+const load = (k, src) => ART[k] ? Promise.resolve() : new Promise(r => { const i = new Image(); i.onload = () => { ART[k] = i; r(); }; i.onerror = () => r(); i.src = src; });
+// the Lightning studio's own pictures, fetched the first time you sit at one of its tables
+export const preloadStudioArt = () => load('studio', './assets/roulette/studio.webp');
 export function preloadRouletteArt() {
-  const load = (k, src) => new Promise(r => { const i = new Image(); i.onload = () => { ART[k] = i; r(); }; i.onerror = () => r(); i.src = src; });
   const fonts = document.fonts ? Promise.all(['700 80px "Barlow Condensed"', '700 80px Cinzel', '700 40px Inter', '500 80px "Bodoni Moda"', 'italic 600 80px "Bodoni Moda"'].map(f => document.fonts.load(f).catch(() => {}))) : Promise.resolve();
   return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('salon', './assets/roulette/salon.webp'), load('stone', './assets/roulette/stone.webp'), load('cloth', './assets/roulette/cloth.webp'), load('leather', './assets/roulette/leather.webp'), fonts]);
 }
 
-export function createRouletteScene(canvas, { quality = detectQuality() } = {}) {
+export function createRouletteScene(canvas, { quality = detectQuality(), dressing = 'european' } = {}) {
+  let dress = SALON;   // (the room asked for is put on at the end: setStudio)
   // the renderer, its loop and frame watcher, the scene and the camera (scene/stage.mjs: the same as the blackjack table's);
   // a lost and restored context makes the wheel's studio light again too (the rest re-uploads by itself)
   const st = createStage(canvas, { quality, background: '#0b0a09', environment: .38, fov: 40, far: 1400, lights: () => [keyL],
@@ -48,20 +59,21 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   keyL.shadow.mapSize.set(quality.shadow, quality.shadow); keyL.shadow.bias = -.0001; keyL.shadow.normalBias = .02; keyL.shadow.radius = 5; keyL.shadow.camera.near = 60; keyL.shadow.camera.far = 240;
   const hemi = new THREE.HemisphereLight('#5b626e', '#0b0a09', .3);
   const glow = new THREE.PointLight('#ffb866', 900, 320, 1.6);
-  scene.add(keyW, keyW.target, keyL, keyL.target, hemi, glow);
+  const rim = new THREE.SpotLight('#9cc8ff', 0, 0, .55, .8, 1.4);   // the studio's: a cool light from behind the set, picking out edges
+  scene.add(keyW, keyW.target, keyL, keyL.target, hemi, glow, rim, rim.target);
   // The light follows the spin (mood): from the croupier's call the layout's pendant and the fill dim by a quarter and the
   // wheel's pendant comes up a tenth, so the bowl is the brightest thing in the room, until the picture goes back to the
   // seat. Eased over `ms` by a still ticker (the shadows stand: nothing moves).
   const LIT = { w: keyW.intensity, l: keyL.intensity, h: hemi.intensity };
   let moodJob = null;
   function mood(on, ms = 900) {
-    const from = { w: keyW.intensity, l: keyL.intensity, h: hemi.intensity, s: salon?.mesh.material.color.r ?? 0 }, to = on ? { w: LIT.w * 1.1, l: LIT.l * .75, h: LIT.h * .75, s: (salon?.level ?? 0) * .7 } : { ...LIT, s: salon?.level ?? 0 };
+    const wall = room(), from = { w: keyW.intensity, l: keyL.intensity, h: hemi.intensity, s: wall?.mesh.material.color.r ?? 0 }, to = on ? { w: LIT.w * 1.1, l: LIT.l * .75, h: LIT.h * .75, s: (wall?.level ?? 0) * .7 } : { ...LIT, s: wall?.level ?? 0 };
     if (moodJob) tickers.delete(moodJob);
     const t0 = performance.now();
     moodJob = now => {
       const k = ms > 0 ? Math.min(1, (now - t0) / ms) : 1, e = k * k * (3 - 2 * k);
       keyW.intensity = from.w + (to.w - from.w) * e; keyL.intensity = from.l + (to.l - from.l) * e; hemi.intensity = from.h + (to.h - from.h) * e;
-      salon?.mesh.material.color.setScalar(from.s + (to.s - from.s) * e);   // (the salon round the table too)
+      wall?.mesh.material.color.setScalar(from.s + (to.s - from.s) * e);   // (the room round the table too)
       if (k >= 1) { tickers.delete(moodJob); moodJob = null; }
     };
     moodJob.still = true; tickers.add(moodJob); requestRender(false);
@@ -71,9 +83,12 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // Its middle faces where your seat looks (placeBackdrop); without the picture the room is simply dark.
   const FLOOR_Y = -80;
   const salon = ART.salon ? salonWall(ART.salon, { radius: 420, eye: 90, floorY: FLOOR_Y, aniso, level: .48 }) : null; if (salon) scene.add(salon.mesh);
+  let studioWall = null;   // the Lightning studio's set, made the first time you sit there
+  const room = () => dress.studio ? studioWall : salon;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: '#0b0a09', roughness: 1 }));
   if (artImage('table:carpet')) carpetFloor(floor, artImage('table:carpet'), { aniso });
   floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y; scene.add(floor);
+  const carpet = floor.material, gloss = new THREE.MeshStandardMaterial({ color: '#050506', roughness: .3, metalness: 0, envMapIntensity: 1.2 });   // the studio's floor: black, polished
 
   // ---- the table ---------------------------------------------------------------------------------------------------
   const table = new THREE.Group(); scene.add(table);
@@ -81,11 +96,12 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // along the table)
   const woodTex = (img, cm, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.repeat.set(1 / cm, 1 / cm); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
   const walnut = new THREE.MeshStandardMaterial({ color: ART.veneer ? '#e6d6c8' : '#1c120c', map: woodTex(ART.veneer, 80, Math.PI / 2), roughness: .34, envMapIntensity: .7 });   // the table: Macassar ebony, its stripes along the length, laid book-matched (each 80 cm leaf the mirror of the next), in a satin lacquer (one coat, drawn as one: a clear coat on the largest wood in the picture costs every pixel of it twice)
+  const blackTop = new THREE.MeshStandardMaterial({ color: '#09090b', roughness: .16, envMapIntensity: 1.3 });   // the studio's: black piano lacquer
   const leather = leatherMaterial();
   // its pebble grain, a picture to every 12 cm (the armrest's pieces are all mapped in cm): the room's own photograph
   // (assets/roulette/leather.webp) is its colour and its bump both, the salon's shared grain only a bump
   const grain = ART.leather ?? artImage('table:leather'); if (grain) { const t = new THREE.Texture(grain); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 12, 1 / 12); t.anisotropy = aniso; t.needsUpdate = true; leather.bumpMap = t; leather.bumpScale = 1.8;
-    if (ART.leather) { const c = t.clone(); c.colorSpace = THREE.SRGBColorSpace; c.needsUpdate = true; leather.map = c; leather.color.set('#8a847c'); leather.bumpScale = 1.3; } }
+    if (ART.leather) { const c = t.clone(); c.colorSpace = THREE.SRGBColorSpace; c.needsUpdate = true; leather.map = c; leather.color.set(dress.leather); leather.bumpScale = 1.3; } }
   const brass = brassMaterial();
   // the wheel's own studio light, for its reflections: a ring light overhead and two soft boxes in a dark room
   // (rendered once; the generator and the little studio are freed straight after)
@@ -105,7 +121,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const feltMats = new Map(), nap = ART.cloth ?? artImage('table:felt');
   const feltMaterial = q => {
     const rich = q.name === 'high'; if (feltMats.has(rich)) return feltMats.get(rich);
-    const m = rich ? new THREE.MeshPhysicalMaterial({ roughness: .96, metalness: 0, sheen: .35, sheenRoughness: .8, sheenColor: new THREE.Color('#3f8a63') }) : new THREE.MeshStandardMaterial({ roughness: .96, metalness: 0 });
+    const m = rich ? new THREE.MeshPhysicalMaterial({ roughness: .96, metalness: 0, sheen: .35, sheenRoughness: .8, sheenColor: new THREE.Color(dress.sheen) }) : new THREE.MeshStandardMaterial({ roughness: .96, metalness: 0 });
     if (rich && nap) { const t = new THREE.Texture(nap); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.needsUpdate = true; m.bumpMap = t; m.bumpScale = .15; }
     feltMats.set(rich, m); return m;
   };
@@ -114,9 +130,11 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // the cloth beyond the printed layout, over the whole top round the wheel: the same wool, the nap alone (one tile
   // painted as the layout paints its own), cut to the table in buildTable, with a brass rule at its edge and round the well
   const NAP = 512 / 24;   // cm a nap tile covers, as the sharpest layout paints it
-  const napTile = (() => { const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d'); g.fillStyle = '#17533a'; g.fillRect(0, 0, 512, 512);
-    if (nap) { g.globalAlpha = .5; g.globalCompositeOperation = 'overlay'; g.drawImage(nap, 0, 0, 512, 512); }
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / NAP, 1 / NAP); t.anisotropy = aniso; return t; })();
+  const napTile = (() => { const c = document.createElement('canvas'); c.width = c.height = 512;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / NAP, 1 / NAP); t.anisotropy = aniso;
+    t.paint = () => { const g = c.getContext('2d'); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.fillStyle = dress.cloth; g.fillRect(0, 0, 512, 512);
+      if (nap) { g.globalAlpha = .5; g.globalCompositeOperation = 'overlay'; g.drawImage(nap, 0, 0, 512, 512); } t.needsUpdate = true; };
+    t.paint(); return t; })();
   const clothMats = new Map(), clothMaterial = q => { const f = feltMaterial(q); if (clothMats.has(f)) return clothMats.get(f);
     const m = f.clone(); m.map = napTile; if (f.bumpMap) { m.bumpMap = f.bumpMap.clone(); m.bumpMap.repeat.set(1 / NAP, 1 / NAP); m.bumpMap.needsUpdate = true; } clothMats.set(f, m); return m; };
   const cloth = new THREE.Mesh(new THREE.BufferGeometry(), clothMaterial(quality)); cloth.position.y = -.05; cloth.receiveShadow = true; table.add(cloth);
@@ -197,9 +215,9 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const R = L.rect, W = R.x1 - R.x0, D = R.z1 - R.z0, ppc = Math.min(24, Math.floor(Math.min(maxTex, quality.felt) / Math.max(W, D)));   // as sharp as the preset's cloth
     const c = document.createElement('canvas'); c.width = Math.round(W * ppc); c.height = Math.round(D * ppc); const g = c.getContext('2d');
     const px = x => (x - R.x0) * ppc, pz = z => (z - R.z0) * ppc;
-    g.fillStyle = '#17533a'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = dress.cloth; g.fillRect(0, 0, c.width, c.height);
     if (nap) { g.globalAlpha = .5; g.globalCompositeOperation = 'overlay'; const t = 512; for (let y = 0; y < c.height; y += t) for (let x = 0; x < c.width; x += t) g.drawImage(nap, x, y, t, t); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
-    const s = L.s, portrait = L.orient === 'port', line = Math.max(2, .13 * ppc), CREAM = 'rgba(238,226,190,.92)';
+    const s = L.s, portrait = L.orient === 'port', line = Math.max(2, .13 * ppc), CREAM = dress.line;
     const INKC = { red: '#c3192b', black: '#111111', green: '#12924f' }, IVORY = '#ece4d2', OVAL = { red: '#a3141f', black: '#141416' };
     // an oval under a number, rx across your view and ry up it, with a fine brass edge
     const oval = (x, z, rx, ry, fill) => {
@@ -238,7 +256,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     // zero: a pointed box toward the wheel, on a deeper green
     { const [x, y, w, h] = box(-1, 0, 0, 3), tip = w * .42;
       g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + tip, y); g.lineTo(x, y + h / 2); g.lineTo(x + tip, y + h); g.lineTo(x + w, y + h); g.closePath();
-      g.fillStyle = '#0c4f30'; g.fill(); g.stroke();
+      g.fillStyle = dress.zero; g.fill(); g.stroke();
       text('0', -.45, 1.5, nSize * 1.2, { color: IVORY, font: BARLOW }); }
     // columns (at least an 8 px cap height on a phone held upright)
     for (const k of [1, 2, 3]) { const [x, y, w, h] = box(12, k - 1, 13, k); g.strokeRect(x, y, w, h); text('2 to 1', 12.5, k - .5, portrait ? s.cc * .4 : s.cu * .38, { font: BARLOW, rot: portrait ? 0 : -Math.PI / 2 }); }
@@ -271,7 +289,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       for (let i = 0; i < N; i++) {
         const tb = at0 + i / N, [ax, az] = pt(tb, r), [bx, bz] = pt(tb, r - bw); g.beginPath(); g.moveTo(px(ax), pz(az)); g.lineTo(px(bx), pz(bz)); g.stroke();
         const n = WHEEL_ORDER[i], [mx, mz] = pt(tb + .5 / N, r - bw / 2), o = Math.min(per / N, bw) * .42;
-        if (n) oval(mx, mz, o * 1.08, o * .86, OVAL[colorOf(n)]); else oval(mx, mz, o * 1.08, o * .86, '#0c4f30');
+        if (n) oval(mx, mz, o * 1.08, o * .86, OVAL[colorOf(n)]); else oval(mx, mz, o * 1.08, o * .86, dress.zero);
         print(String(n), mx, mz, bw * .46, { color: IVORY, font: BARLOW });
       }
       // the sector lines across the inside (Zero | Voisins | Orphelins | Tiers: the zero game's chord runs from between 15
@@ -301,14 +319,14 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       g.font = a; const wa = g.measureText('Salon ').width; g.font = b; const wb = g.measureText('Noir').width, x0 = -(wa + wb) / 2;
       g.font = a; g.fillStyle = 'rgba(236,228,210,.9)'; g.fillText('Salon ', x0, 4.6 * k); g.font = b; g.fillStyle = 'rgba(226,196,131,.95)'; g.fillText('Noir', x0 + wa, 4.6 * k);
       g.font = `700 ${1.45 * k}px Inter, system-ui, sans-serif`; g.letterSpacing = `${.62 * k}px`; g.textAlign = 'center'; g.fillStyle = 'rgba(201,164,92,.88)';
-      g.fillText('EUROPEAN ROULETTE', .31 * k, 7.7 * k); g.letterSpacing = '0px';
+      g.fillText(dress.game, .31 * k, 7.7 * k); g.letterSpacing = '0px';
       g.restore(); }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; return t;
   }
   // the cloth for the seat: the old one's texture and canvas are freed (width 0 lets its pixels go now)
   function repaintLayout() { const old = feltMat.map; feltMat.map = paintLayout(); feltMat.needsUpdate = !old; if (old) { old.dispose(); old.image.width = 0; } requestRender(false); }
   // A rebuild (the phone turned) frees the last body's shapes and its own materials; the shared ones stay.
-  const keep = new Set([walnut, leather, brass, feltMat]);
+  const keep = new Set([walnut, blackTop, leather, brass, feltMat]);
   function clearGroup(g) { g.traverse(o => { if (o === g) return; o.geometry?.dispose(); for (const m of [o.material ?? []].flat()) if (!keep.has(m) && ![...floatMats.values()].includes(m)) m.dispose(); }); g.clear(); }
   function buildTable(orient) {
     L = geometry(orient); const R = L.rect;
@@ -340,7 +358,15 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     cloth.geometry.dispose(); cloth.geometry = flat(cut(outline(RIM), WELL + 1.2), 0);
     const rule = new THREE.Mesh(flat(cut(outline(RIM - .7), WELL - .2), -.15), brass); rule.receiveShadow = true; body.add(rule);
     const topGeo = new THREE.ExtrudeGeometry(shape, { depth: 12, bevelEnabled: true, bevelThickness: .8, bevelSize: .8, bevelSegments: 3, curveSegments: 64 }); topGeo.rotateX(-Math.PI / 2); topGeo.translate(0, -13.1, 0);
-    const top = new THREE.Mesh(topGeo, walnut); top.receiveShadow = true; top.castShadow = true; body.add(top);
+    const top = new THREE.Mesh(topGeo, dress.studio ? blackTop : walnut); top.receiveShadow = true; top.castShadow = true; body.add(top);
+    if (dress.studio) {
+      // the studio's lacquer is edged in gold, and the wheel stands raised on a stepped gold plinth, as on Evolution's set
+      // (art deco: three steps down to the cloth); its value markers stand clear of it
+      const edge = outline(.25); edge.holes.push(outline(1.7)); const eg = new THREE.ShapeGeometry(edge, 64); eg.rotateX(-Math.PI / 2); eg.translate(0, -.24, 0); body.add(new THREE.Mesh(eg, brass));
+      const r0 = WELL + .2, steps = [[r0, 0], [r0, 2.6], [r0 + 2.2, 2.6], [r0 + 2.2, 1.8], [r0 + 4.2, 1.8], [r0 + 4.2, 1], [r0 + 6.4, 1], [r0 + 6.4, 0]];
+      const plinth = new THREE.Mesh(new THREE.LatheGeometry(steps.map(([x, y]) => new THREE.Vector2(x, y)), 160), brass); plinth.position.set(wx, 0, cz); plinth.receiveShadow = true; body.add(plinth);
+      studioProps({ wx, cz, x0T, z0T, z1T, R, tray, rOut: r0 + 6.4 });
+    }
     const dark = new THREE.MeshStandardMaterial({ color: '#0b0908', roughness: .9, side: THREE.BackSide });
     const well = new THREE.Mesh(new THREE.CylinderGeometry(WELL, WELL, 18, 96, 1, true), dark); well.position.set(wx, -9.3, cz); body.add(well);
     // the tray: a velvet-lined recess holding the float, chips lying on their sides in rows
@@ -388,7 +414,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     // what holds it up, as at the blackjack table: a lacquered apron under the top with two lines of warm light round it,
     // a pedestal set well back, and a low plinth with a brass edge and a line of light at its foot that lies warm on the
     // carpet; a brass foot-rail on the players' side
-    { const lacquer = new THREE.MeshStandardMaterial({ color: '#16110d', roughness: .34, envMapIntensity: .8 }), glowM = new THREE.MeshBasicMaterial({ color: '#ffd9a6', toneMapped: false });
+    { const lacquer = new THREE.MeshStandardMaterial({ color: dress.lacquer, roughness: dress.studio ? .2 : .34, envMapIntensity: .8 }), glowM = new THREE.MeshBasicMaterial({ color: dress.lamp, toneMapped: false });
       const rect = (inset, r) => { const a = x0T + inset, b = x1T - inset, c = z0T + inset, d = z1T - inset, q = Math.min(r, (b - a) / 2, (d - c) / 2), sh = new THREE.Shape();
         sh.moveTo(a + q, -c); sh.lineTo(b - q, -c); sh.absarc(b - q, -(c + q), q, Math.PI / 2, 0, true); sh.lineTo(b, -(d - q)); sh.absarc(b - q, -(d - q), q, 0, -Math.PI / 2, true);
         sh.lineTo(a + q, -d); sh.absarc(a + q, -(d - q), q, -Math.PI / 2, -Math.PI, true); sh.lineTo(a, -(c + q)); sh.absarc(a + q, -(c + q), q, Math.PI, Math.PI / 2, true); return sh; };
@@ -400,7 +426,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       slab(24, 22, FLOOR_Y, P1, lacquer); band(24, 22, P1 - .5, 1, brass, .2); band(24, 22, FLOOR_Y + .5, .4, glowM, .25);
       // its light on the carpet: a warm band round the plinth, strongest at its edge
       { const pad = 36, w = x1T - x0T - 48 + 2 * pad, d = z1T - z0T - 48 + 2 * pad, k = 6, c = document.createElement('canvas'); c.width = Math.round(w * k / 4); c.height = Math.round(d * k / 4); const g = c.getContext('2d'), sx = c.width / w, sz = c.height / d;
-        g.filter = `blur(${Math.round(9 * sx)}px)`; g.strokeStyle = 'rgba(255,200,140,.95)'; g.lineWidth = 14 * sx; g.beginPath(); g.roundRect(pad * sx, pad * sz, (w - 2 * pad) * sx, (d - 2 * pad) * sz, 22 * sx); g.stroke();
+        g.filter = `blur(${Math.round(9 * sx)}px)`; g.strokeStyle = dress.pool; g.lineWidth = 14 * sx; g.beginPath(); g.roundRect(pad * sx, pad * sz, (w - 2 * pad) * sx, (d - 2 * pad) * sz, 22 * sx); g.stroke();
         const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
         const pool = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: .5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
         pool.rotation.x = -Math.PI / 2; pool.position.set((x0T + x1T) / 2, FLOOR_Y + .15, (z0T + z1T) / 2); pool.renderOrder = 1; body.add(pool); } }
@@ -409,6 +435,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       for (const k of [-.46, 0, .46]) { const leg = new THREE.Mesh(legG, brass); leg.position.set(cx + k * len, -72, z1T - 14); body.add(leg); } }
     // lights follow the table
     keyW.position.set(L.wheelX + 6, 150, 20); keyW.target.position.set(L.wheelX, 0, (L.zFar + L.zNear) / 2);
+    rim.position.set((L.wheelX + L.xEnd) / 2, 70, L.zFar - 260); rim.target.position.set((L.wheelX + L.xEnd) / 2, 0, (L.zFar + L.zNear) / 2);
     { const mid = (L.X(-1) + L.xEnd) / 2, cz2 = (L.zFar + L.zNear) / 2; keyL.position.set(mid, 175, cz2 + 26); keyL.target.position.set(mid, 0, cz2); }
     glow.position.set(L.wheelX - 120, 70, -40);
     // highlight tiles: one per number and per outside box
@@ -427,9 +454,47 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     requestRender();
   }
   const tiles = new Map(), relayout = new Set();
+  // The studio's own pieces, built with the table there. A gold sunburst printed on the cloth round the wheel's plinth
+  // (cut away where the layout and the tray are, and short of the rim), and the lightning machine standing behind the
+  // croupier's side: a lacquered column with gold bands, a glass tube with a glowing filament wound in gold, a gold sphere
+  // and ring on top, and the lever the croupier pulls (L.machine: where its bolts leave from; the show is rgame's).
+  function studioProps({ wx, cz, x0T, z0T, z1T, R, tray, rOut }) {
+    { const Rd = rOut + 30, k = 10, S = Math.round(2 * Rd * k), c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+      const X = x => (x - (wx - Rd)) * k, Z = z => (z - (cz - Rd)) * k;
+      g.translate(S / 2, S / 2); g.lineCap = 'round';
+      for (let i = 0; i < 72; i++) { const a = i / 72 * Math.PI * 2, long = i % 2 === 0, r1 = (rOut + 1.2) * k, r2 = (long ? Rd - 2 : Rd - 12) * k;
+        const gr = g.createLinearGradient(Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * r2, Math.sin(a) * r2); gr.addColorStop(0, 'rgba(226,192,120,.75)'); gr.addColorStop(1, 'rgba(226,192,120,0)');
+        g.strokeStyle = gr; g.lineWidth = (long ? .32 : .2) * k; g.beginPath(); g.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); g.lineTo(Math.cos(a) * r2, Math.sin(a) * r2); g.stroke(); }
+      g.strokeStyle = 'rgba(226,192,120,.6)'; for (const [r, w] of [[rOut + 2.4, .18], [rOut + 3.2, .08]]) { g.lineWidth = w * k; g.beginPath(); g.arc(0, 0, r * k, 0, Math.PI * 2); g.stroke(); }
+      g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+      g.fillRect(X(R.x0 - 1.5), Z(R.z0 - 1.5), X(R.x1) - X(R.x0 - 1.5), Z(R.z1 + 1.5) - Z(R.z0 - 1.5));                 // the layout
+      g.fillRect(X(tray.x0 - 1.5), Z(tray.z0 - 1.5), X(tray.x1 + 1.5) - X(tray.x0 - 1.5), Z(tray.z1 + 1.5) - Z(tray.z0 - 1.5));   // the tray
+      g.fillRect(0, 0, X(x0T + 7), S); g.fillRect(0, 0, S, Z(z0T + 7)); g.fillRect(0, Z(z1T - 7), S, S);               // short of the rim
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(2 * Rd, 2 * Rd), new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: .5, metalness: .35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+      m.rotation.x = -Math.PI / 2; m.position.set(wx, .02, cz); m.receiveShadow = true; body.add(m); }
+    { const mx = wx + WELL + 34, mz = z0T - 17, top = 46, ink = new THREE.MeshStandardMaterial({ color: '#08080a', roughness: .2, envMapIntensity: 1.2 });
+      const m = new THREE.Group(); m.position.set(mx, 0, mz); body.add(m);
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(8, 9.5, 4 - FLOOR_Y, 8), ink); col.position.y = (FLOOR_Y + 4) / 2; col.castShadow = col.receiveShadow = true; m.add(col);
+      for (const y of [FLOOR_Y + 3, -20, -2, 3.4]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(9.6 - (y + 80) * .012, 9.8 - (y + 80) * .012, y > 0 ? 1.2 : .8, 8), brass); b.position.y = y; m.add(b); }
+      const glass = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, top - 4, 40, 1, true), new THREE.MeshStandardMaterial({ color: '#cfd8e6', roughness: .06, metalness: 0, transparent: true, opacity: .22, envMapIntensity: 2, depthWrite: false, side: THREE.DoubleSide }));
+      glass.position.y = 4 + (top - 4) / 2; glass.renderOrder = 2; m.add(glass);
+      const fil = new THREE.Mesh(new THREE.CylinderGeometry(.28, .28, top - 6, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(dress.accent ?? '#9cc8ff').multiplyScalar(1.6), toneMapped: false })); fil.position.y = 4 + (top - 4) / 2; m.add(fil);
+      const helix = new THREE.Curve(); helix.getPoint = (u, out = new THREE.Vector3()) => out.set(Math.cos(u * Math.PI * 2 * 16) * 1.9, 6 + u * (top - 12), Math.sin(u * Math.PI * 2 * 16) * 1.9);
+      m.add(new THREE.Mesh(new THREE.TubeGeometry(helix, 640, .16, 6, false), brass));
+      for (const y of [4.6, top]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(5, 5.4, 1.4, 40), brass); r.position.y = y; m.add(r); }
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(4.2, 32, 20), brass); sphere.position.y = top + 5; sphere.castShadow = true; m.add(sphere);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(7.2, 1.3, 16, 64), brass); ring.rotation.x = Math.PI / 2; ring.position.y = top + 3.4; m.add(ring);
+      // the lever, on the column's face toward the table: a gold arm with a red knob, up until it is pulled
+      const lever = new THREE.Group(); lever.position.set(0, 0, 9.6); lever.rotation.x = -.5; m.add(lever);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(.5, .5, 14, 12), brass); arm.position.y = 7; lever.add(arm);
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(1.5, 24, 16), new THREE.MeshStandardMaterial({ color: '#a3141f', roughness: .25 })); knob.position.y = 14.5; knob.castShadow = true; lever.add(knob);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 2.4, 20), brass); hub.rotation.z = Math.PI / 2; lever.add(hub);
+      L.machine = { group: m, lever, filament: fil, tip: new THREE.Vector3(mx, top + 5, mz) }; }
+  }
   // The salon's middle faces where your seat looks: the croupier's side from the long side, the head of the table from the
   // foot.
-  function placeBackdrop() { const port = L.orient === 'port'; salon?.place((L.wheelX - WELL + L.rect.x1) / 2, (L.zFar + L.zNear) / 2, port ? -1 : 0, port ? 0 : -1); }
+  function placeBackdrop() { const port = L.orient === 'port'; for (const w of [salon, studioWall]) w?.place((L.wheelX - WELL + L.rect.x1) / 2, (L.zFar + L.zNear) / 2, port ? -1 : 0, port ? 0 : -1); }
   // A lit box glows like a lamp under the cloth: brightest along its printed edge and fading in toward the middle, so
   // the numeral keeps its ink. One alpha map per box shape (the zero's is pointed), shared by the boxes of that size.
   const glowMaps = new Map();
@@ -555,17 +620,27 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // wheel beside the croupier's chip tray, turned toward your seat (wide and low, so it shows whole under the bar at your
   // seat and never stands over the wheel): the newest number large at its left in its colour, the twelve before it in a
   // grid to the right, newest first. Repainted when a number lands (setBoard).
+  // In the Lightning studio the board is the strike screen: in an art deco gold frame stepped up to a crown, the
+  // table's name across its head, the newest number large at its left and the last eight beside it, and under them the
+  // numbers lightning struck this round with their multipliers (setBoard's `strikes`).
   const BOARD_Y = 2;   // the display's foot, over the felt
-  const board = (() => {
-    const W = 30, H = 13, c = document.createElement('canvas'); c.width = 900; c.height = Math.round(900 * H / W);
+  function makeBoard(studio) {
+    const W = studio ? 33 : 30, H = studio ? 33 * 17 / 40 : 13, c = document.createElement('canvas'); c.width = studio ? 1200 : 900; c.height = Math.round(c.width * H / W);   // (the studio's is painted 40 x 17 and shown as large as the salon's fits under the bar)
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso;
     const g3 = new THREE.Group(), face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
-    const pole = BOARD_Y - FLOOR_Y, frame = new THREE.Mesh(new THREE.BoxGeometry(W + 1.4, H + 1.4, 1.6), brass), post = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, pole, 16), brass), foot = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 1.5, 40), brass);
+    const pole = BOARD_Y - FLOOR_Y, rim = studio ? 2.2 : 1.4, frame = new THREE.Mesh(new THREE.BoxGeometry(W + rim, H + rim, 1.6), brass), post = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, pole, 16), brass), foot = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 1.5, 40), brass);
     frame.position.y = face.position.y = BOARD_Y + H / 2; face.position.z = .81; post.position.y = FLOOR_Y + pole / 2; foot.position.y = FLOOR_Y + .75; frame.castShadow = post.castShadow = true;
-    g3.add(frame, face, post, foot); table.add(g3);
-    return { group: g3, canvas: c, tex: t };
-  })();
-  function setBoard(history) {
+    g3.add(frame, face, post, foot);
+    if (studio) {   // the crown: three gold steps over the frame, and a fluted fin either side
+      let y = BOARD_Y + H + rim / 2; for (const [w, h] of [[W * .62, .8], [W * .36, .7], [W * .14, .9]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 1.4), brass); b.position.y = y + h / 2; b.castShadow = true; g3.add(b); y += h; }
+      for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(.5, H * (.95 - i * .18), 1.2), brass); f.position.set(sx * (W / 2 + rim / 2 + .5 + i * .9), BOARD_Y + H / 2 - i * H * .06, 0); g3.add(f); }
+    }
+    table.add(g3); return { group: g3, canvas: c, tex: t, studio, W, H };
+  }
+  let board = makeBoard(false), boardShows = { history: [], strikes: [] };
+  function setBoard(history = boardShows.history, strikes = boardShows.strikes) {
+    boardShows = { history, strikes };
+    if (board.studio) return paintStrikeBoard(history, strikes);
     const c = board.canvas, g = c.getContext('2d'), k = c.width / 30, ink = { red: '#ff4b55', black: '#f1ece0', green: '#3fd98a' };   // laid out in the board's own centimetres
     g.fillStyle = '#060606'; g.fillRect(0, 0, c.width, c.height);
     g.strokeStyle = 'rgba(214,180,104,.7)'; g.lineWidth = .1 * k; g.strokeRect(.4 * k, .4 * k, c.width - .8 * k, c.height - .8 * k);
@@ -578,6 +653,39 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     rest.slice(0, 12).forEach((n, i) => { const col = i % 4, row = Math.floor(i / 4); g.fillStyle = ink[colorOf(n)]; g.globalAlpha = 1 - i * .045; g.fillText(String(n), (13.9 + col * 4.4) * k, (2.9 + row * 3.6) * k); });
     g.globalAlpha = 1; board.tex.needsUpdate = true; requestRender(false);
   }
+  // The strike screen, laid out in its own centimetres (40 x 17)
+  const BOLT = 'M 0.5 -1 L -0.32 0.12 L 0.06 0.12 L -0.48 1 L 0.4 -0.18 L 0.02 -0.18 Z';   // a lightning bolt, 1 high either way of 0
+  function paintStrikeBoard(history, strikes) {
+    const c = board.canvas, g = c.getContext('2d'), k = c.width / 40, ink = { red: '#ff4b55', black: '#f1ece0', green: '#3fd98a' }, gold = '#d8b46a';   // (k: px to its 40 cm)
+    g.fillStyle = '#050506'; g.fillRect(0, 0, c.width, c.height);
+    // a faint sunburst from the foot of the screen
+    g.save(); g.translate(20 * k, 17.6 * k); g.strokeStyle = 'rgba(214,180,104,.08)'; g.lineWidth = .12 * k;
+    for (let i = 0; i <= 26; i++) { const a = Math.PI + i / 26 * Math.PI; g.beginPath(); g.moveTo(Math.cos(a) * 3 * k, Math.sin(a) * 3 * k); g.lineTo(Math.cos(a) * 40 * k, Math.sin(a) * 40 * k); g.stroke(); }
+    g.restore();
+    g.strokeStyle = 'rgba(214,180,104,.85)'; g.lineWidth = .12 * k; g.strokeRect(.5 * k, .5 * k, c.width - k, c.height - k); g.lineWidth = .05 * k; g.strokeRect(.85 * k, .85 * k, c.width - 1.7 * k, c.height - 1.7 * k);
+    // the head: the table's name between two bolts
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = gold; g.font = `700 ${1.25 * k}px Cinzel, serif`; g.letterSpacing = `${.3 * k}px`;
+    const title = dress.game, tw = g.measureText(title).width; g.fillText(title, 20 * k + .15 * k, 2.3 * k); g.letterSpacing = '0px';
+    for (const sx of [-1, 1]) { g.save(); g.translate(20 * k + sx * (tw / 2 + 1.4 * k), 2.3 * k); g.scale(.8 * k, .8 * k); g.fillStyle = dress.accent ?? gold; g.fill(new Path2D(BOLT)); g.restore(); }
+    // the newest number, large, and the eight before it
+    const [first, ...rest] = history;
+    g.fillStyle = 'rgba(214,180,104,.4)'; g.fillRect(12.4 * k, 4 * k, .07 * k, 5.6 * k); g.fillRect(1.6 * k, 10.4 * k, 36.8 * k, .07 * k);
+    if (first != null) { g.fillStyle = ink[colorOf(first)]; g.font = `800 ${6.4 * k}px "Barlow Condensed", sans-serif`; g.fillText(String(first), 6.8 * k, 7 * k); }
+    g.font = `700 ${2.2 * k}px "Barlow Condensed", sans-serif`;
+    rest.slice(0, 8).forEach((n, i) => { g.fillStyle = ink[colorOf(n)]; g.globalAlpha = 1 - i * .07; g.fillText(String(n), (14.9 + i * 3.1) * k, 7 * k); });
+    g.globalAlpha = 1;
+    // the lightning numbers: each in a gold-ringed cell, its multiplier under it
+    g.fillStyle = 'rgba(236,228,210,.6)'; g.font = `700 ${.7 * k}px Inter, sans-serif`; g.letterSpacing = `${.2 * k}px`; g.fillText('LIGHTNING NUMBERS', 20 * k, 11.5 * k); g.letterSpacing = '0px';
+    const list = strikes ?? [], n = list.length, cw = Math.min(5.2, 34 / Math.max(1, n));
+    list.forEach((st, i) => {
+      const x = (20 + (i - (n - 1) / 2) * cw) * k, y = 14 * k, r = Math.min(1.9, cw * .4) * k, hot = st.double ? '#ff7a4d' : st.chain ? '#ff5a3c' : dress.accent ?? gold;
+      g.beginPath(); g.arc(x, y - .5 * k, r, 0, Math.PI * 2); g.fillStyle = '#0d0d10'; g.fill(); g.lineWidth = .14 * k; g.strokeStyle = hot; g.stroke();
+      g.fillStyle = ink[colorOf(st.n)]; g.font = `800 ${r * 1.05}px "Barlow Condensed", sans-serif`; g.fillText(String(st.n), x, y - .5 * k);
+      g.fillStyle = gold; g.font = `800 ${Math.min(1.1, cw * .26) * k}px "Barlow Condensed", sans-serif`; g.fillText(`${st.x}×`, x, y + 2 * k);
+    });
+    if (!n) { g.fillStyle = 'rgba(236,228,210,.35)'; g.font = `500 ${.8 * k}px Inter, sans-serif`; g.fillText('Lightning strikes when bets close', 20 * k, 14 * k); }
+    board.tex.needsUpdate = true; requestRender(false);
+  }
   // behind the wheel, beside the croupier's chip tray, turned toward your seat (from the foot, on an upright phone, it
   // stands beyond the wheel)
   function placeBoard() {
@@ -586,7 +694,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     board.group.position.set(x, 0, z); board.group.rotation.y = Math.atan2(seat.x - x, seat.z - z);
   }
   function placePlaque() { const port = L.orient === 'port'; plaque.position.set(L.xEnd + (port ? 10 : -4), 0, L.zFar - (port ? 22 : 17)); plaque.rotation.y = port ? Math.PI / 2 : -.22; }
-  function placeMarkers() { if (!L) return; const cz = (L.zFar + L.zNear) / 2; markers.position.set(L.wheelX + WELL * .55, 0, cz - WELL * .9); markers.rotation.y = 0; }
+  function placeMarkers() { if (!L) return; const cz = (L.zFar + L.zNear) / 2, k = dress.studio ? 1.24 : 1; markers.position.set(L.wheelX + WELL * .55 * k, 0, cz - WELL * .9 * k); markers.rotation.y = 0; }   // (clear of the studio's plinth)
   // The croupier's rake: a slim ebony stick with a T head and a brass ferrule where they meet. Its group sits on the felt
   // under the middle of the head; the head's face (local -z) pushes the chips, and the stick runs back from it toward the
   // croupier and up to his hand. Out of sight until he reaches in.
@@ -710,8 +818,9 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   }
   // the canvas is w x h; the picture is framed for the part of it between `top` (the bar, the strip of numbers) and
   // `bottom` (the dock, which the canvas runs on under, blurred)
+  let framedAs = null;
   function frame(w, h, top = 0, bottom = 0) {
-    st.size(w, h);
+    framedAs = [w, h, top, bottom]; st.size(w, h);
     const vh = Math.max(1, h - top - bottom); view.w = w; view.h = vh; view.top = top;
     camera.clearViewOffset(); camera.aspect = w / vh;
     const orient = w / vh < .9 ? 'port' : 'land';
@@ -772,6 +881,22 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     return side(zc, x, z) === side(zc, left - T.r, T.cz) ? 'call:zero' : 'call:voisins';
   }
   // a preset applies at once: pixels and shadows (the stage), the cloth and the chips
+  // The room the table stands in (DRESS): the light and the room round it changed, the cloth repainted, and the top, the
+  // leather, the lower body and the plinth rebuilt. The studio's set is made the first time it is wanted (the room fetches
+  // its picture first: preloadStudioArt).
+  function setStudio(name) {
+    const d = DRESS[name] ?? SALON; if (d === dress) return; dress = d;
+    if (d.studio && !studioWall && ART.studio) { studioWall = salonWall(ART.studio, { radius: 420, eye: 90, floorY: FLOOR_Y, aniso, level: .62 }); scene.add(studioWall.mesh); }
+    if (salon) salon.mesh.visible = !d.studio; if (studioWall) studioWall.mesh.visible = d.studio;
+    floor.material = d.studio ? gloss : carpet;
+    napTile.paint(); for (const m of [...feltMats.values(), ...clothMats.values()]) m.sheenColor?.set(d.sheen);
+    leather.color.set(d.leather); keyW.color.set(d.key); keyL.color.set(d.key); hemi.color.set(d.fill); glow.color.set(d.glow);
+    rim.color.set(d.accent ?? '#9cc8ff'); rim.intensity = d.studio ? 2600 : 0;
+    if (board.studio !== d.studio) { table.remove(board.group); board.group.traverse(o => { o.geometry?.dispose(); if (o.material && o.material !== brass) o.material.dispose(); }); board.tex.dispose(); board = makeBoard(d.studio); }
+    if (L) { buildTable(L.orient); if (framedAs) frame(...framedAs); }   // (the shots are worked out as frame works them: over the picture between the bar and the dock)
+    setBoard();
+    requestRender();
+  }
   function setQuality(q) {
     const was = quality; quality = q; st.setQuality(q);
     const m = feltMaterial(q); if (m !== feltMat) { m.map = feltMat.map; feltMat.map = null; feltMat = felt.material = m; m.needsUpdate = true; }
@@ -780,9 +905,10 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     setChipDetail(q.chipSegments); swapChipGeometry(scene); requestRender();
   }
 
+  setStudio(dressing);   // the room asked for (a salon table changes nothing)
   return {
     THREE, renderer, scene, camera, wheel, table, tickers, requestRender, frame, project, pick, highlight, anchor, chipMesh, chipLook, chips, setMarkers, dolly, rake, chipsG, mood, setBoard,
-    shots, move, setPose, showcase, relayout, setQuality, fit: fitNow,
+    shots, move, setPose, showcase, relayout, setQuality, setStudio, get studio() { return Object.keys(DRESS).find(k => DRESS[k] === dress); }, fit: fitNow,
     get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },
     wheelToWorld(p) { return new THREE.Vector3(p[0], p[1], p[2]).add(wheel.group.position); },

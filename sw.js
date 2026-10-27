@@ -34,7 +34,7 @@ const FONTS = [...n('barlow-condensed-latin', '600-normal', '700-normal', '800-n
 const SUITS = ['clubs', 'diamonds', 'hearts', 'spades'];
 const FILES = [...['icon-192', 'icon-512', 'maskable-192', 'maskable-512', 'apple-touch-icon'].map(f => `icons/${f}.png`), ...FONTS.map(f => `src/fonts/${f}.woff2`),
   ...['back', 'felt', 'leather', 'salon', 'salon-light', 'carpet'].map(f => `assets/table/${f}.webp`), ...SUITS.flatMap(s => ['jack', 'queen', 'king'].map(r => `assets/cards/court-belt/${r}_of_${s}.webp`)),
-  'assets/cards/ace_of_spades_2.webp', 'assets/roulette/macassar.webp', 'assets/roulette/salon.webp', 'assets/roulette/stone.webp', 'assets/roulette/cloth.webp', 'assets/roulette/leather.webp', ...WAV.map(f => `src/sounds/${f}.wav`), ...KIT.map(f => `src/sounds/kit/${f}.mp3`)];
+  'assets/cards/ace_of_spades_2.webp', 'assets/roulette/macassar.webp', 'assets/roulette/salon.webp', 'assets/roulette/stone.webp', 'assets/roulette/cloth.webp', 'assets/roulette/leather.webp', 'assets/roulette/studio.webp', ...WAV.map(f => `src/sounds/${f}.wav`), ...KIT.map(f => `src/sounds/kit/${f}.mp3`)];
 // (the music, 7 MB, is kept the first time it plays rather than up front)
 
 const MEDIA_RE = /\.(mp3|wav|webp|png|jpe?g|woff2)$/i;
