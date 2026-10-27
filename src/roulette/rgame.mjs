@@ -103,9 +103,11 @@ export async function createRoulette(ctx) {
   // the camera's bearing round the wheel, in the wheel's own angles (physics.mjs): the near side of the bowl
   const camAz = (c = S.camera.position) => { const w = S.wheel.group.position; return Math.atan2(-(c.z - w.z), c.x - w.x); };
   let clickTurn = 0; const click = (gain, rate = 1) => audio.cue(`ball-click-${(clickTurn++ % 6) + 1}`, { gain, rate: rate * (.96 + Math.random() * .08), x: ballX() });
+  // the croupier's own sounds (his hand on the wheelhead, the launch, the rake, the dolly): their takes in turn
+  const turns = {}, pick = (name, n) => (turns[name] = ((turns[name] ?? Math.floor(Math.random() * n)) + 1) % n) + 1;
   const say = (line, opts) => audio.say(`voice/james-${line}`, opts);
   const numberClip = n => `voice/james-n${n}`;
-  audio.preload([...[1, 2, 3, 4, 5, 6].map(i => `ball-click-${i}`), 'voice/james-place-bets', 'voice/james-no-more-bets', 'voice/james-good-luck', 'voice/james-winning-number', 'voice/james-congrats']);   // not the music: it streams (decoded, it would be 17 MB nobody plays)
+  audio.preload([...[1, 2, 3, 4, 5, 6].map(i => `ball-click-${i}`), 'ball-launch-1', 'ball-launch-2', 'wheelhead-1', 'wheelhead-2', 'rake-1', 'rake-2', 'rake-3', 'dolly-1', 'dolly-2', 'voice/james-place-bets', 'voice/james-no-more-bets', 'voice/james-good-luck', 'voice/james-winning-number', 'voice/james-congrats']);   // not the music: it streams (decoded, it would be 17 MB nobody plays)
   // while you place bets: the rolling sound's loops, and the bytes of the 37 numbers (the drawn one is decoded as bets
   // close, so the croupier's call is never late or lost to a slow first fetch)
   if (audio.available) { const go = () => { prepareRoller(audio.ctx); audio.prefetch(WHEEL.map(numberClip)); }; window.requestIdleCallback ? requestIdleCallback(go, { timeout: 3000 }) : setTimeout(go, 1500); }
@@ -434,6 +436,7 @@ export async function createRoulette(ctx) {
     const p = plan(null, { dir, phiNow: phi + pre.angle, fast: f, rotorSpeed: speed, theta0: camAz(S.shots.wheel?.pos) + Math.PI + (Math.random() - .5) * .6 });
     S.highlight([]); liftDolly(); setIdle(false);
     lateBets((pre.T + p.callAt) * 1000 / (f ? 1.25 : 1));
+    handOnWheel(pre, f ? 1.25 : 1);
     await playSpin(p, f, pre, () => closeBets(p, ctl)); running = false; refresh();
     const r = ctl.r, n = r.n;
     // the result: the wheelhead turns on from the spin's own speed, the ball easing into the middle of its pocket
@@ -475,6 +478,13 @@ export async function createRoulette(ctx) {
     const T1 = w0 * w1 < 0 ? .3 + Math.min(.25, Math.abs(w0) * .12) : 0, v1 = T1 ? 0 : w0, T2 = .35, a1 = w0 * T1 / 2;
     return { T: T1 + T2, T1, angle: a1 + (v1 + w1) * T2 / 2, at: s => s < T1 ? w0 * s - w0 * s * s / (2 * T1) : a1 + v1 * (s - T1) + (w1 - v1) * (s - T1) ** 2 / (2 * T2) };
   }
+  // ...and heard: his palm on the wood, then the push. Each take's push (s into wheelhead-1, -2) lands as the wheelhead
+  // starts its new turn, T1 into the pre-roll (`pace`: fast play runs it quicker)
+  const PUSH = [.24, .37];
+  function handOnWheel(pre, pace) {
+    const k = pick('wheelhead', 2), lead = PUSH[k - 1], t1 = pre.T1 / pace;
+    audio.cue(`wheelhead-${k}`, { gain: .45, x: panX(S.wheel.group.position), delay: Math.max(0, t1 - lead), from: Math.max(0, lead - t1) });
+  }
   // play the spin, frame by frame: the croupier's hand on the wheelhead, then the simulated throw (the wheelhead, the ball
   // and its sound). `onCall`: "No more bets" (the bets close); the picture dips to the wheel then, and in the black the
   // wheelhead is turned on by the whole pockets that bring the drawn number under the ball (physics.mjs, plan)
@@ -492,7 +502,7 @@ export async function createRoulette(ctx) {
           return;
         }
         if (!launched) {   // the throw
-          launched = true; restIdx = null; S.wheel.ball.visible = true; click(.45, .8); audio.cue('whoosh', { bus: 'table', gain: .18, rate: 1.7 });
+          launched = true; restIdx = null; S.wheel.ball.visible = true; audio.cue(`ball-launch-${pick('ball-launch', 2)}`, { gain: .5, rate: .96 + Math.random() * .08, x: ballX() });
           roll = rollLoop = audio.available && audio.enabled ? createRoller(audio.ctx, audio.bus.table) : roll;
           if (Math.random() < .4) say('good-luck', { prio: 1 });
         }
@@ -583,7 +593,9 @@ export async function createRoulette(ctx) {
     const d = S.dolly, a = S.anchor(`n${n}`); d.visible = true;
     const tall = cols.get(`n${n}`)?.length ?? 0, y = H * tall;   // (every player's chips there are one column)
     if (ms <= 0) { d.position.set(a.x, y, a.z); S.requestRender(); return Promise.resolve(); }
-    return motion.tween(ms, t => d.position.set(a.x, y + (1 - t) * 10, a.z), ease.land).then(() => audio.play(tall ? 'stack' : 'chip', { gain: .6, x: panX(a) }));
+    return motion.tween(ms, t => d.position.set(a.x, y + (1 - t) * 10, a.z), ease.land).then(() => {
+      audio.cue(`dolly-${pick('dolly', 2)}`, { gain: .55, rate: .96 + Math.random() * .08, x: panX(a) }); if (tall) audio.play('stack', { gain: .3, x: panX(a) });
+    });
   }
   function liftDolly() { const d = S.dolly; if (!d.visible) return; const y0 = d.position.y; motion.tween(220, t => { d.position.y = y0 + t * 10; }).then(() => { d.visible = false; S.requestRender(); }); }
   async function payout(r, n) {
@@ -673,8 +685,10 @@ export async function createRoulette(ctx) {
       const from = R.position.clone(), to = V(cx, 0, z0), over = Math.max(4, ...cs.map(c => c.lists.reduce((a, l) => a + l.length, 0) * H + 1.5));
       await motion.tween(200, t => { const e = ease.inOut(t); R.position.lerpVectors(from, to, e); R.position.y = (1 - e) * from.y + over * Math.sin(Math.PI * Math.min(1, t * 1.15)); });
       R.position.copy(to); audio.play('chip', { gain: .25, x: panX(to) });
-      const order = cs.sort((a, b) => b.z - a.z), starts = order.map(c => c.z), d = z0 - line;
-      await motion.tween(220 + d * 4, t => {
+      const order = cs.sort((a, b) => b.z - a.z), starts = order.map(c => c.z), d = z0 - line, ms = 220 + d * 4;
+      // the stroke heard: wood and chips over the cloth, louder for more stacks, quicker for a short stroke
+      audio.cue(`rake-${pick('rake', 3)}`, { gain: Math.min(.5, .26 + .02 * cs.reduce((a, c) => a + c.lists.length, 0)), rate: Math.max(.9, Math.min(1.25, .5 / (ms / 1000 + .08))), x: panX(to) });
+      await motion.tween(ms, t => {
         const zh = z0 - d * ease.inOut(t), face = zh - .55, done = []; R.position.z = zh;
         order.forEach((c, i) => {
           let z = Math.min(starts[i], face - CHIP_R);

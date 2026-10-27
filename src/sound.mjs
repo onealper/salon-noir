@@ -114,13 +114,14 @@ export class TableAudio {
   prefetch(paths) { if (this.available) for (const p of paths) if (!this.raw.has(p)) this.raw.set(p, this.bytes(p)); }
   forget(path) { if (this.raw?.has(path)) this.kit.delete(path); }
   get live() { return this.enabled && this.available && !document.hidden && this.ctx.state === 'running'; }
-  // A one-off kit sound on a bus: a sting, a menu tick, the table cheering.
-  async cue(path, { bus = 'table', gain = 1, rate = 1, x = 0 } = {}) {
+  // A one-off kit sound on a bus: a sting, a menu tick, the table cheering. `delay` (s from now) and `from` (s into the
+  // clip) line a sound up with the move it belongs to.
+  async cue(path, { bus = 'table', gain = 1, rate = 1, x = 0, delay = 0, from = 0 } = {}) {
     if (!this.live) return; const buf = await this.clip(path); if (!buf || !this.live) return;
     const src = this.ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
     const g = this.ctx.createGain(); g.gain.value = gain; let out = g;
     if (x && this.ctx.createStereoPanner) { const p = this.ctx.createStereoPanner(); p.pan.value = Math.max(-.7, Math.min(.7, x / 70)); g.connect(p); out = p; }
-    src.connect(g); out.connect(this.bus[bus] ?? this.bus.table); src.start(); return src;
+    src.connect(g); out.connect(this.bus[bus] ?? this.bus.table); src.start(this.ctx.currentTime + delay, from); return src;
   }
   // The dealer speaks one line at a time. A more important line cuts in; a lesser one waits its
   // turn only if it is still worth saying (`fresh` ms), otherwise it is dropped. `late`: dropped too if its clip

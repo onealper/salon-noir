@@ -35,6 +35,7 @@ File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CRED
 - **The room:** recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0, mixed into one loop (`room-casino-1.mp3`)
 - **Chip-select thock:** a [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) wood knock with a Kenney clay-chip click, CC0
 - **Dealer voices (James and Sofia), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs
+- **The roulette croupier's sounds** (his hand on the wheelhead, the ball's launch, the rake, the dolly): generated for Salon Noir with ElevenLabs Sound Effects v2
 
 ## Images
 
