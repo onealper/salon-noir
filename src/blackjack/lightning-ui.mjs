@@ -3,7 +3,7 @@
 // the chips, the board's cells crackling); then for each total a bolt comes down out of the dark through its cell and
 // grounds on the felt in sparks, quicker and quicker, and a held breath in the dark before the biggest. Win on a struck total and a bolt carries that multiplier from the board
 // down to a badge on your bet, where it waits for your next win; cash it and a gold bolt hits the badge and the whole
-// table flashes. Outside, a storm comes nearer as a bigger multiplier rides on your bet (storm.mjs). The bolts, burns
+// table flashes: the payoff (payoff, below). Outside, a storm comes nearer as a bigger multiplier rides on your bet (storm.mjs). The bolts, burns
 // and lamp are scene/lightning3d.mjs; the multipliers are the engine's.
 import { BUCKETS } from '../engine.mjs';
 import { LAYOUT } from '../scene/world.mjs';
@@ -15,13 +15,13 @@ import * as ui from '../ui-motion.mjs';
 const LABEL = { le17: '4–17', 18: '18', 19: '19', 20: '20', 21: '21', bj: 'BJ' };
 // `inView`: you can see the table (not the lobby, not the wheel); `shown`: the room is in sight (behind the lobby too);
 // `reframe`: the seat is framed again (the board takes the head of the table)
-export function createLightningUI({ world, table, motion, audio, settings, take, stage, overlay, inView, shown, reframe }) {
+export function createLightningUI({ world, table, view, motion, audio, feel, settings, take, stage, overlay, call, paid: showPaid, inView, shown, reframe }) {
   const L = createLightning3D(world, { reduced: () => settings.reduced || settings.flash === 'off', soft: () => settings.flash === 'soft' }); let rumbleAt = -Infinity;
   const storm = createStorm({ three: L, audio, settings, take });
   const box = document.querySelector('#lightning'), row = box.querySelector('.lb-row'), cells = {};
   for (const b of BUCKETS) { const c = document.createElement('div'); c.className = 'lb-cell'; c.dataset.b = b; c.innerHTML = `<small>${LABEL[b]}</small><b>–</b>`; row.append(c); cells[b] = c; }
-  const fx = document.createElement('div'); fx.className = 'zap'; fx.hidden = true; fx.innerHTML = '<div class="dim"></div><div class="flash"></div><div class="splash" hidden><small>Lightning</small><b></b><em></em></div>'; stage.append(fx);
-  const flashEl = fx.querySelector('.flash'), veilEl = fx.querySelector('.dim'), splash = fx.querySelector('.splash');
+  const fx = document.createElement('div'); fx.className = 'zap'; fx.hidden = true; fx.innerHTML = '<div class="dim"></div><div class="flash"></div><div class="l-splash" hidden><small>Lightning</small><b></b><em></em></div>'; stage.append(fx);
+  const flashEl = fx.querySelector('.flash'), veilEl = fx.querySelector('.dim'), splash = fx.querySelector('.l-splash');   // (not .splash: that is the page's loading screen, whose rules hide it)
   const badge = document.createElement('div'); badge.className = 'l-badge'; badge.hidden = true; badge.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.6 2 4.8 13.4h6l-1.4 8.6 8.8-11.4h-6L13.6 2Z"/></svg><b></b><small></small>'; overlay.append(badge);
   // the stage flash: at full, stroke for stroke with its bolt (`light`, from lightning3d's hit) or two peaks; at soft one low
   // peak (the strikes come no faster than three a second); none when off
@@ -118,16 +118,66 @@ export function createLightningUI({ world, table, motion, audio, settings, take,
       box.classList.remove('charging'); veil(0, real(600)); await L.dim(0, real(600)); audio.hold(false);
     }
   }
+  // The payoff: the multiplier you carried pays. Its light gathers on your badge (the room dips, a hum climbs, the felt
+  // crackles round it), a gold bolt drives into it and the picture holds for a breath (the hit-stop, longer for a bigger
+  // multiplier) before the table shakes and the thunder comes, both as big as the multiplier, and the dealer calls it; the
+  // multiplier slams onto the screen and the money counts up under it with rising ticks, while the bonus is paid onto your
+  // stack in chips that crackle with what is left of the charge. Reduce motion: no gathering, no hold, the sum at once.
+  async function payoff(r) {
+    const { m, amount } = r.bonus, k = Math.min(1, Math.max(0, (m - 2) / 18)), at = rim(), real = ms => motion.reduced ? 0 : ms * motion.slow;
+    L.charge(false); badge.classList.add('gather');
+    const GATHER = 360 + 300 * k; L.dim(.55, real(200)); veil(.45, real(200));
+    const hum = audio.buzz(real(GATHER) / 1000, { gain: .2 + .1 * k }); L.crawl(at, { hot: true, n: 4, life: real(GATHER), reach: 5 + 3 * k, grow: true });
+    await motion.wait(GATHER); hum?.cut(); badge.classList.remove('gather');
+    const light = await L.hit(at, { hot: true, width: 1.5 + .7 * k, life: 640, n: Math.round(80 + 80 * k), size: 46 + 24 * k, near: true });
+    L.flare(at, { color: '#ffe0a0', size: 48 + 30 * k, life: 700 });
+    audio.cue('strike', { gain: .9 }); feel?.tap(m >= 10 ? 'strike-big' : 'strike');
+    await hitStop(60 + 80 * k, .5 + .25 * k);
+    flash(.5 + .2 * k, light); shake(5 + 9 * k);
+    audio.cue(m >= 10 ? 'thunder-mega' : take('thunder', 2), { gain: .5 + .35 * k, delay: .04 });
+    call?.('lightning');
+    const b = splash.querySelector('b'), em = splash.querySelector('em'); b.textContent = `×${m}`; em.textContent = '+0'; em.classList.remove('done');
+    splash.hidden = false; splash.classList.remove('go', 'out'); void splash.offsetWidth; splash.classList.add('go');
+    badge.classList.add('spent'); setTimeout(() => { badge.classList.remove('spent'); renderBadge(false); }, 700);
+    // paid in chips onto the winning hand's stack, crackling as they land and for a moment after
+    const h = r.hands.find(h => h.payout > h.stake) ?? r.hands[0], key = `h${h?.index ?? 0}`, base = view.stackBase(key), pile = new world.THREE.Vector3(base.x, 1.2, base.z);
+    const paid = view.payout(key, amount).then(() => {
+      L.crawl(pile, { hot: true, n: 5, life: real(900), reach: 6 }); L.sparks(pile, { color: '#ffe2a0', n: 26, speed: 24 });
+      for (const t of [380, 820]) setTimeout(() => L.crawl(pile, { hot: true, n: 3, life: real(420), reach: 4 }), real(t));
+    });
+    await motion.wait(260);   // the multiplier lands first
+    await countUp(em, amount, real(520 + 700 * k));
+    void em.offsetWidth; em.classList.add('done'); showPaid?.(); audio.cue('win-bling', { gain: .7 }); feel?.tap('win');   // (the balance takes it now)
+    await Promise.all([paid, motion.wait(settings.fast ? 700 : 1000)]);
+    splash.classList.add('out'); L.dim(0, real(500)); veil(0, real(500)); await motion.wait(420); splash.hidden = true; splash.classList.remove('go', 'out');
+  }
+  // The hit-stop: for a breath the picture holds under the flash (no frame drawn), then lets go into the shake.
+  async function hitStop(ms, power) {
+    if (settings.reduced) return;
+    const peak = settings.flash === 'off' ? 0 : settings.flash === 'soft' ? Math.min(.2, power * .45) : power;
+    if (peak) { for (const a of flashEl.getAnimations()) a.cancel(); flashEl.style.opacity = peak; }
+    world.hold(ms); await new Promise(res => setTimeout(res, ms));
+    flashEl.style.opacity = '';
+  }
+  // The bonus counted up: quick at first and slowing onto its figure, a tick for each step, each a little higher.
+  function countUp(el, to, ms) {
+    if (ms <= 0) { el.textContent = `+${fmt(to)}`; return Promise.resolve(); }
+    const steps = Math.max(8, Math.min(26, Math.round(ms / 40)));
+    return new Promise(res => {
+      let i = 0;
+      const step = () => {
+        i++; const k = i / steps; el.textContent = `+${fmt(i >= steps ? to : Math.round(to * (1 - (1 - k) ** 2.4)))}`;
+        audio.blip(560 * 2 ** (1.3 * k), { gain: .1 + .08 * k }); if (i % 3 === 0) feel?.tap('tick');
+        if (i >= steps) { res(); return; }
+        setTimeout(step, ms / steps * (.55 + 1.1 * k));   // (the gaps lengthen as it slows; they add up to about ms)
+      };
+      step();
+    });
+  }
   async function settleShow(r) {
     layout();
-    if (r.bonus) {   // the multiplier you carried in pays: a gold bolt onto your badge, the table goes white
-      const at = rim(); L.charge(false); const light = await L.hit(at, { hot: true, width: 1.9, life: 620, n: 120, size: 60, near: true }); L.flare(at, { color: '#ffe0a0', size: 60, life: 700 });
-      flash(.6, light); shake(8); audio.cue('strike', { gain: .9 });
-      splash.querySelector('b').textContent = `×${r.bonus.m}`; splash.querySelector('em').textContent = `+${fmt(r.bonus.amount)}`;
-      splash.hidden = false; splash.classList.remove('go'); void splash.offsetWidth; splash.classList.add('go');
-      badge.classList.add('spent'); setTimeout(() => { badge.classList.remove('spent'); renderBadge(false); }, 700);
-      await motion.wait(settings.fast ? 1100 : 1600); splash.hidden = true;
-    } else if (r.lost) { badge.classList.add('lost'); audio.cue(take('zap', 2), { gain: .35 }); await motion.wait(420); badge.classList.remove('lost'); }
+    if (r.bonus) await payoff(r);
+    else if (r.lost) { badge.classList.add('lost'); audio.cue(take('zap', 2), { gain: .35 }); await motion.wait(420); badge.classList.remove('lost'); }
     if (r.earned) {   // a bolt carries this hand's multiplier from its cell on the board down to your bet
       const c = cells[r.earned.bucket], n = ndcOf(c), to = rim(); c.classList.add('lit');
       L.hit(to, { from: L.atScreen(n.x, n.bottom, to), width: .9, life: 520, n: 30, size: 26 });

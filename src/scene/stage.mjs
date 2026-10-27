@@ -125,7 +125,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // Drawn only when something changes. A ticker draws every frame while it runs, unless it is `lazy` (it
   // asks for its own frames); it redraws the shadows too, unless it is `still` (it moves no shadow caster:
   // the camera, a glow, a light's level). `requestRender(false)` asks for a frame that keeps the shadows.
-  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0; const tickers = new Set();
+  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0; const tickers = new Set();
   function requestRender(shadows = true) { dirty = true; if (shadows) shadowsDirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
   // Frame-time watch: while things move, compare each frame with the display's own refresh (the
   // shortest recent interval - 8, 16 or 33 ms), so a 30 Hz screen or Low Power Mode is not mistaken
@@ -147,6 +147,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   const gl = renderer.getContext();
   function loop(t) {
     loops++; running = false; if (paused || gl.isContextLost()) return;   // out of sight, or the context is gone (its restore asks for a frame)
+    if (t < heldUntil) { running = true; last = 0; requestAnimationFrame(loop); return; }   // a hit-stop: the picture holds (time runs on; the gap isn't a slow frame)
     watch(t); if (!tickers.size) last = 0;
     let busy = false, moving = false;
     for (const f of tickers) { try { f(t); busy ||= !f.lazy; moving ||= !f.still; } catch (e) { tickers.delete(f); console.error('ticker', e); } }   // one bad ticker must not stop the table (a finishing tween may request another frame here)
@@ -169,6 +170,8 @@ export function createStage(canvas, { quality = detectQuality(), background, env
       for (const k of lights()) k.shadow.mapSize.set(q.shadow, q.shadow); freeShadows(); renderer.shadowMap.type = shadowType(q);
       if (q.soft !== was.soft) scene.traverse(o => { for (const m of [o.material ?? []].flat()) m.needsUpdate = true; });
     },
+    // A hit-stop: no frame drawn for `ms`, the last one held on the screen, then on again from where time has got to.
+    hold(ms) { heldUntil = performance.now() + ms; requestRender(false); },
     // Out of sight (the other room): no frames, the smallest drawing buffer and no shadow maps held.
     pause(on) {
       if (on === paused) return; paused = on;

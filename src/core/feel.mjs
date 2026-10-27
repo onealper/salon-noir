@@ -22,6 +22,9 @@ const PATTERNS = {
   big: [{ duration: 30, intensity: .6 }, { delay: 70, duration: 30, intensity: .8 }, { delay: 70, duration: 60, intensity: 1 }],   // blackjack, a big win
   refuse: 'error',                                     // a bet the table won't take
   knock: [{ duration: 14, intensity: .45 }],             // the roulette ball striking a canoe
+  strike: [{ duration: 45, intensity: 1 }],              // a Lightning multiplier paying: the bolt
+  'strike-big': [{ duration: 70, intensity: 1 }, { delay: 60, duration: 40, intensity: .7 }, { delay: 50, duration: 30, intensity: .5 }],   // a ×10 and up
+  tick: [{ duration: 8, intensity: .35 }],               // the payoff counting up
 };
 const GOLD = ['#e2c483', '#c9a45c', '#f6e7b8', '#8d7038', '#ece4d2'];
 

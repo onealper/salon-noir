@@ -27,7 +27,7 @@ const SPOT_NAME = { main: 'Main bet', ...Object.fromEntries(SIDE_BETS.map(b => [
 const keyOf = spot => spot === 'main' ? 'h0' : spot;
 const maxPays = id => Math.max(...SIDE[id].table.map(r => r[1]));   // the slot's own bet; the Free Bet table repaints the last slot
 // The dealer's lines (both voices), fetched with the salon's sounds.
-const BJ_LINES = ['place-bets', 'dealer-ace', 'insurance', 'even-money', 'blackjack', 'dealer-blackjack', 'dealer-17', 'dealer-18', 'dealer-19', 'dealer-20', 'dealer-21', 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
+const BJ_LINES = ['place-bets', 'dealer-ace', 'insurance', 'even-money', 'lightning', 'blackjack', 'dealer-blackjack', 'dealer-17', 'dealer-18', 'dealer-19', 'dealer-20', 'dealer-21', 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
 
 export function createBlackjack(ctx) {
   const { settings, store, audio, feel, uiSound, sting, take } = ctx;
@@ -142,7 +142,7 @@ export function createBlackjack(ctx) {
   function boardCover() { const b = $('#lightning'); return b.hidden || document.body.classList.contains('in-lobby') ? 0 : b.offsetHeight + 12; }
   const barCover = () => ctx.barCover(stage);   // how far the bar reaches down over the table
   // ---- readouts ----------------------------------------------------------------------------------------------
-  function renderBalance() { save(); ctx.showBalance(table.balance); }
+  function renderBalance(less = 0) { save(); ctx.showBalance(table.balance - less); }   // (`less`: shown later, as a Lightning bonus counts up)
   function renderBets() {
     const inPlay = table.phase !== 'betting', amount = id => inPlay ? 0 : table.betOn(id);
     for (const id of SPOTS) { const el = spotEls[id].querySelector('.amount'); if (el.classList.contains('won')) continue; const a = amount(id); el.hidden = !a || id !== 'main'; el.textContent = fmt(a); }
@@ -488,8 +488,9 @@ export function createBlackjack(ctx) {
     for (const { el, r: sr } of seatResults) { if (el.hidden) continue; const [text, cls] = outcomeOf({ ...sr, index: 0 }, r); el.dataset.out = '1'; setTotal(el, text); el.classList.remove('bust'); el.classList.add(cls); }
     for (const { seat, p } of others()) if (p.flash) { const f = p.flash; p.flash = null; if (f.bonus) say(seat, `⚡ +${fmt(f.bonus.amount)}`, 2400); else if (f.earned) say(seat, `⚡ ×${f.earned.m}`, 2400); }
     renderSeats();
-    renderBalance(); renderTotals(); markOutcomes(r);
+    renderBalance(r.bonus?.amount ?? 0); renderTotals(); markOutcomes(r);
     if (table.mode === 'lightning') await lightning.settle(r);   // (the multiplier was saved with the balance as the hand settled)
+    ctx.showBalance(table.balance);
     celebrate(r);
     showBanner(r);
     // with side bets settled this hand the result (and their lines) waits for your tap or Space; otherwise it moves on
@@ -533,7 +534,7 @@ export function createBlackjack(ctx) {
   const bigWin = r => r.net >= Math.max(10 * r.hands.reduce((s, h) => s + h.stake, 0), 250) || r.sides.some(x => x.payout > 0 && x.pays >= 25);
   function celebrate(r) {
     const main = r.hands.reduce((s, h) => s + h.stake, 0), big = bigWin(r);
-    if (r.bonus) { big || r.bonus.m >= 10 ? audio.cue('thunder-mega', { gain: .8 }) : audio.cue(take('thunder', 2), { gain: .7 }); if (r.bonus.m >= 10) setTimeout(() => audio.cue(take('crowd-cheer', 2), { bus: 'room', gain: 5 }), 400); }
+    if (r.bonus?.m >= 10) setTimeout(() => audio.cue(take('crowd-cheer', 2), { bus: 'room', gain: 5 }), 400);   // (its thunder came with the payoff: lightning-ui)
     if (r.blackjack || big || r.bonus?.m >= 10) { feel.tap('big'); feel.confetti({ size: big || r.bonus?.m >= 10 ? 2 : 1 }); } else if (r.net > 0) feel.tap('win');
     if (r.blackjack) { sting('blackjack'); dealerSays('blackjack', { prio: 2, fresh: 2500 }); }
     else if (big) { sting('big', .9); setTimeout(() => audio.cue(take('crowd-cheer', 2), { bus: 'room', gain: 5 }), 250); }
@@ -702,7 +703,7 @@ export function createBlackjack(ctx) {
   function reset() { misdealQuiet(); table.clear(); wallet.reset(); table.balance = synced = wallet.START; table.pending = null; table.lastLayout = null; renderBalance(); lightning.reset(); renderBets(); refreshControls(); othersBet(); }
   async function misdealQuiet() { table.abandon(); for (const { p } of others()) p.refund(); renderSeats(); world.setPan(0); decide = null; view.clearCards(); view.clearChips(); hideBanner(); clearFeed(); for (const t of Object.values(totals)) t.hidden = true; busy = false; setMode('betting'); }
   // ---- Lightning ------------------------------------------------------------------------------------------------------------
-  const lightning = createLightningUI({ world, table, motion, audio, settings, take, stage, overlay, inView: () => visible && !lobby.isOpen, shown: () => visible, reframe: () => { framed = ''; reframeNow(); } });
+  const lightning = createLightningUI({ world, table, view, motion, audio, feel, settings, take, stage, overlay, call: line => dealerSays(line, { prio: 3, fresh: 1500 }), paid: () => ctx.showBalance(table.balance), inView: () => visible && !lobby.isOpen, shown: () => visible, reframe: () => { framed = ''; reframeNow(); } });
   lightningLayout = lightning.layout;
 
   // Rules and paytables, written from the same data the game settles with.

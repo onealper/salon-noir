@@ -152,6 +152,13 @@ export class TableAudio {
     setTimeout(cut, (end - t) * 1000 + 400);   // (if nothing strikes)
     return { cut };
   }
+  // A short struck tick, a counter turning over (the Lightning payoff counting up): a triangle at `freq` and its fifth, gone
+  // in 70 ms, on the UI bus.
+  blip(freq, { gain = .12 } = {}) {
+    if (!this.live) return;
+    const c = this.ctx, t = c.currentTime, g = c.createGain(); g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(.0005, t + .07); g.connect(this.bus.ui);
+    for (const [f, a] of [[freq, 1], [freq * 1.5, .35]]) { const o = c.createOscillator(), og = c.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(f, t); og.gain.value = a; o.connect(og).connect(g); o.start(t); o.stop(t + .08); }
+  }
   // The dealer speaks one line at a time. A more important line cuts in; a lesser one waits its
   // turn only if it is still worth saying (`fresh` ms), otherwise it is dropped. `late`: dropped too if its clip
   // takes longer than this to load (a call the picture won't wait for). `onStart` runs as the line starts; the

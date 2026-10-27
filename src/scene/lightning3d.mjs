@@ -233,7 +233,7 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
     }, () => { for (const m of arcs) scene.remove(m); mat.dispose(); });
   }
   function sparks(at, { color = '#cfdcff', n = 36, speed = 40, life = 700 } = {}) {
-    if (reduced()) return;
+    if (reduced()) return; n = Math.round(n);
     const pos = new Float32Array(n * 3), vel = [];
     for (let i = 0; i < n; i++) { pos.set([at.x, at.y + .3, at.z], i * 3); const a = rnd(0, Math.PI * 2), up = rnd(.2, 1); vel.push(new THREE.Vector3(Math.cos(a) * rnd(.3, 1), up, Math.sin(a) * rnd(.3, 1)).multiplyScalar(speed * rnd(.4, 1))); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));

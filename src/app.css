@@ -698,13 +698,19 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 .zap .bolts .glow { stroke: #7f9bff; opacity: .55; filter: blur(3px); }
 .zap .bolts .core { stroke: #f4f7ff; }
 .zap .bolts .hot .glow { stroke: #ffd98a; opacity: .6; }
-.zap .splash { position: absolute; left: 50%; top: 42%; translate: -50% -50%; display: grid; justify-items: center; gap: 2px; text-align: center; isolation: isolate; }
-.zap .splash::before { content: ''; position: absolute; inset: -50px -110px; z-index: -1; background: radial-gradient(closest-side, rgba(4, 6, 18, .92), rgba(4, 6, 18, .6) 55%, transparent); }
-.zap .splash small { font: 700 12px/1 Inter, system-ui, sans-serif; letter-spacing: .5em; margin-right: -.5em; text-transform: uppercase; color: #cdd8ff; text-shadow: 0 0 10px rgba(120, 150, 255, .9); }
-.zap .splash b { font: 800 120px/.9 "Barlow Condensed", sans-serif; color: #fff6d6; text-shadow: 0 0 18px rgba(255, 210, 120, .95), 0 0 50px rgba(255, 170, 60, .7), 0 0 90px rgba(120, 150, 255, .6); }
-.zap .splash em { font: 800 40px/1 "Barlow Condensed", sans-serif; font-style: normal; color: var(--gold-hi); text-shadow: 0 0 14px rgba(0, 0, 0, .8); }
-.zap .splash.go { animation: splash 1.6s cubic-bezier(.2, .9, .25, 1) both; }
-@keyframes splash { 0% { opacity: 0; scale: 2.2; filter: blur(8px); } 12% { opacity: 1; scale: .94; filter: none; } 20% { scale: 1.04; } 30% { scale: 1; } 80% { opacity: 1; scale: 1.02; } 100% { opacity: 0; scale: 1.08; } }
+.zap .l-splash { position: absolute; left: 50%; top: 42%; translate: -50% -50%; display: grid; justify-items: center; gap: 2px; text-align: center; isolation: isolate; }
+.zap .l-splash::before { content: ''; position: absolute; inset: -50px -110px; z-index: -1; background: radial-gradient(closest-side, rgba(4, 6, 18, .92), rgba(4, 6, 18, .6) 55%, transparent); }
+.zap .l-splash small { font: 700 12px/1 Inter, system-ui, sans-serif; letter-spacing: .5em; margin-right: -.5em; text-transform: uppercase; color: #cdd8ff; text-shadow: 0 0 10px rgba(120, 150, 255, .9); }
+.zap .l-splash b { font: 800 120px/.9 "Barlow Condensed", sans-serif; color: #fff6d6; text-shadow: 0 0 18px rgba(255, 210, 120, .95), 0 0 50px rgba(255, 170, 60, .7), 0 0 90px rgba(120, 150, 255, .6); }
+.zap .l-splash em { font: 800 40px/1 "Barlow Condensed", sans-serif; font-style: normal; color: var(--gold-hi); text-shadow: 0 0 14px rgba(0, 0, 0, .8); }
+/* the payoff: the multiplier slams in and holds while the sum counts up under it, which pops as it lands; then it goes */
+.zap .l-splash.go { animation: splash-in .55s cubic-bezier(.2, .9, .25, 1) both; }
+.zap .l-splash.out { animation: splash-out .42s ease-in both; }
+@keyframes splash-in { 0% { opacity: 0; scale: 2.2; filter: blur(8px); } 40% { opacity: 1; scale: .94; filter: none; } 70% { scale: 1.04; } 100% { opacity: 1; scale: 1; } }
+@keyframes splash-out { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 1.08; } }
+.zap .l-splash em { font-variant-numeric: tabular-nums; }
+.zap .l-splash em.done { animation: tally .45s cubic-bezier(.2, .9, .25, 1); }
+@keyframes tally { 0% { scale: 1.35; color: #fff; text-shadow: 0 0 18px rgba(255, 220, 140, .95), 0 0 40px rgba(255, 190, 90, .7); } 100% { scale: 1; } }
 /* your multiplier, waiting beside your bet */
 .l-badge { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 4px; padding: 4px 9px 4px 6px; translate: -50% -50%; border-radius: 99px; pointer-events: auto;
   background: linear-gradient(180deg, #2b2416, #0d0c0a); border: 1px solid var(--gold-hi); color: var(--gold-hi);
@@ -715,6 +721,9 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 @keyframes badge-hum { 50% { box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 28px rgba(255, 205, 110, .7), 0 6px 14px rgba(0, 0, 0, .5); } }
 .l-badge.arrive { animation: badge-in .7s cubic-bezier(.2, 1.5, .4, 1), badge-hum 2.4s .7s ease-in-out infinite; }
 @keyframes badge-in { 0% { scale: 0; opacity: 0; } 50% { scale: 1.35; opacity: 1; } 100% { scale: 1; } }
+/* the payoff gathering on it: the badge crackles, swelling, before the bolt drives in */
+.l-badge.gather { animation: badge-gather .11s steps(2) infinite; scale: 1.18; transition: scale .3s; }
+@keyframes badge-gather { 50% { box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 34px rgba(255, 225, 150, .95), 0 0 12px rgba(170, 190, 255, .9); filter: brightness(1.5); } }
 .l-badge.spent { animation: badge-spent .7s ease-out forwards; }
 @keyframes badge-spent { 30% { scale: 1.5; filter: brightness(2); } 100% { scale: .2; opacity: 0; } }
 .l-badge.lost { animation: badge-lost .42s ease-in forwards; }
@@ -724,11 +733,11 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 body[data-table="lightning"] .hint { top: calc(var(--top-h, 0px) + var(--board-h, 0px) - 2px); }
 @media (max-width: 420px) {
   .lb-cell { min-width: 41px; padding: 3px 4px; } .lb-cell b { font-size: 17px; } .lb-cell small { font-size: 8.5px; letter-spacing: .04em; }
-  .zap .splash b { font-size: 92px; } .zap .splash em { font-size: 32px; }
+  .zap .l-splash b { font-size: 92px; } .zap .l-splash em { font-size: 32px; }
 }
-@media (orientation: landscape) and (max-height: 520px) { .lb-cell { min-width: 36px; padding: 2px 4px; } .lb-cell b { font-size: 15px; } .lb-cell small { font-size: 8px; } .zap .splash b { font-size: 72px; } }
-@media (prefers-reduced-motion: reduce) { .lb-cell.flash, .lb-cell.crackle b, .lb-cell.armed b, .l-badge, .zap .splash.go, .lightning.charging .lb-row { animation: none !important; } }
-body.reduced .lb-cell.flash, body.reduced .lb-cell.crackle b, body.reduced .lb-cell.armed b, body.reduced .l-badge, body.reduced .zap .splash.go, body.reduced .lightning.charging .lb-row { animation: none !important; }
+@media (orientation: landscape) and (max-height: 520px) { .lb-cell { min-width: 36px; padding: 2px 4px; } .lb-cell b { font-size: 15px; } .lb-cell small { font-size: 8px; } .zap .l-splash b { font-size: 72px; } }
+@media (prefers-reduced-motion: reduce) { .lb-cell.flash, .lb-cell.crackle b, .lb-cell.armed b, .zap .l-splash.out, .zap .l-splash em.done, .l-badge.gather, .l-badge, .zap .l-splash.go, .lightning.charging .lb-row { animation: none !important; } }
+body.reduced .lb-cell.flash, body.reduced .lb-cell.crackle b, body.reduced .lb-cell.armed b, body.reduced .zap .l-splash.out, body.reduced .zap .l-splash em.done, body.reduced .l-badge.gather, body.reduced .l-badge, body.reduced .zap .l-splash.go, body.reduced .lightning.charging .lb-row { animation: none !important; }
 /* Flashing effects (settings): soft turns the board's flicker into a slow swell; off keeps every light steady */
 body[data-flash="soft"] .lightning.charging .lb-row { animation: charge .9s ease-in-out infinite; }
 body[data-flash="off"] .lb-cell.flash, body[data-flash="off"] .lightning.charging .lb-row { animation: none !important; }

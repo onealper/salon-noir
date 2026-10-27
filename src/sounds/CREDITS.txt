@@ -89,7 +89,7 @@ Chip-select thock
 
 Made for Salon Noir with ElevenLabs (https://elevenlabs.io): the owner's own sounds, used
 under ElevenLabs' terms; not openly licensed
-  voice/james-*.mp3 (58 files), voice/sofia-*.mp3 (15 files)
+  voice/james-*.mp3 (59 files), voice/sofia-*.mp3 (16 files)
                       The dealers' voices, James and Sofia (text to speech), recorded
                       again on 2026-10-27 with Eleven v4 in two ElevenLabs library
                       voices: James is "Jerry B. - British RP | Posh & Refined", Sofia
@@ -97,17 +97,19 @@ under ElevenLabs' terms; not openly licensed
                       speech levelled to -17 dB RMS; the number calls' comma shortened.
                       Blackjack calls, both voices: bj-place-bets, bj-insurance, bj-even-money,
                       bj-dealer-ace, bj-blackjack, bj-dealer-blackjack, bj-dealer-17..21,
-                      bj-dealer-busts, bj-push, bj-nicely-played, bj-new-shoe.
+                      bj-dealer-busts, bj-push, bj-nicely-played, bj-new-shoe, bj-lightning
+                      (the Lightning table, as a multiplier pays).
                       Roulette calls, James: place-bets, last-bets, no-more-bets, good-luck,
                       winning-number, n0..n36 (the numbers), congrats.
                       The words, as recorded: "Place your bets." "Insurance?" "Even money?"
                       "Dealer shows an ace." "[warmly] Blackjack!" "Dealer has blackjack."
                       "Dealer has seventeen." (to twenty-one) "Dealer busts." "Push."
-                      "[warmly] Nicely played." "New shoe. One moment, please." At
-                      roulette: "Place your bets, please." "Last bets, please." "No more
-                      bets." "Good luck, everyone." "The winning number is…" "[warmly]
-                      Congratulations!" and each number with its colour: "Zero, green.",
-                      "Seventeen, black." ([warmly] is an Eleven v4 direction, not said.)
+                      "[warmly] Nicely played." "New shoe. One moment, please."
+                      "[excited] Lightning strikes!" At roulette: "Place your bets,
+                      please." "Last bets, please." "No more bets." "Good luck,
+                      everyone." "The winning number is…" "[warmly] Congratulations!"
+                      and each number with its colour: "Zero, green.", "Seventeen,
+                      black." ([warmly] and [excited] are Eleven v4 directions, not said.)
   crowd-cheer-1.mp3, crowd-cheer-2.mp3                  The table cheering a big win.
   win-small-1/2, win-side-1/2, win-blackjack-1/2, win-big-1/2, win-bling, reveal-sting
                       Win stings.

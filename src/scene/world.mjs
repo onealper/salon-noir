@@ -332,7 +332,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   return {
     THREE, renderer, scene, camera, table, spots, shoe, frame, requestRender, tickers, project, setQuality, setPan, panFor, get pan() { return pan; },
     lights: { key, hemi, glow, get backdrop() { return backdrop; }, get room() { return roomLight; } }, showcase, afterFrame, radialTexture, setExtraSee(pts) { extraSee = pts; },
-    setMode, pause: st.pause, get paused() { return st.paused; },
+    setMode, pause: st.pause, hold: st.hold, get paused() { return st.paused; },
     get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     discard: { group: discard, get count() { return discarded; }, set: setDiscards, topY: () => .6 + discarded * CARD_T },
     edgeTex,
