@@ -93,6 +93,12 @@ const showInPlay = v => ui.morph($('#bet'), fmt(v));
 const title = (name, page) => { $('#tableName').textContent = name; document.title = `${BRAND_TITLE} · ${page}`; };
 // how far the bar reaches down over a room's stage
 const barCover = el => { const b = $('.top').getBoundingClientRect(), r = el.getBoundingClientRect(); return Math.max(0, Math.round(b.bottom - r.top)); };
+// How tall the dock is where it runs along the foot of a room's picture, full width (the picture goes on under it,
+// behind its blur); 0 where it stands beside it (a phone on its side) or the room isn't showing.
+const dockCover = el => { const r = el.getBoundingClientRect(); if (!r.width) return 0;
+  for (const d of $$('.dock')) { const q = d.getBoundingClientRect(); if (q.height && Math.abs(q.top - r.bottom) < 2 && q.left <= r.left + 1 && q.right >= r.right - 1) return Math.round(q.height); }
+  return 0; };
+const BLUR_RISE = 40;   // px the dock's blur rises over the picture (.dock-blur's top in app.css): the table is framed clear of it
 
 // ---- settings -------------------------------------------------------------------------------------------------------------
 const dlg = $('#settingsDialog');
@@ -119,7 +125,8 @@ const flashSel = $('#optFlash'); flashSel.value = settings.flash; document.body.
 flashSel.onchange = () => { uiSound('toggle'); settings.flash = flashSel.value; store.set('flash', settings.flash); document.body.dataset.flash = settings.flash; };
 const gfxSel = $('#optGfx'); gfxSel.value = settings.gfx;
 const gfxNote = () => { const s = rooms[room]?.scene; if (s) $('#gfxNote').textContent = `${s.quality.name === 'high' ? 'Sharp' : s.quality.name === 'phone' ? 'Balanced' : 'Battery saver'} · ${s.pixelRatio}× pixels`; };   // the room you see (each fits its own pixel budget)
-gfxSel.onchange = () => { settings.gfx = gfxSel.value; store.set('gfx', settings.gfx); each(r => r.setQuality(gfxProfile(settings.gfx))); gfxNote(); };
+document.body.dataset.gfx = gfxProfile(settings.gfx).name;   // (the battery saver goes without the blur under the dock)
+gfxSel.onchange = () => { settings.gfx = gfxSel.value; store.set('gfx', settings.gfx); document.body.dataset.gfx = gfxProfile(settings.gfx).name; each(r => r.setQuality(gfxProfile(settings.gfx))); gfxNote(); };
 $('#settings').addEventListener('click', gfxNote);
 bindToggle('#optFast', 'fast', on => each(r => r.setFast(on)));
 // How many others sit with you. Changes take effect between hands. The note names the blackjack table's players
@@ -225,7 +232,7 @@ if (welcome && !params.has('table')) lobby.note(welcome);   // (a spin the wheel
 const ctx = {
   app: $('.app'), audio, settings, store, ui, kit, feel, uiSound, sting, take, random, dev, carried, warm,
   quality: () => gfxProfile(settings.gfx), resetBalance, notice, record: e => ledger.add({ game: 'roulette', ...e }),
-  showBalance, showInPlay, title, barCover, openSheetAt, bindToggle,
+  showBalance, showInPlay, title, barCover, dockCover, BLUR_RISE, openSheetAt, bindToggle,
 };
 const ROOMS = { blackjack: () => import('./blackjack/controller.mjs').then(m => m.createBlackjack(ctx)), roulette: () => import('./roulette/rgame.mjs').then(m => m.createRoulette(ctx)) };
 const loading = {};

@@ -132,11 +132,13 @@ export function createBlackjack(ctx) {
   const ro = new ResizeObserver(() => {
     cancelAnimationFrame(reframe);
     reframe = requestAnimationFrame(reframeNow);
-  }); ro.observe(stage); ro.observe($('.top'));
-  // The top bar floats over the table; the camera frames the area below it (plus the bar's fade).
+  }); ro.observe(stage); ro.observe($('.top')); ro.observe($('.dock'));
+  // The top bar floats over the table; the camera frames the area below it (plus the bar's fade). A dock along the foot
+  // of the picture is floated over it too: the canvas runs on under it, blurred, and the seat is framed clear of the blur.
   function reframeNow() {
-    const w = stage.clientWidth, h = stage.clientHeight, bar = barCover(), top = bar + boardCover(bar), k = `${w}x${h}x${top}`; if (k === framed || !w || !h) return;
-    framed = k; $('.app').style.setProperty('--top-h', `${bar}px`); $('.app').style.setProperty('--board-h', `${top - bar}px`); world.frame(w, h, top); layoutOverlay();
+    const w = stage.clientWidth, h = stage.clientHeight, bar = barCover(), top = bar + boardCover(bar), under = ctx.dockCover(stage), k = `${w}x${h}x${top}x${under}`; if (k === framed || !w || !h) return;
+    framed = k; $('.app').style.setProperty('--top-h', `${bar}px`); $('.app').style.setProperty('--board-h', `${top - bar}px`); stage.style.setProperty('--under', `${under}px`);
+    world.frame(w, h + under, top, under ? under + ctx.BLUR_RISE : 0); layoutOverlay();
   }
   // the Lightning board sits under the bar; the seat is framed below it so it never covers the dealer's cards
   function boardCover() { const b = $('#lightning'); return b.hidden || document.body.classList.contains('in-lobby') ? 0 : b.offsetHeight + 12; }
@@ -198,7 +200,7 @@ export function createBlackjack(ctx) {
     const pays = Math.max(...b.table.map(r => r[1]));
     t.setAttribute('aria-label', `${b.name}, pays up to ${pays} to 1. ${b.cards}.`); t.title = `${b.name}: ${b.cards}. ` + b.table.map(([l, p]) => `${l} ${p}:1`).join(' · ') + `. House edge ${b.edge.toFixed(1)}%.`;
     t.style.setProperty('--c', TRAY_ICONS[b.id].c);
-    t.innerHTML = `<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">${TRAY_ICONS[b.id].svg}</svg></span><b>${b.name}</b><small><i>up to </i>${pays}:1</small><span class="amt"></span>`;
+    t.innerHTML = `<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">${TRAY_ICONS[b.id].svg}</svg></span><b>${b.name.length > 13 && b.short ? b.short : b.name}</b><small><i>up to </i>${pays}:1</small><span class="amt"></span>`;
   }
   for (const b of SIDE_BETS) {
     const t = document.createElement('button'); t.className = 'tile'; t.dataset.spot = b.id; paintTile(t, b);

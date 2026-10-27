@@ -54,7 +54,7 @@ export async function createRoulette(ctx) {
     <p class="hint r-hint" aria-live="polite"><span></span></p>
     <div class="r-fade" aria-hidden="true"></div>`;
   const dock = document.createElement('footer'); dock.className = 'dock rdock';
-  dock.innerHTML = `<div class="r-blur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  dock.innerHTML = `<div class="dock-blur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <div class="r-tools">
       <button class="pill r-tool" id="rRace" aria-expanded="false" aria-controls="rRaceSheet" aria-label="Racetrack" aria-keyshortcuts="T"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="5"/><rect x="7.5" y="10.5" width="9" height="3" rx="1.5"/></svg><span class="label">Racetrack</span></button>
       <button class="pill r-tool" id="rStats" aria-expanded="false" aria-controls="rStatsSheet" aria-label="Statistics" aria-keyshortcuts="S"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V11M10 19V5M15 19v-6M20 19V8"/></svg><span class="label">Statistics</span></button>
@@ -73,7 +73,6 @@ export async function createRoulette(ctx) {
 
   const hint = hintLine(hintEl);   // (the words morph in the line's own span: see .hint in app.css)
   const S = createRouletteScene(canvas, { quality: ctx.quality() }), motion = new Motion(S);
-  dock.dataset.q = S.quality.name;   // (the battery saver goes without the blur under the dock)
   for (const r of RIVALS) S.chipLook(r.color, { inserts: r.inserts });
   // A spin is paid into the wallet the moment bets close (the number is drawn then); the balance on
   // screen (and which chips you can afford) holds back until the ball lands, so the result isn't given away.
@@ -898,16 +897,14 @@ export async function createRoulette(ctx) {
 
   // ---- framing -------------------------------------------------------------------------------------------------------------------
   let framed = '';
-  const BLUR_RISE = 40;   // px the dock's blur rises over the picture (.r-blur's top in app.css)
   function reframe() {
     if (!active && !S.showcase.on) return;
     const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
     const bar = ctx.barCover(stage), strip = histEl.offsetHeight ? histEl.offsetHeight + 10 : 0, top = bar + strip;
-    // a dock along the foot of the picture: the canvas runs on under it (blurred there) and the table is framed above it
-    const sr = stage.getBoundingClientRect(), dr = dock.getBoundingClientRect(), under = Math.abs(dr.top - sr.bottom) < 2 && dr.left <= sr.left + 1 && dr.right >= sr.right - 1 ? Math.round(dr.height) : 0;
+    const under = ctx.dockCover(stage);   // a dock along the foot of the picture: the canvas runs on under it, blurred
     stage.style.setProperty('--top-h', `${bar}px`); stage.style.setProperty('--under', `${under}px`);
     const k = `${w}x${h}x${top}x${under}`;
-    if (k === framed) return; framed = k; const was = S.layout?.orient; S.frame(w, h + under, top, under ? under + BLUR_RISE : 0);   // (framed clear of the blur's rise, so no spot is softened)
+    if (k === framed) return; framed = k; const was = S.layout?.orient; S.frame(w, h + under, top, under ? under + ctx.BLUR_RISE : 0);   // (framed clear of the blur's rise, so no spot is softened)
     if (was !== S.layout.orient) renderHistory();
     if (bubble.dataset.on) placeBubble(true);
   }
@@ -963,7 +960,7 @@ export async function createRoulette(ctx) {
     callBets: () => say('place-bets', { prio: 3 }),   // hear the voice level you set
     setReduced(on) { motion.reduced = on; setIdle(idleWant); },   // the drift stops or resumes only where it belongs (never mid-spin)
     setFast(on) { motion.slow = on ? .62 : 1; },
-    setQuality(q) { S.setQuality(q); dock.dataset.q = q.name; setIdle(idleWant); },   // the battery saver stands the wheel still
+    setQuality(q) { S.setQuality(q); setIdle(idleWant); },   // the battery saver stands the wheel still
     refresh, reframe: () => { framed = ''; reframe(); },
     // for the browser checks, only in a testing session (?test or salonnoir.dev): rig() fixes the next number
     test: ctx.dev ? { plan, at, get history() { return history; }, place: (id, units = 1) => placeOn([[id, units]]), rig: n => { rigged = n; }, set turbo(v) { turbo = v; }, stacks, get skipLevel() { return skipLevel; }, get stageAt() { return stageAt; }, motion, showWin, showBubble } : undefined,

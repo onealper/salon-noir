@@ -225,9 +225,10 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // `top`: pixels at the top of the canvas covered by the (translucent) top bar. The view is framed
   // for the area below it, then the lens is extended upward over those pixels (an off-centre
   // frustum), so the room shows through the bar without anything important sitting under it.
-  function frame(w, h, top = 0) {
+  // `bottom`: pixels at the foot covered by the dock and its blur, framed out the same way (the canvas runs on under them).
+  function frame(w, h, top = 0, bottom = 0) {
     st.size(w, h);
-    const vh = Math.max(1, h - top); view.w = w; view.h = vh;
+    const vh = Math.max(1, h - top - bottom); view.w = w; view.h = vh;
     camera.clearViewOffset(); camera.aspect = w / vh;
     const portrait = w / vh < .9, compact = !portrait && vh < 460, cfg = portrait ? CAMERA.port : CAMERA.land, must = mustSee(portrait, compact);   // compact: a phone on its side
     head = portrait ? .94 - Math.min(.2, 2 * 40 / vh) : .94;   // (the hint is about 35 px from the top: on a short phone the dealer's rack sat under it)
@@ -243,7 +244,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     }
     aim(best ? best.eye : new THREE.Vector3(0, 51, 108), must);
     baseQuat.copy(camera.quaternion); applyPan(); seatPos.copy(camera.position);
-    view.h = h; if (top > 0) camera.setViewOffset(w, vh, 0, -top, w, h);
+    view.h = h; if (top > 0 || bottom > 0) camera.setViewOffset(w, vh, 0, -top, w, h);
     for (const f of afterFrame) f(w, h, top);
     if (show.on) placeShowcase(performance.now());   // the lobby keeps its own camera
     requestRender();

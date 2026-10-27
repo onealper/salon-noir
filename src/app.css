@@ -97,7 +97,7 @@ body.reduced .splash .keylight { animation: none; }
 
 /* ---- the stage ------------------------------------------------------------------------------ */
 .stage { grid-row: 1 / 3; grid-column: 1; position: relative; min-height: 0; overflow: hidden; }
-#table { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#table { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; }   /* (--under: the dock it runs on beneath) */
 .overlay { position: absolute; inset: 0; pointer-events: none; }
 .overlay > * { position: absolute; left: 0; top: 0; }
 .spot { pointer-events: auto; border-radius: 50%; transition: box-shadow .2s var(--ease), background .2s; }
@@ -154,6 +154,26 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity .2s;
 
 /* ---- the dock ----------------------------------------------------------------------------------- */
 .dock { position: relative; z-index: 3; display: grid; grid-template-areas: 'dock'; justify-items: center; align-items: center; padding: 10px 16px max(12px, env(safe-area-inset-bottom)); background: linear-gradient(#0f0f10, #0b0b0c); border-top: 1px solid #1d1d20; min-height: 0; }
+/* A dock along the foot of the picture is a progressive blur, not a solid bar: the table goes on under the controls
+   (each room frames its seat clear of it), softening by degrees toward the foot - each layer twice the blur of the one
+   before, faded in a step further down - with a shade over it so the controls keep their contrast. Not in the side
+   column of a phone on its side, nor on the battery saver, which keeps the plain bar. */
+.dock-blur { display: none; }
+@media not ((orientation: landscape) and (max-height: 520px)) {
+  .stage { overflow: visible; }
+  body:not([data-gfx="saver"]) .dock { background: none; border-top: 0; }
+  body:not([data-gfx="saver"]) .dock-blur { display: block; position: absolute; left: 0; right: 0; top: -40px; bottom: 0; z-index: -1; pointer-events: none;
+    background: linear-gradient(rgba(11, 11, 12, 0), rgba(11, 11, 12, .4) 30%, rgba(11, 11, 12, .7) 62%, rgba(11, 11, 12, .86)); }
+  .dock-blur i { position: absolute; inset: 0; --m: linear-gradient(transparent var(--a), #000 var(--c));
+    -webkit-backdrop-filter: blur(var(--b)); backdrop-filter: blur(var(--b)); -webkit-mask-image: var(--m); mask-image: var(--m); }
+  .dock-blur i:nth-child(1) { --b: 1px; --a: 0%; --c: 16%; }
+  .dock-blur i:nth-child(2) { --b: 2.5px; --a: 8%; --c: 28%; }
+  .dock-blur i:nth-child(3) { --b: 5px; --a: 18%; --c: 42%; }
+  .dock-blur i:nth-child(4) { --b: 10px; --a: 30%; --c: 58%; }
+  .dock-blur i:nth-child(5) { --b: 18px; --a: 44%; --c: 76%; }
+  /* over the blur the controls are glass: a dark translucent fill and a fine light edge on top */
+  .dock .pill:not(.gold), .dock .tray-toggle, .dock .tile { background: rgba(22, 22, 25, .62); border-color: rgba(255, 255, 255, .1); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 4px 14px rgba(0, 0, 0, .25); }
+}
 /* The hint's words morph in a span of their own (a morphing root is made inline and relative, which would pull the
    line out of place). It hangs just under the bar and above its blur, so it is always sharp. */
 .hint { position: absolute; z-index: 4; left: 50%; top: calc(var(--top-h, 0px) + 8px); translate: -50% 0; margin: 0; width: max-content; max-width: calc(100% - 32px); padding: 6px 14px; border-radius: 99px; background: rgba(12, 12, 13, .72); font-size: 14px; color: #cfc8ba; text-align: center; pointer-events: none; transition: opacity .2s; }
@@ -210,11 +230,13 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 .chip:disabled { opacity: .3; filter: grayscale(.7); }
 
 .bet-actions { display: flex; gap: 8px; align-items: center; }
+@media (min-width: 761px) and (min-height: 521px) { .bet-actions .pill:not(.deal) { min-width: 100px; justify-content: center; } }   /* Undo, Clear and Rebet (or ×2) one width, so the row doesn't shuffle as they change (a phone shows them as icons) */
 .pill { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line-2); font: 700 14px/1 Inter, system-ui, sans-serif; letter-spacing: .03em; transition: background .2s, border-color .2s, opacity .2s; }
 .pill svg { width: 17px; height: 17px; }
 .pill .glyph { font: 800 16px/1 "Barlow Condensed", sans-serif; }
 @media (hover: hover) { .pill:hover:not(:disabled) { background: #232327; border-color: #4a4a50; } }
-.pill:disabled { opacity: .35; }
+.pill:disabled { opacity: 1; color: rgba(236, 228, 210, .32); border-color: rgba(255, 255, 255, .07) !important; background: rgba(18, 18, 20, .45) !important; box-shadow: none !important; cursor: default; }
+.pill.gold:disabled { color: rgba(226, 196, 131, .62); border-color: rgba(201, 164, 92, .5) !important; background: rgba(40, 33, 19, .55) !important; }
 .pill.gold { background: linear-gradient(#d5b36d, #b08a45); border-color: #e2c483; color: #17130b; }
 @media (hover: hover) { .pill.gold:hover:not(:disabled) { background: linear-gradient(#e0c07c, #bb9550); border-color: #f0d69c; } }
 .pill.gold kbd { color: #4a3b1b; border-color: rgba(23, 19, 11, .3); }
@@ -439,8 +461,9 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .sh
 .pill.deal { min-width: 188px; justify-content: center; transition: transform .06s ease, box-shadow .06s ease, color .25s, opacity .2s; }
 .pill.deal .label { transition: opacity .2s; }
 /* a Deal button that is waiting for a bet reads as switched off, not as a muddy gold one */
-.pill.deal:disabled { opacity: 1; color: #6f6a62; border-color: var(--line-2); background: var(--panel-2) !important; box-shadow: 0 5px 0 #0a0a0b; }
-.pill.deal:disabled .shimmer-backdrop { background: linear-gradient(#222226, #1a1a1d); }
+/* not yet: still the gold button, dimmed to an outline, so you can see where the next move is */
+.pill.deal:disabled { opacity: 1; color: rgba(226, 196, 131, .62); border-color: rgba(201, 164, 92, .5) !important; background: rgba(40, 33, 19, .55) !important; box-shadow: 0 5px 0 rgba(10, 9, 7, .7); }
+.pill.deal:disabled .shimmer-backdrop { background: linear-gradient(rgba(46, 38, 22, .82), rgba(30, 25, 15, .82)); }
 .pill.deal:disabled .shimmer-highlight { box-shadow: none; }
 .shimmer .shimmer-backdrop { transition: background .3s; }
 /* the side-bet total is a badge on the toggle, like the ones on the tiles, so the row does not move */
@@ -750,8 +773,6 @@ body:not([data-room="roulette"]) .rstage, body:not([data-room="roulette"]) .rdoc
 body[data-room="roulette"] .shoe-meter { display: none; }
 body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flying .rdock, body.flying .r-overlay, body.flying .r-hint { opacity: 0; pointer-events: none; }
 .rdock, .r-overlay, .r-hint { transition: opacity .5s var(--ease); }
-/* the picture runs on under a dock along its foot (--under: the dock's height, set as the room frames itself) */
-.rstage { overflow: visible; }
 .rcanvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; touch-action: none; }
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* the room falls away into the dark round the table, as under its pendants */
@@ -879,24 +900,6 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 
 /* the dock */
 .rdock { display: flex; align-items: center; justify-content: center; gap: 14px 18px; flex-wrap: wrap; }
-/* A progressive blur in place of the solid bar: the table goes on under the controls, softening by degrees toward the
-   foot (each layer twice the blur of the one before, faded in a step further down), with a shade over it so the
-   controls keep their contrast. Not in the side column of a phone on its side, nor on the battery saver. */
-.r-blur { display: none; }
-@media not ((orientation: landscape) and (max-height: 520px)) {
-  .rdock { background: none; border-top: 0; }
-  .r-blur { display: block; position: absolute; left: 0; right: 0; top: -40px; bottom: 0; z-index: -1; pointer-events: none;
-    background: linear-gradient(rgba(11, 11, 12, 0), rgba(11, 11, 12, .42) 34%, rgba(11, 11, 12, .72) 70%, rgba(11, 11, 12, .86)); }
-  .r-blur i { position: absolute; inset: 0; --m: linear-gradient(transparent var(--a), #000 var(--c));
-    -webkit-backdrop-filter: blur(var(--b)); backdrop-filter: blur(var(--b)); -webkit-mask-image: var(--m); mask-image: var(--m); }
-  .r-blur i:nth-child(1) { --b: 1px; --a: 0%; --c: 18%; }
-  .r-blur i:nth-child(2) { --b: 2.5px; --a: 9%; --c: 30%; }
-  .r-blur i:nth-child(3) { --b: 5px; --a: 20%; --c: 44%; }
-  .r-blur i:nth-child(4) { --b: 10px; --a: 32%; --c: 60%; }
-  .r-blur i:nth-child(5) { --b: 18px; --a: 46%; --c: 78%; }
-  .rdock[data-q="saver"] .r-blur i { display: none; }
-  .rdock[data-q="saver"] .r-blur { background: linear-gradient(rgba(11, 11, 12, 0), rgba(11, 11, 12, .8) 40%, #0b0b0c 75%); }
-}
 .rdock .bet-actions { grid-template-areas: 'u c s d'; }
 #rUndo { grid-area: u; } #rClear { grid-area: c; } #rRebet, #rX2 { grid-area: s; justify-self: stretch; justify-content: center; } #rSpin { grid-area: d; }
 .r-tools { display: flex; gap: 8px; }
