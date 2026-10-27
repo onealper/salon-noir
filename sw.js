@@ -18,13 +18,13 @@ const CODE = ['./', 'manifest.webmanifest', 'src/app.css', 'src/fonts.css',
   ...['app', 'engine', 'sidebets', 'players', 'sound', 'ui-kit', 'ui-motion'].map(f => `src/${f}.mjs`),
   ...['bet-controls', 'brand', 'chips', 'feel', 'format', 'ledger', 'lobby', 'modes', 'rng', 'wallet'].map(f => `src/core/${f}.mjs`),
   ...['stage', 'world', 'view', 'pieces', 'textures', 'lightning3d'].map(f => `src/scene/${f}.mjs`),
-  ...['controller', 'book', 'lightning-ui', 'tray-icons'].map(f => `src/blackjack/${f}.mjs`),
+  ...['controller', 'book', 'lightning-ui', 'storm', 'tray-icons'].map(f => `src/blackjack/${f}.mjs`),
   ...['rgame', 'rules', 'physics', 'replay', 'rscene', 'wheel3d', 'roller'].map(f => `src/roulette/${f}.mjs`),
   ...['three.module.min.js', 'RoomEnvironment.js', 'anime.mjs', 'confetti.mjs', 'torph.mjs', 'web-haptics.mjs', 'cuelume/index.js', 'cuelume/audio/engine.js',
     'cuelume/interactions/bind.js', ...['bubble', 'context', 'mech', 'press', 'recipes', 'themes'].map(f => `cuelume/sounds/${f}.js`)].map(f => `src/vendor/${f}`)];
 const BJ = ['place-bets', 'insurance', 'even-money', 'dealer-ace', 'blackjack', 'dealer-blackjack', ...n('dealer', 17, 18, 19, 20, 21), 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
 const KIT = [...n('ball-click', ...to(6)), ...n('ball-launch', 1, 2), ...n('wheelhead', 1, 2), ...n('rake', ...to(3)), ...n('dolly', 1, 2), ...n('chip-thock', ...to(5)), ...n('crowd-cheer', 1, 2), ...n('spark', ...to(4)), ...n('zap', 1, 2), ...n('thunder', 1, 2, 'mega', 'rumble'),
-  'charge', 'strike', 'whoosh', 'reveal-sting', 'win-bling', 'room-casino-1', ...['big', 'blackjack', 'side', 'small'].flatMap(k => n(`win-${k}`, 1, 2)),
+  'charge', 'strike', 'rain-window', 'whoosh', 'reveal-sting', 'win-bling', 'room-casino-1', ...['big', 'blackjack', 'side', 'small'].flatMap(k => n(`win-${k}`, 1, 2)),
   ...n('ui-click', 1, 2), ...['open', 'select', 'toggle'].flatMap(k => n(`ui-${k}`, ...to(4))),
   ...['james', 'sofia'].flatMap(v => BJ.map(l => `voice/${v}-bj-${l}`)), ...['place-bets', 'last-bets', 'no-more-bets', 'good-luck', 'winning-number', 'congrats', ...to(37).map(i => `n${i - 1}`)].map(l => `voice/james-${l}`)];
 const WAV = [...n('card-slide', 3, 4, 7, 8), ...n('card-place', ...to(4)), ...n('card-shove', ...to(4)), 'card-fan-1', 'card-shuffle', ...n('chip-lay', ...to(3)), ...n('chips-collide', ...to(4)),
@@ -33,7 +33,7 @@ const FONTS = [...n('barlow-condensed-latin', '600-normal', '700-normal', '800-n
   ...n('cinzel-latin', '600-normal', '700-normal'), ...n('inter-latin', '500-normal', '600-normal', '700-normal', '800-normal')];
 const SUITS = ['clubs', 'diamonds', 'hearts', 'spades'];
 const FILES = [...['icon-192', 'icon-512', 'maskable-192', 'maskable-512', 'apple-touch-icon'].map(f => `icons/${f}.png`), ...FONTS.map(f => `src/fonts/${f}.woff2`),
-  ...['back', 'felt', 'leather', 'salon', 'carpet'].map(f => `assets/table/${f}.webp`), ...SUITS.flatMap(s => ['jack', 'queen', 'king'].map(r => `assets/cards/court-belt/${r}_of_${s}.webp`)),
+  ...['back', 'felt', 'leather', 'salon', 'salon-light', 'carpet'].map(f => `assets/table/${f}.webp`), ...SUITS.flatMap(s => ['jack', 'queen', 'king'].map(r => `assets/cards/court-belt/${r}_of_${s}.webp`)),
   'assets/cards/ace_of_spades_2.webp', 'assets/roulette/macassar.webp', 'assets/roulette/salon.webp', ...WAV.map(f => `src/sounds/${f}.wav`), ...KIT.map(f => `src/sounds/kit/${f}.mp3`)];
 // (the music, 7 MB, is kept the first time it plays rather than up front)
 

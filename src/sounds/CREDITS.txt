@@ -33,7 +33,7 @@ for Spader, the game's earlier name). The game adds a small generated room rever
 random pitch and level variation, and stereo placement by table position at play time.
 
 
-The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (136 files)
+The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (137 files)
 ===================================================================
 
 Changes, every kit file: cut to length, levels matched and encoded as MP3 with ffmpeg
@@ -122,3 +122,7 @@ under ElevenLabs' terms; not openly licensed
                       for Salon Noir with ElevenLabs Sound Effects v3 on 2026-10-27; mono
                       (rake-2/3: the left channel of a wide stereo take), 70 Hz high-pass,
                       cut to the onset, tails faded, peaks at -3 dBFS.
+  rain-window.mp3     The rain on the card salon's windows in the Lightning table's storm.
+                      Generated for Salon Noir with ElevenLabs Sound Effects v2 on
+                      2026-10-27; its lead cut, the last second crossfaded into the first
+                      (a seamless 8.8 s loop), stereo, levelled to -24 dBFS RMS.

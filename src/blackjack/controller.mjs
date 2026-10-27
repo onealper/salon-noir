@@ -702,7 +702,7 @@ export function createBlackjack(ctx) {
   function reset() { misdealQuiet(); table.clear(); wallet.reset(); table.balance = synced = wallet.START; table.pending = null; table.lastLayout = null; renderBalance(); lightning.reset(); renderBets(); refreshControls(); othersBet(); }
   async function misdealQuiet() { table.abandon(); for (const { p } of others()) p.refund(); renderSeats(); world.setPan(0); decide = null; view.clearCards(); view.clearChips(); hideBanner(); clearFeed(); for (const t of Object.values(totals)) t.hidden = true; busy = false; setMode('betting'); }
   // ---- Lightning ------------------------------------------------------------------------------------------------------------
-  const lightning = createLightningUI({ world, table, motion, audio, settings, take, stage, overlay, inView: () => visible && !lobby.isOpen, reframe: () => { framed = ''; reframeNow(); } });
+  const lightning = createLightningUI({ world, table, motion, audio, settings, take, stage, overlay, inView: () => visible && !lobby.isOpen, shown: () => visible, reframe: () => { framed = ''; reframeNow(); } });
   lightningLayout = lightning.layout;
 
   // Rules and paytables, written from the same data the game settles with.
@@ -775,6 +775,7 @@ export function createBlackjack(ctx) {
       if (visible) return; visible = true; world.pause(false);
       if (!busy && table.phase === 'betting') { table.balance = wallet.balance; if (table.cost > table.balance) { table.clear(); serial(syncAllStacks); hint('Your bets were cleared: your balance changed at the wheel.'); } }
       applyMode(table.mode, { announce: false }); renderBalance(); renderBets(); refreshControls();   // (applyMode frames the seat)
+      lightning.badge();   // the Lightning show sees the room is in sight (applyMode stands aside mid-hand): its storm starts
     },
     hide() { visible = false; world.showcase.stop(0); lightning.preview(false); lightning.badge(); world.pause(true); },   // the hidden table draws nothing while you are at the wheel
     showcase: world.showcase,

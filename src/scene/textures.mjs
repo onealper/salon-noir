@@ -46,7 +46,7 @@ const load = (key, src) => new Promise(res => { const i = new Image(); i.onload 
 // and repainted when they do.
 let courtArt = null, courtDone = false, courtLanded;
 const courtReady = new Promise(r => { courtLanded = r; });
-export function preloadCardArt() { return Promise.all(['back', 'felt', 'leather', 'salon', 'carpet'].map(n => load('table:' + n, `./assets/table/${n}.webp`))); }
+export function preloadCardArt() { return Promise.all(['back', 'felt', 'leather', 'salon', 'salon-light', 'carpet'].map(n => load('table:' + n, `./assets/table/${n}.webp`))); }
 export function loadCourtArt() {
   return courtArt ??= Promise.all([
     ...COURT_NAMES.map(async n => { if (!await load('panel:' + n, `./assets/cards/court-belt/${n}.webp`)) await load(n, `./assets/cards/${n}.webp`); }),

@@ -57,8 +57,10 @@ export const brassMaterial = () => new THREE.MeshStandardMaterial({ color: '#b98
 // The picture goes round once and then mirrored, so its two joins are seamless; place() turns its middle to where the
 // seat looks. The floor it paints fades out below its horizon (`horizon`, down the picture) to where the wall meets the
 // room's own floor (`floorY`), which runs on under it into the dark; the horizon stands at `eye` over the table.
-// `level`: how bright it is drawn (the room's light on it; the rooms dim it with their lights).
-export function salonWall(img, { radius = 420, horizon = .45, eye = 90, floorY = -80, level = .62, aniso = 1 } = {}) {
+// `level`: how bright it is drawn (the room's light on it; the rooms dim it with their lights). `light`: a mask of the
+// picture's lights at any size (R the mirrors, G the lamps, B the windows' glass): with it, `light.flash(v, colour)` adds a
+// flash on the mirrors and windows (lightning outside) and `light.lamps(v)` dims or flickers the lamps (1: as painted).
+export function salonWall(img, { radius = 420, horizon = .45, eye = 90, floorY = -80, level = .62, aniso = 1, light = null } = {}) {
   const H = Math.PI * radius * img.height / img.width, meet = horizon + (eye - floorY) / H;   // (one picture round half the wall, true to its shape)
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d');
   g.drawImage(img, 0, 0);
@@ -70,9 +72,23 @@ export function salonWall(img, { radius = 420, horizon = .45, eye = 90, floorY =
   const t = new THREE.Texture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.MirroredRepeatWrapping; t.repeat.x = 2; t.anisotropy = aniso; t.needsUpdate = true;
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, H, 96, 1, true), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, transparent: true, depthWrite: false }));
   mesh.material.color.setScalar(level);
+  let lights = null;
+  if (light) {   // (the flash is added after the room's dimming: lightning outside is as bright with the house lights down)
+    const m = new THREE.Texture(light); m.wrapS = THREE.MirroredRepeatWrapping; m.repeat.x = 2; m.needsUpdate = true;
+    const u = { uLight: { value: m }, uFlash: { value: 0 }, uFlashCol: { value: new THREE.Color('#d6e0ff') }, uLamps: { value: 1 } };
+    mesh.material.onBeforeCompile = s => {
+      Object.assign(s.uniforms, u);
+      s.fragmentShader = 'uniform sampler2D uLight; uniform float uFlash; uniform vec3 uFlashCol; uniform float uLamps;\n' + s.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        vec3 lm = texture2D(uLight, vMapUv).rgb;
+        diffuseColor.rgb *= mix(1.0, uLamps, lm.g);
+        diffuseColor.rgb += uFlashCol * uFlash * (lm.r * 0.9 + lm.b * 1.4);`);
+    };
+    mesh.material.customProgramCacheKey = () => 'salon-light';
+    lights = { flash(v, colour) { u.uFlash.value = v; if (colour) u.uFlashCol.value.set(colour); }, lamps(v) { u.uLamps.value = v; } };
+  }
   // centred on (x, z), its middle facing along (dx, dz)
   const place = (x, z, dx, dz) => { mesh.position.set(x, eye - (.5 - horizon) * H, z); mesh.rotation.y = Math.atan2(dx, dz) - Math.PI / 2; };
-  return { mesh, level, place };
+  return { mesh, level, place, light: lights };
 }
 // The salon's carpet on a room's floor plane: a 75 cm repeat mirrored at its edges, lit by the pendants round the table
 // and dark beyond them.

@@ -57,10 +57,10 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // circle's middle out past your seat) and hangs low, its row of sconces (a third of the way down the picture) in that
   // band; its panelling meets the carpet. The lobby's sweep round the table sees it all round. Without the picture: a
   // dark wall with two warm lamps.
-  const roomArt = artImage('table:salon'), FLOOR_Y = -78; let backdrop = null;
-  if (roomArt) {
-    const salon = salonWall(roomArt, { radius: 380, horizon: .59, eye: -140, floorY: FLOOR_Y, aniso });
-    salon.place(0, EDGE_Z - 120 + 380, 0, -1); scene.add(salon.mesh); backdrop = salon.mesh;
+  const roomArt = artImage('table:salon'), FLOOR_Y = -78; let backdrop = null, roomLight = null;
+  if (roomArt) {   // (its light mask lets the Lightning table's storm flash the mirrors and windows and flicker the lamps)
+    const salon = salonWall(roomArt, { radius: 380, horizon: .59, eye: -140, floorY: FLOOR_Y, aniso, light: artImage('table:salon-light') });
+    salon.place(0, EDGE_Z - 120 + 380, 0, -1); scene.add(salon.mesh); backdrop = salon.mesh; roomLight = salon.light;
   } else {
     const wall = new THREE.Mesh(new THREE.PlaneGeometry(700, 320), new THREE.MeshStandardMaterial({ color: '#15130f', roughness: .9 }));
     wall.position.set(0, 60, -190); scene.add(wall);
@@ -312,7 +312,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
 
   return {
     THREE, renderer, scene, camera, table, spots, shoe, frame, requestRender, tickers, project, setQuality, setPan, panFor, get pan() { return pan; },
-    lights: { key, hemi, glow, get backdrop() { return backdrop; } }, showcase, afterFrame, radialTexture, setExtraSee(pts) { extraSee = pts; },
+    lights: { key, hemi, glow, get backdrop() { return backdrop; }, get room() { return roomLight; } }, showcase, afterFrame, radialTexture, setExtraSee(pts) { extraSee = pts; },
     setMode, pause: st.pause, get paused() { return st.paused; },
     get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     discard: { group: discard, get count() { return discarded; }, set: setDiscards, topY: () => .6 + discarded * CARD_T },

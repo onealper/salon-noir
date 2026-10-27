@@ -293,6 +293,52 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
     requestRender(false);
   }
 
+  // ---- the storm outside: lightning seen through the salon's windows ----------------------------------------------------
+  // A flash's light over time, as lightning gives it: a return stroke and one to three restrikes down the same channel,
+  // 40 to 120 ms apart (real flashes: 3 to 5 strokes some 60 ms apart), each gone in a few tens of ms over the channel's
+  // fading glow. `once` (Flashing effects: Soft): a single gentle swell. → { ms, at(ms) → 0 to 1 }
+  function flicker(once) {
+    if (once) return { ms: 560, at: t => t < 80 ? t / 80 * .45 : .45 * Math.max(0, 1 - (t - 80) / 480) ** 1.5 };
+    const hits = [0]; for (let i = 0, n = 1 + Math.floor(Math.random() * 3); i < n; i++) hits.push(hits.at(-1) + rnd(40, 120));
+    const amp = hits.map((_, i) => i ? rnd(.55, .9) * (1 - i * .12) : 1), ms = hits.at(-1) + 380;
+    return { ms, at: t => {
+      let v = .2 * Math.max(0, 1 - t / ms);   // the glow under the strokes
+      for (let i = 0; i < hits.length; i++) if (t >= hits[i]) v = Math.max(v, amp[i] * Math.exp(-(t - hits[i]) / 38));
+      return v;
+    } };
+  }
+  // The window's light thrown across the cloth: a tall sash window, two panes across and four up, laid long the way the
+  // light travels (x) and sheared, as it comes in slantwise from the sky; brightest nearest the window. Drawn once.
+  function panes() {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, 256, 128); g.shadowColor = '#fff'; g.shadowBlur = 7;
+    g.translate(30, 64); g.transform(1, 0, -.3, 1, 0, 0);
+    [.75, 1, .8, .45].forEach((a, i) => { g.fillStyle = `rgba(255,255,255,${a})`; for (let j = 0; j < 2; j++) g.fillRect(i * 52, -48 + j * 50, 45, 42); });
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+  }
+  const gobo = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ map: panes(), color: '#b4c4ff', opacity: 0, ...additive }));
+  gobo.renderOrder = 3; gobo.visible = false; scene.add(gobo);
+  // The windows stand left and right of the table as the room wraps round it, so the light comes in from a side: the
+  // mirrors on the far wall catch it (the wall's light mask, scene/stage.mjs), the glass between the curtains blazes, the
+  // panes fall across the felt and a cold light reaches the cards from that side. A near strike (`power` over .65, not on
+  // Soft) browns the lamps out for a moment: they dip and stutter back. Resolves when it has passed.
+  let winJob = 0;
+  function windowFlash({ side = Math.random() < .5 ? -1 : 1, power = .6 } = {}) {
+    if (reduced()) return Promise.resolve();
+    const id = ++winJob, lampId = ++lampJob, once = soft(), f = flicker(once), room = lights.room, near = power > .65 && !once, life = f.ms + (near ? 300 : 0);
+    const z = (GROUND_Z + m0.z) / 2 + rnd(-10, 10);
+    gobo.visible = true; gobo.scale.set(side * 165 * rnd(.9, 1.1), 1, 78); gobo.position.set(-side * rnd(0, 18), .13, z); gobo.rotation.y = rnd(-.18, .18);
+    lamp.position.set(side * 300, 150, z); lamp.color.set('#b9c8ff');
+    return new Promise(res => animate(gobo, life, k => {
+      const t = k * life, e = t < f.ms ? f.at(t) * power : 0;
+      gobo.material.opacity = e * .55; room?.flash(e * 1.1); if (lampId === lampJob) lamp.intensity = e * 600;
+      if (near) room?.lamps(t < 60 ? 1 - t / 60 * .6 : Math.min(1, .4 + (t - 60) / (life - 60) * .6 - (Math.random() < .25 ? .15 : 0)));
+    }, () => {
+      if (id === winJob) { gobo.visible = false; gobo.material.opacity = 0; room?.flash(0); room?.lamps(1); }
+      if (lampId === lampJob) lamp.intensity = 0; res();
+    }));
+  }
+
   // One strike on the felt: the bolt, and where it grounds the burn, the crawling arcs, sparks and the lamp.
   function hit(at, { hot = false, fromX, from, width, life, n, size } = {}) {
     const landed = bolt(at, { hot, fromX, from, width: width ?? (hot ? 1.3 : 1), life });
@@ -328,7 +374,7 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
     requestAnimationFrame(() => setTimeout(go, 0));
   }
   return {
-    bolt, sparks, flare, burn, crawl, lampFlash, dim, hit, ground, atScreen, charge: setCharge, ambient, setTable,
-    clear() { ambient(false); dim(0, 0); setCharge(false); },
+    bolt, sparks, flare, burn, crawl, lampFlash, dim, hit, ground, atScreen, charge: setCharge, ambient, setTable, windowFlash,
+    clear() { ambient(false); dim(0, 0); setCharge(false); winJob++; gobo.visible = false; lights.room?.flash(0); lights.room?.lamps(1); },
   };
 }

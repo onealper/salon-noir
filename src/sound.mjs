@@ -119,13 +119,14 @@ export class TableAudio {
   forget(path) { if (this.raw?.has(path)) this.kit.delete(path); }
   get live() { return this.enabled && this.available && !document.hidden && this.ctx.state === 'running'; }
   // A one-off kit sound on a bus: a sting, a menu tick, the table cheering. `delay` (s from now) and `from` (s into the
-  // clip) line a sound up with the move it belongs to.
-  async cue(path, { bus = 'table', gain = 1, rate = 1, x = 0, delay = 0, from = 0 } = {}) {
+  // clip) line a sound up with the move it belongs to; `lowpass` (Hz) takes its highs away, as distance and walls do.
+  async cue(path, { bus = 'table', gain = 1, rate = 1, x = 0, delay = 0, from = 0, lowpass = 0 } = {}) {
     if (!this.live) return; const buf = await this.clip(path); if (!buf || !this.live) return;
     const src = this.ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
-    const g = this.ctx.createGain(); g.gain.value = gain; let out = g;
+    const g = this.ctx.createGain(); g.gain.value = gain; let out = g, head = g;
     if (x && this.ctx.createStereoPanner) { const p = this.ctx.createStereoPanner(); p.pan.value = Math.max(-.7, Math.min(.7, x / 70)); g.connect(p); out = p; }
-    src.connect(g); out.connect(this.bus[bus] ?? this.bus.table); src.start(this.ctx.currentTime + delay, from); return src;
+    if (lowpass) { const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; f.Q.value = .5; f.connect(g); head = f; }
+    src.connect(head); out.connect(this.bus[bus] ?? this.bus.table); src.start(this.ctx.currentTime + delay, from); return src;
   }
   // The dealer speaks one line at a time. A more important line cuts in; a lesser one waits its
   // turn only if it is still worth saying (`fresh` ms), otherwise it is dropped. `late`: dropped too if its clip
@@ -156,6 +157,18 @@ export class TableAudio {
     const [a, b] = soundSpan(buf); src.loopStart = a; src.loopEnd = b;
     const g = this.ctx.createGain(); g.gain.value = 0; src.connect(g).connect(this.bus.room); src.start(0, a);
     g.gain.setTargetAtTime(1, this.ctx.currentTime, .8); this.loops.room = { src, g };
+  }
+  // Weather beside the room's bed (the rain on the windows at the Lightning table): looped like it on the room bus, at
+  // `level` (0 to 1, eased over a couple of seconds); no path lets it fade away.
+  async weather(path, level = 1) {
+    if (!this.available) return; const w = this.loops.weather; this.weatherWant = { path, level };   // (the latest wish wins a slow load)
+    if (w && w.path === path) { w.g.gain.setTargetAtTime(level, this.ctx.currentTime, 1.2); return; }
+    this.loops.weather = null;
+    if (w) { w.g.gain.setTargetAtTime(0, this.ctx.currentTime, .8); w.src.stop(this.ctx.currentTime + 4); }
+    if (!path) return; const buf = await this.clip(path); if (!buf || this.loops.weather || this.weatherWant.path !== path) return; level = this.weatherWant.level;
+    const src = this.ctx.createBufferSource(); src.buffer = buf; src.loop = true; const [a, b] = soundSpan(buf); src.loopStart = a; src.loopEnd = b;
+    const g = this.ctx.createGain(); g.gain.value = 0; src.connect(g).connect(this.bus.room); src.start(0, a);
+    g.gain.setTargetAtTime(level, this.ctx.currentTime, 1.5); this.loops.weather = { src, g, path };
   }
   // Music streams (it is long): a media element routed into the music bus, crossfaded on a change.
   music(path) {

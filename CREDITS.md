@@ -36,11 +36,12 @@ File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CRED
 - **Chip-select thock:** a [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) wood knock with a Kenney clay-chip click, CC0
 - **Dealer voices (James and Sofia), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs (the dealers in the library voices "Jerry B." and "Claire", Eleven v4)
 - **The roulette croupier's sounds** (his hand on the wheelhead, the ball's launch, the rake, the dolly): generated for Salon Noir with ElevenLabs Sound Effects v3
+- **The rain in the Lightning table's storm** (`rain-window.mp3`): generated for Salon Noir with ElevenLabs Sound Effects v2
 
 ## Images
 
 - **Court cards and the ace of spades in play** (`assets/cards/court-belt/`, `assets/cards/ace_of_spades_2.webp`): drawn for Salon Noir (generated art)
-- **Card back, felt, leather, the card salon panorama and the salon's carpet** (`assets/table/`): generated for Salon Noir (the panorama and the carpet with FLUX 3 Image through ElevenLabs; the panorama then blurred)
+- **Card back, felt, leather, the card salon panorama and the salon's carpet** (`assets/table/`): generated for Salon Noir (the panorama and the carpet with FLUX 3 Image through ElevenLabs; the panorama then blurred). `salon-light.webp`, the panorama's light mask (its mirrors, lamps and windows, for the storm), was drawn from it
 - **Classic court cards** (`assets/cards/{jack,queen,king}_of_*.webp`), shown only if a drawn court card fails to load: from Howard Yeh's [playing-cards-assets](https://github.com/hayeah/playing-cards-assets), MIT, © 2018 Howard Yeh (`assets/cards/LICENSE.txt`)
 - **Wood veneer and the roulette salon panorama** (`assets/roulette/`): generated for Salon Noir (the panorama with FLUX 3 Image through ElevenLabs, then blurred)
 - **Card faces, pips, chips and felt lettering:** drawn in code (`src/scene/textures.mjs`)
