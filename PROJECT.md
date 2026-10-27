@@ -75,7 +75,7 @@ README.md, CREDITS.md      Front page and full credits
 LICENSE                    All rights reserved for the owner's own work; third-party material keeps its licence
 sw.js, manifest.webmanifest, icons/   Offline play and the home-screen app (icons rendered from the brand mark)
 .nojekyll                  Empty: GitHub Pages serves the files as they are (README, "Play on your phone over HTTPS")
-docs/screenshots/          Screenshots used by the README
+docs/                      The README's logo (logo.svg, from brand.mjs), screenshots and Lightning clip (screenshots/)
 test/                      node --test suite over the pure modules (helpers.mjs: cards, seeded random, storage stand-in)
 src/                       All code, styles, fonts, sounds and libraries
   app.mjs                  The salon (start reading here): settings, sound, the settings sheet and Last hands, the top bar,
