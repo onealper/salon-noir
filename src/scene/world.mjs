@@ -344,7 +344,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
 // Clear acrylic, after the real 8-deck shoes: a trough whose floor (frosted) climbs 14 degrees to a tall back, standing on
 // its own side panels, lidded its whole length with the lid bent down over the back; the cards lean back on that floor at
 // 58 degrees, their backs to the dealer, behind a frame open at the foot for the mouth; behind them the weight, a black
-// block on steel wheels; in front, the frosted chin and the tongue with the card reader in it.
+// wedge on steel rollers with a knob to draw it back by; in front, the frosted chin and the tongue with the card reader in it.
 // The walls stand a little over the cards (`over`, from the floor). The stack is a prism whose depth is the number of cards
 // times their thickness.
 // `foot`: where the front card stands on the floor; `top`, `topY`: the front of the walls' top edge, `topAt(x)` along it;
@@ -433,15 +433,23 @@ function buildShoe({ stackTex, glass }) {
     const [cx, cz] = px(-2, 0), grad = c.createRadialGradient(cx, cz, 0, cx, cz, k * 6.5); grad.addColorStop(0, 'rgba(255,40,64,.5)'); grad.addColorStop(.45, 'rgba(255,40,64,.18)'); grad.addColorStop(1, 'rgba(255,40,64,0)');
     c.save(); c.translate(cx, cz); c.scale(.62, 1.15); c.translate(-cx, -cz); c.fillStyle = grad; c.fillRect(0, 0, c.canvas.width, c.canvas.height); c.restore();
   }, { additive: true, opacity: .5, y: .021 }); g.add(reddened);
-  // The weight behind the stack (`roller`): a black block leaning with the cards, on a steel wheel each side with a hex nut
-  // at its hub. Placed against the last card (setStack).
+  // The weight behind the stack (`roller`), after the real ones: a black acrylic wedge, its face leaning on the last card,
+  // its top level with the floor and its back square, riding on two steel rollers across its width (one under its face, one
+  // under its back) with a chrome knob on top to draw it back by. Its origin is where the last card stands on the floor
+  // (setStack); the rollers keep it RR off the floor.
   const roller = new THREE.Group(); g.add(roller);
-  const PD = 3.2, PH = 4.6, V2 = (x, y) => new THREE.Vector2(x, y), BW = W - .8;
-  const block = new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape([V2(0, 0), V2(PD * u.x, PD * u.y), V2(PD * u.x + PH * cos, PD * u.y + PH * sin), V2(PH * cos, PH * sin)]),
-    { depth: 2 * BW, bevelEnabled: true, bevelThickness: .12, bevelSize: .12, bevelOffset: -.12, bevelSegments: 2 }).translate(0, 0, -BW), glass.black);
+  const RR = .45, PD = 4.4, PH = 5, al = SHOE.slope - SHOE.floor, d = V(cos, sin), V2 = (x, y) => new THREE.Vector2(x, y), BW = W - .8;
+  const P0 = d.clone().multiplyScalar(RR / Math.sin(al)), P1 = d.clone().multiplyScalar(PH), P3 = on(V(0, 0), PD, RR), P2 = P1.clone().addScaledVector(u, (P3.x - P1.x) / u.x);
+  const block = new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape([P0, P3, P2, P1].map(p => V2(p.x, p.y))),
+    { depth: 2 * BW, bevelEnabled: true, bevelThickness: .14, bevelSize: .14, bevelOffset: -.14, bevelSegments: 3 }).translate(0, 0, -BW), glass.black);
   block.castShadow = true; roller.add(block);
-  const wheel = new THREE.CylinderGeometry(1.25, 1.25, .45, 32).rotateX(Math.PI / 2), nut = new THREE.CylinderGeometry(.42, .42, .6, 6).rotateX(Math.PI / 2);
-  for (const z of [1, -1]) for (const geo of [wheel, nut]) { const m = new THREE.Mesh(geo, glass.steel); m.position.copy(on(V(0, 0), 1.75, 1.25)).setZ(z * (BW + .3)); m.castShadow = true; roller.add(m); }
+  const rod = new THREE.CylinderGeometry(RR, RR, 2 * BW + .3, 24).rotateX(Math.PI / 2), nut = new THREE.CylinderGeometry(.3, .3, .2, 6).rotateX(Math.PI / 2);
+  for (const along of [RR / Math.tan(al / 2) + .1, PD - .75]) {
+    const at = on(V(0, 0), along, RR), r = new THREE.Mesh(rod, glass.steel); r.position.copy(at); r.castShadow = true; roller.add(r);
+    for (const z of [1, -1]) { const m = new THREE.Mesh(nut, glass.steel); m.position.copy(at).setZ(z * (BW + .25)); roller.add(m); }
+  }
+  { const mid = P1.clone().lerp(P2, .5), post = new THREE.Mesh(new THREE.CylinderGeometry(.22, .3, 1, 16), glass.steel), knob = new THREE.Mesh(new THREE.SphereGeometry(.62, 24, 16), glass.steel);
+    post.quaternion.setFromUnitVectors(V(0, 1), n); post.position.copy(mid).addScaledVector(n, .6); knob.position.copy(mid).addScaledVector(n, 1.35); post.castShadow = knob.castShadow = true; roller.add(post, knob); }
   // The stack: a prism leaning with the slope on the climbing floor, its cards' edges on its sides.
   const stackMats = new THREE.MeshStandardMaterial({ map: stackTex, roughness: .82, side: THREE.DoubleSide });   // one material: an array would need geometry groups
   const stack = new THREE.Mesh(new THREE.BufferGeometry(), stackMats); stack.castShadow = true; g.add(stack);
@@ -485,7 +493,23 @@ function buildShoe({ stackTex, glass }) {
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
     return { pos: new THREE.Vector3(-3.4, .44, 0), quat: new THREE.Quaternion().setFromRotationMatrix(m) };   // (over the tongue, clear of the reader's rim)
   };
-  return { group: g, setStack, frontPose, exitPose, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
+  // The card on its way out, f from 0 (the front card, leaning in the shoe) to 1 (flat on the tongue), as a dealer draws it:
+  // its foot pulled out over the chin and along the tongue while its head slides down the face of the stack behind the
+  // frame, like a ladder sliding down a wall, until the head reaches the mouth; then it drops flat as it comes clear.
+  const TY = .44, poseOf = (A, B) => {   // the card from its foot A to its head B (CARD_W apart), its back out of the shoe
+    const x = B.clone().sub(A).normalize(), m = new THREE.Matrix4().makeBasis(x, V(0, 0, 1), V(0, 0, 0).crossVectors(x, V(0, 0, 1)));
+    return { pos: A.clone().lerp(B, .5).addScaledVector(V(-x.y, x.x), .02), quat: new THREE.Quaternion().setFromRotationMatrix(m) };
+  };
+  const F = V(foot.x, foot.y), mouth = V(-.05, TY), headOn = A => { const w = F.clone().sub(A), b = w.dot(d), t = -b + Math.sqrt(Math.max(0, b * b - w.lengthSq() + CARD_W * CARD_W)); return F.clone().addScaledVector(d, Math.max(0, t)); };
+  const out = V(foot.x - Math.sqrt(CARD_W * CARD_W - (foot.y - TY) ** 2), TY), legs = [F.distanceTo(mouth), mouth.distanceTo(out)], SPLIT = .62;
+  const footAlong = k => { const s = k * (legs[0] + legs[1]); return s <= legs[0] ? F.clone().lerp(mouth, s / legs[0]) : mouth.clone().lerp(out, (s - legs[0]) / legs[1]); };
+  const flatAt = exitPose(), clear = poseOf(out, F);
+  const slidePose = f => {
+    if (f <= SPLIT) { const A = footAlong(f / SPLIT); return poseOf(A, headOn(A)); }
+    const k = (f - SPLIT) / (1 - SPLIT), e = k * k * (3 - 2 * k);
+    return { pos: clear.pos.clone().lerp(flatAt.pos, e).add(V(0, Math.sin(Math.PI * k) * .25)), quat: clear.quat.clone().slerp(flatAt.quat, e) };
+  };
+  return { group: g, setStack, frontPose, exitPose, slidePose, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
 }
 
 class ArcXZ extends THREE.Curve {

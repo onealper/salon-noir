@@ -246,7 +246,7 @@ export class TableView {
       const s = speed(t), p = at(s);
       // sounds on the frames they happen: the snap as the face lands, the slide across the cloth
       if (!snapped && s > LA + turnLen * .9) { snapped = true; this.audio?.play('turn', { x: p.x }); }
-      if (s <= LA) { m.quaternion.slerpQuaternions(q0, exit.quat, smooth(s / (LA || 1))); p.y = p0.y + (pE.y - p0.y) * (s / (LA || 1)); }
+      if (s <= LA) { const q = this.shoeToTable(this.world.shoe.slidePose(s / (LA || 1))); m.quaternion.copy(q.quat); p.copy(q.pos); }   // drawn out of the mouth (world.mjs)
       else {
         if (!staged) { staged = true; next?.(); }    // the next card settles into the mouth
         const f = clamp01((s - LA) / turnLen), th = Math.PI * smooth(f);
@@ -271,7 +271,7 @@ export class TableView {
     const d = this.world.discard.group; d.updateMatrixWorld();
     const into = V(0, this.world.discard.topY() + .3, 0).applyMatrix4(d.matrix), qD = cardQuat(d.rotation.y + Math.PI / 2, 0);
     this.audio?.play('slide', { x: p0.x });
-    await this.motion.tween(260, t => { m.position.lerpVectors(p0, exit.pos, t); m.quaternion.slerpQuaternions(q0, exit.quat, t); }, ease.in);
+    await this.motion.tween(300, t => { const q = this.shoeToTable(this.world.shoe.slidePose(t)); m.position.copy(q.pos); m.quaternion.copy(q.quat); }, ease.in);
     next?.();
     const a = exit.pos.clone();
     await this.motion.tween(620, t => { m.position.lerpVectors(a, into, t); m.position.y += Math.sin(Math.PI * t) * 7; m.quaternion.slerpQuaternions(exit.quat, qD, smooth(t)); }, ease.inOut);

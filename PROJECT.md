@@ -112,7 +112,7 @@ src/                       All code, styles, fonts, sounds and libraries
                            sheets, and what glass does to the cloth (shade, caustics)
     world.mjs              Blackjack 3D table and seated camera; what holds the table up (tableBase: a lacquered apron with
                            lines of warm light, a pedestal, a brass-edged plinth lighting the carpet); the clear acrylic shoe (after real 8-deck shoes: a lidded
-                           trough climbing to its back on a frosted floor, the weight on steel wheels behind the cards, a
+                           trough climbing to its back on a frosted floor, the weight (a wedge on steel rollers, with a knob) behind the cards, a
                            frosted chin, and in the tongue the card reader: a slot window with a red light guide that brightens
                            as each card goes over it), and the matching discard holder
     view.mjs               Dealer choreography: how cards and chips move
