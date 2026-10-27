@@ -128,6 +128,30 @@ export class TableAudio {
     if (lowpass) { const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; f.Q.value = .5; f.connect(g); head = f; }
     src.connect(head); out.connect(this.bus[bus] ?? this.bus.table); src.start(this.ctx.currentTime + delay, from); return src;
   }
+  // The air charging before the Lightning table's strikes, made here rather than recorded: a mains hum climbing through a
+  // filter that opens over `seconds`, and static crackling over it, a few bursts a second at first and a couple of hundred
+  // by the end. → { cut() }, the strike: it stops dead (null with the sound off).
+  buzz(seconds, { gain = .26 } = {}) {
+    if (!this.live) return null;
+    const c = this.ctx, t = c.currentTime, end = t + Math.max(.1, seconds), voices = [];
+    const out = c.createGain(); out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(gain, end); out.connect(this.bus.table);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 6; lp.frequency.setValueAtTime(150, t); lp.frequency.exponentialRampToValueAtTime(2400, end); lp.connect(out);
+    for (const [f, a] of [[50, .5], [100.6, .3], [150.3, .16]]) {
+      const o = c.createOscillator(), g = c.createGain(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.12, end);
+      g.gain.value = a; o.connect(g).connect(lp); o.start(t); voices.push(o);
+    }
+    const rate = c.sampleRate, n = Math.ceil(rate * (end - t)), buf = c.createBuffer(1, n, rate), d = buf.getChannelData(0), fall = Math.exp(-1 / (rate * .0025));
+    for (let i = 0, amp = 0; i < n; i++) { const k = i / n; if (Math.random() < (6 + 200 * k * k) / rate) amp = .3 + Math.random() * .7; d[i] = (Math.random() * 2 - 1) * amp; amp *= fall; }
+    const crackle = c.createBufferSource(), hp = c.createBiquadFilter(), cg = c.createGain(); crackle.buffer = buf; hp.type = 'highpass'; hp.frequency.value = 1500; cg.gain.value = .6;
+    crackle.connect(hp).connect(cg).connect(out); crackle.start(t); voices.push(crackle);
+    let done = false;
+    const cut = () => {
+      if (done) return; done = true; const now = c.currentTime, v = out.gain.value;
+      out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(v, now); out.gain.setTargetAtTime(0, now, .01); for (const s of voices) s.stop(now + .12);
+    };
+    setTimeout(cut, (end - t) * 1000 + 400);   // (if nothing strikes)
+    return { cut };
+  }
   // The dealer speaks one line at a time. A more important line cuts in; a lesser one waits its
   // turn only if it is still worth saying (`fresh` ms), otherwise it is dropped. `late`: dropped too if its clip
   // takes longer than this to load (a call the picture won't wait for). `onStart` runs as the line starts; the

@@ -680,6 +680,12 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 .lb-cell.hot b { color: #fff4c8; text-shadow: 0 0 8px rgba(255, 220, 130, .95), 0 0 22px rgba(255, 190, 80, .7); }
 .lb-cell.flash { animation: lb-flash .55s ease-out; }
 @keyframes lb-flash { 0% { background: rgba(235, 240, 255, .95); box-shadow: 0 0 30px 6px rgba(170, 190, 255, .9); } 100% { background: transparent; box-shadow: none; } }
+/* as the charge builds a cell crackles now and then; the last to be struck holds charged in the dark before it (steady at soft) */
+.lb-cell.crackle b { animation: crackle .2s steps(1, end); }
+@keyframes crackle { 0%, 45% { color: #dfe6ff; text-shadow: 0 0 6px rgba(150, 175, 255, .95), 0 0 14px rgba(110, 140, 255, .6); } 25%, 70%, 100% { color: #55524c; text-shadow: none; } }
+.lb-cell.armed { box-shadow: inset 0 0 0 1px rgba(170, 190, 255, .7), 0 0 16px rgba(140, 165, 255, .45); }
+.lb-cell.armed b { color: #c9d4ff; animation: crackle .2s steps(1, end) infinite; }
+.lightning.soft .lb-cell.armed b { animation: none; }
 .lb-cell.lit { background: linear-gradient(180deg, rgba(226, 196, 131, .35), rgba(201, 164, 92, .12)); box-shadow: inset 0 0 0 1px var(--gold-hi), 0 0 18px rgba(226, 196, 131, .45); }
 .lb-cell.lit small { color: var(--gold-hi); }
 /* the strike layer over the table */
@@ -721,8 +727,8 @@ body[data-table="lightning"] .hint { top: calc(var(--top-h, 0px) + var(--board-h
   .zap .splash b { font-size: 92px; } .zap .splash em { font-size: 32px; }
 }
 @media (orientation: landscape) and (max-height: 520px) { .lb-cell { min-width: 36px; padding: 2px 4px; } .lb-cell b { font-size: 15px; } .lb-cell small { font-size: 8px; } .zap .splash b { font-size: 72px; } }
-@media (prefers-reduced-motion: reduce) { .lb-cell.flash, .l-badge, .zap .splash.go, .lightning.charging .lb-row { animation: none !important; } }
-body.reduced .lb-cell.flash, body.reduced .l-badge, body.reduced .zap .splash.go, body.reduced .lightning.charging .lb-row { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .lb-cell.flash, .lb-cell.crackle b, .lb-cell.armed b, .l-badge, .zap .splash.go, .lightning.charging .lb-row { animation: none !important; } }
+body.reduced .lb-cell.flash, body.reduced .lb-cell.crackle b, body.reduced .lb-cell.armed b, body.reduced .l-badge, body.reduced .zap .splash.go, body.reduced .lightning.charging .lb-row { animation: none !important; }
 /* Flashing effects (settings): soft turns the board's flicker into a slow swell; off keeps every light steady */
 body[data-flash="soft"] .lightning.charging .lb-row { animation: charge .9s ease-in-out infinite; }
 body[data-flash="off"] .lb-cell.flash, body[data-flash="off"] .lightning.charging .lb-row { animation: none !important; }
