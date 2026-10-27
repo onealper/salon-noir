@@ -132,7 +132,7 @@ src/                       All code, styles, fonts, sounds and libraries
 assets/
   cards/                   Court-card art: court-belt/ is the set in play; the top-level J/Q/K files (Howard Yeh, MIT) are the fallback
   table/                   Felt, leather, card back, the card salon panorama (and salon-light.webp, its mirrors, lamps and windows as R, G, B) and the carpet both rooms stand on
-  roulette/                Wood veneer, the wheel's stone track (stone.webp) and the roulette salon panorama (each room's panorama is wrapped round its table, out of focus: salonWall in scene/stage.mjs)
+  roulette/                The table's Macassar veneer (laid book-matched), cloth nap and armrest leather, the wheel's stone track (stone.webp) and the roulette salon panorama (each room's panorama is wrapped round its table, out of focus: salonWall in scene/stage.mjs)
 ```
 
 ## Architecture rules (keep these)

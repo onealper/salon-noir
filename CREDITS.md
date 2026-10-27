@@ -43,7 +43,7 @@ File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CRED
 - **Court cards and the ace of spades in play** (`assets/cards/court-belt/`, `assets/cards/ace_of_spades_2.webp`): drawn for Salon Noir (generated art)
 - **Card back, felt, leather, the card salon panorama and the salon's carpet** (`assets/table/`): generated for Salon Noir (the panorama and the carpet with FLUX 3 Image through ElevenLabs; the panorama then blurred). `salon-light.webp`, the panorama's light mask (its mirrors, lamps and windows, for the storm), was drawn from it
 - **Classic court cards** (`assets/cards/{jack,queen,king}_of_*.webp`), shown only if a drawn court card fails to load: from Howard Yeh's [playing-cards-assets](https://github.com/hayeah/playing-cards-assets), MIT, © 2018 Howard Yeh (`assets/cards/LICENSE.txt`)
-- **Wood veneer, the wheel's stone ball track and the roulette salon panorama** (`assets/roulette/`): generated for Salon Noir (the panorama with FLUX 3 Image through ElevenLabs, then blurred; the stone, `stone.webp`, with FLUX 3 Image at 2K through ElevenLabs, then evened out and made seamless)
+- **The roulette table's Macassar veneer, cloth, leather, the wheel's stone ball track and the roulette salon panorama** (`assets/roulette/`): generated for Salon Noir through ElevenLabs (the veneer, `macassar.webp`, with Seedream 5 Pro, laid book-matched; the stone, the cloth's nap and the armrest's leather with FLUX 3 Image at 2K, evened out and made seamless; the panorama with FLUX 3 Image, then blurred)
 - **Card faces, pips, chips and felt lettering:** drawn in code (`src/scene/textures.mjs`)
 - **App icons** (`icons/`): rendered from the Salon Noir mark in `src/core/brand.mjs`
 

@@ -28,7 +28,7 @@ const ART = {};
 export function preloadRouletteArt() {
   const load = (k, src) => new Promise(r => { const i = new Image(); i.onload = () => { ART[k] = i; r(); }; i.onerror = () => r(); i.src = src; });
   const fonts = document.fonts ? Promise.all(['700 80px "Barlow Condensed"', '700 80px Cinzel', '700 40px Inter', '500 80px "Bodoni Moda"', 'italic 600 80px "Bodoni Moda"'].map(f => document.fonts.load(f).catch(() => {}))) : Promise.resolve();
-  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('salon', './assets/roulette/salon.webp'), load('stone', './assets/roulette/stone.webp'), fonts]);
+  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('salon', './assets/roulette/salon.webp'), load('stone', './assets/roulette/stone.webp'), load('cloth', './assets/roulette/cloth.webp'), load('leather', './assets/roulette/leather.webp'), fonts]);
 }
 
 export function createRouletteScene(canvas, { quality = detectQuality() } = {}) {
@@ -79,10 +79,13 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const table = new THREE.Group(); scene.add(table);
   // (the top's shape gives texture coordinates in centimetres: one picture of the veneer to every 80 cm, its stripes
   // along the table)
-  const woodTex = (img, cm, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / cm, 1 / cm); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
-  const walnut = new THREE.MeshStandardMaterial({ color: ART.veneer ? '#e6d6c8' : '#1c120c', map: woodTex(ART.veneer, 80, Math.PI / 2), roughness: .34, envMapIntensity: .7 });   // the table: Macassar ebony, its stripes along the length, in a satin lacquer (one coat, drawn as one: a clear coat on the largest wood in the picture costs every pixel of it twice)
+  const woodTex = (img, cm, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.repeat.set(1 / cm, 1 / cm); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
+  const walnut = new THREE.MeshStandardMaterial({ color: ART.veneer ? '#e6d6c8' : '#1c120c', map: woodTex(ART.veneer, 80, Math.PI / 2), roughness: .34, envMapIntensity: .7 });   // the table: Macassar ebony, its stripes along the length, laid book-matched (each 80 cm leaf the mirror of the next), in a satin lacquer (one coat, drawn as one: a clear coat on the largest wood in the picture costs every pixel of it twice)
   const leather = leatherMaterial();
-  const grain = artImage('table:leather'); if (grain) { const t = new THREE.Texture(grain); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(24, 2); t.needsUpdate = true; leather.bumpMap = t; leather.bumpScale = 1.8; }
+  // its pebble grain, a picture to every 12 cm (the armrest's pieces are all mapped in cm): the room's own photograph
+  // (assets/roulette/leather.webp) is its colour and its bump both, the salon's shared grain only a bump
+  const grain = ART.leather ?? artImage('table:leather'); if (grain) { const t = new THREE.Texture(grain); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 12, 1 / 12); t.anisotropy = aniso; t.needsUpdate = true; leather.bumpMap = t; leather.bumpScale = 1.8;
+    if (ART.leather) { const c = t.clone(); c.colorSpace = THREE.SRGBColorSpace; c.needsUpdate = true; leather.map = c; leather.color.set('#8a847c'); leather.bumpScale = 1.3; } }
   const brass = brassMaterial();
   // the wheel's own studio light, for its reflections: a ring light overhead and two soft boxes in a dark room
   // (rendered once; the generator and the little studio are freed straight after)
@@ -99,7 +102,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   const wheel = createWheel(THREE, { aniso, env: studioEnv, glow: '#ffb85a', stone: ART.stone }); table.add(wheel.group);   // black lacquer, a warm gold ring light
   // the cloth: matte wool, and on the high preset a fabric sheen at grazing angles and the nap as a fine bump (the other
   // presets keep the plain material: the cloth is the largest surface in the picture, and a phone pays for every pixel)
-  const feltMats = new Map(), nap = artImage('table:felt');
+  const feltMats = new Map(), nap = ART.cloth ?? artImage('table:felt');
   const feltMaterial = q => {
     const rich = q.name === 'high'; if (feltMats.has(rich)) return feltMats.get(rich);
     const m = rich ? new THREE.MeshPhysicalMaterial({ roughness: .96, metalness: 0, sheen: .35, sheenRoughness: .8, sheenColor: new THREE.Color('#3f8a63') }) : new THREE.MeshStandardMaterial({ roughness: .96, metalness: 0 });
@@ -186,7 +189,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const c = document.createElement('canvas'); c.width = Math.round(W * ppc); c.height = Math.round(D * ppc); const g = c.getContext('2d');
     const px = x => (x - R.x0) * ppc, pz = z => (z - R.z0) * ppc;
     g.fillStyle = '#17533a'; g.fillRect(0, 0, c.width, c.height);
-    const nap = artImage('table:felt'); if (nap) { g.globalAlpha = .5; g.globalCompositeOperation = 'overlay'; const t = 512; for (let y = 0; y < c.height; y += t) for (let x = 0; x < c.width; x += t) g.drawImage(nap, x, y, t, t); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+    if (nap) { g.globalAlpha = .5; g.globalCompositeOperation = 'overlay'; const t = 512; for (let y = 0; y < c.height; y += t) for (let x = 0; x < c.width; x += t) g.drawImage(nap, x, y, t, t); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
     const s = L.s, portrait = L.orient === 'port', line = Math.max(2, .13 * ppc), CREAM = 'rgba(238,226,190,.92)';
     const INKC = { red: '#c3192b', black: '#111111', green: '#12924f' }, IVORY = '#ece4d2', OVAL = { red: '#a3141f', black: '#141416' };
     // an oval under a number, rx across your view and ry up it, with a fine brass edge
@@ -346,10 +349,19 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       for (let k = 0; k <= 8; k++) { const a = Math.PI / 2 + k / 8 * Math.PI / 2; prof.push([-half + 4.6 + 4.6 * Math.cos(a), hgt - 4.6 + 4.6 * Math.sin(a)]); }
       const sh = new THREE.Shape(prof.map(([o, y]) => new THREE.Vector2(o, y))), y0 = -.4;
       const zP = R.z1 + half, xF = R.x1 + half, zD = R.z0 - half;
-      const straight = (len, along, x, z) => { const g = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false, curveSegments: 12 }); if (along === 'x') g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, leather); m.position.set(x, y0, z); m.castShadow = m.receiveShadow = true; body.add(m); };
-      const corner = (cx, cz2, phi0) => { const g = new THREE.LatheGeometry(prof.concat([prof[0]]).map(([o, y]) => new THREE.Vector2(rc + o, y)), 24, phi0, Math.PI / 2); const m = new THREE.Mesh(g, leather); m.material = leather; m.position.set(cx, y0, cz2); m.castShadow = m.receiveShadow = true; body.add(m); };
+      // an extrusion comes flat-shaded, every facet of the roll a band of its own: its normals smoothed where faces meet
+      // at under 50 degrees (the roll), its flat ends kept sharp
+      const smooth = g => { const P = g.attributes.position, N = g.attributes.normal, key = k => `${P.getX(k).toFixed(3)},${P.getY(k).toFixed(3)},${P.getZ(k).toFixed(3)}`, at = new Map();
+        for (let k = 0; k < P.count; k++) { const q = key(k); if (!at.has(q)) at.set(q, []); at.get(q).push(k); }
+        const out = new Float32Array(N.count * 3), n = new THREE.Vector3(), m = new THREE.Vector3(), sum = new THREE.Vector3();
+        for (const ks of at.values()) for (const k of ks) { n.fromBufferAttribute(N, k); sum.set(0, 0, 0); for (const j of ks) { m.fromBufferAttribute(N, j); if (m.dot(n) > .64) sum.add(m); } sum.normalize(); out.set([sum.x, sum.y, sum.z], k * 3); }
+        g.setAttribute('normal', new THREE.BufferAttribute(out, 3)); return g; };
+      const straight = (len, along, x, z) => { const g = smooth(new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false, curveSegments: 12 })); if (along === 'x') g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, leather); m.position.set(x, y0, z); m.castShadow = m.receiveShadow = true; body.add(m); };
+      // a lathe's uv runs 0..1 round and along its outline: in cm instead, across the roll and along it, as the straight runs have
+      const inCm = (g, pts, around) => { let len = 0; for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getY(k) * len, uv.getX(k) * around); return g; };
+      const corner = (cx, cz2, phi0) => { const g = inCm(new THREE.LatheGeometry(prof.concat([prof[0]]).map(([o, y]) => new THREE.Vector2(rc + o, y)), 24, phi0, Math.PI / 2), prof.concat([prof[0]]), rc * Math.PI / 2); const m = new THREE.Mesh(g, leather); m.material = leather; m.position.set(cx, y0, cz2); m.castShadow = m.receiveShadow = true; body.add(m); };
       const xs = wx + 50;
-      { const halfP = prof.filter(([o]) => o >= 0).sort((a, b) => a[1] - b[1] || b[0] - a[0]); const capG = new THREE.LatheGeometry([new THREE.Vector2(0, 0), ...halfP.map(([o, y]) => new THREE.Vector2(o, y)), new THREE.Vector2(0, hgt)], 20, Math.PI, Math.PI); const m = new THREE.Mesh(capG, leather); m.position.set(xs, y0, zP); m.castShadow = true; body.add(m); }   // the near end, rounded
+      { const halfP = prof.filter(([o]) => o >= 0).sort((a, b) => a[1] - b[1] || b[0] - a[0]); const capP = [[0, 0], ...halfP, [0, hgt]], capG = inCm(new THREE.LatheGeometry(capP.map(([o, y]) => new THREE.Vector2(o, y)), 20, Math.PI, Math.PI), capP, half * Math.PI / 2); const m = new THREE.Mesh(capG, leather); m.position.set(xs, y0, zP); m.castShadow = true; body.add(m); }   // the near end, rounded
       straight(xF - rc - xs, 'x', xs, zP);                       // along the players' side
       corner(xF - rc, zP - rc, 0);                                // round the near corner of the foot
       straight((zP - rc) - (zD + rc), 'z', xF, zD + rc);          // across the foot
