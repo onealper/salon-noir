@@ -770,7 +770,7 @@ export async function createRoulette(ctx) {
     winEl.querySelector('.r-gross').textContent = r.back ? `Staked ${fmt(r.staked)} · paid back ${fmt(r.back)}${r.partage && r.partage < r.back ? `, ${fmt(r.partage)} of it by la partage` : ''}` : '';
     const em = winEl.querySelector('em'), final = net ? signed(net) : 'Even'; em.textContent = net ? (net > 0 ? '+0' : '−0') : final;
     winEl.hidden = false; void winEl.offsetWidth; winEl.classList.add('show');   // a reflow, then the transition
-    if (net) setTimeout(() => ui.morph(em, final), 140);   // the amount rolls up to the result
+    if (net) setTimeout(() => ui.morph(em, final), 380);   // the amount rolls up to the result, once the pill has come in
   }
   function clearResult() {
     if (lastLit != null) { lastLit = null; if (!hovered && mode === 'betting') S.highlight([]); }

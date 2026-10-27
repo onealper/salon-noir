@@ -412,6 +412,7 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 body.reduced *, body.reduced *::before, body.reduced *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 body.reduced .shimmer :is(.shimmer-spark-wrap, .shimmer-spark, .shimmer-cone) { animation: none !important; }
 body.reduced .shimmer .shimmer-spark-wrap { display: none; }
+body.reduced :is(.r-win, .r-win.show, .r-history, .rstage .r-history) { transition-delay: 0s !important; }
 
 /* motion helpers: elements that springs scale need a box of their own */
 .hand-total > span, .bank output, .spot .amount, .pill .label { display: inline-block; }
@@ -799,7 +800,7 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 /* While the ball runs the hint is a small pill at the foot. From the drop, and in the replay, the picture is the wheel's
    alone: the strip steps up out of it (it is back as the number is called, with the number) and the hint goes. */
 body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; font-size: 12.5px; }
-.r-history { transition: opacity .3s var(--ease), translate .3s var(--ease); }
+.r-history { z-index: 3; transition: opacity .3s var(--ease) .15s, translate .4s var(--ease) .15s; }   /* (over the top bar's blur, which runs on below the bar; back a beat after what took its place) */
 .rstage.r-wheelonly .r-history { opacity: 0; translate: -50% -8px; }
 .rstage.r-wheelonly .r-hint { opacity: 0; }
 
@@ -822,8 +823,9 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 @keyframes rec { 50% { opacity: .2; } }
 
 /* the result */
-.r-win { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 58px); translate: -50% 0; display: grid; justify-items: center; gap: 2px; padding: 10px 26px 11px; border-radius: 16px; background: linear-gradient(rgba(22, 20, 16, .94), rgba(12, 12, 13, .94)); border: 1px solid rgba(226, 196, 131, .35); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(-8px) scale(.96); transition: opacity .3s var(--ease), transform .5s var(--spring-pop); z-index: 3; }
-.r-win.show { opacity: 1; transform: none; }
+.r-win { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 58px); translate: -50% 0; display: grid; justify-items: center; gap: 2px; padding: 10px 26px 11px; border-radius: 16px; background: linear-gradient(rgba(22, 20, 16, .94), rgba(12, 12, 13, .94)); border: 1px solid rgba(226, 196, 131, .35); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(10px) scale(.92); filter: blur(8px); transition: opacity .25s var(--ease), transform .3s var(--ease), filter .25s var(--ease); z-index: 3; }
+/* in as the strip steps up out of its way: it rises, sharpens and settles with a little spring; out quicker */
+.r-win.show { opacity: 1; transform: none; filter: none; transition: opacity .45s var(--ease) .12s, transform .7s var(--spring-pop) .12s, filter .45s var(--ease) .12s; }
 .r-win small { font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
 .r-win.red small { color: #ec8a8f; } .r-win.green small { color: #6fd39e; }
 .r-win b { font: 500 15px/1.2 "Bodoni Moda", serif; font-style: italic; color: var(--ivory); }
@@ -835,7 +837,7 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 /* The result takes the recent numbers' place, the room kept for the strip above the picture: lower down it covered the
    racetrack printed on the cloth beside the layout, and the zero end of it on an upright phone. Beside the layout it is
    one line; on an upright phone the totals go under it. The strip is back with your next bet, the new number first. */
-.rstage:has(.r-win.show) .r-history { opacity: 0; }
+.rstage:has(.r-win.show) .r-history { opacity: 0; translate: -50% -10px; transition: opacity .22s var(--ease), translate .3s var(--ease); }
 @media (max-width: 760px) and (orientation: portrait) {
   .r-win { top: calc(var(--top-h, 0px) + 6px); width: max-content; max-width: calc(100% - 24px); grid-template-columns: repeat(3, auto); grid-template-areas: 's b e' 'g g g'; align-items: center; column-gap: 12px; row-gap: 1px; padding: 5px 16px 6px; }
   .r-win small, .r-win b, .r-win em { white-space: nowrap; }
