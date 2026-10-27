@@ -51,6 +51,7 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
     lacquerM('#060606', .14, ramp([[0, .55], [.18, 1], [1, 1]])));
   rim.material.side = THREE.DoubleSide; rim.castShadow = true; wheel.add(rim);
   torus(W + 1.05, .1, .84, brass);   // the brass inlay round the top
+  { const under = new THREE.Mesh(new THREE.CircleGeometry(R, 96), new THREE.MeshBasicMaterial({ color: '#000' })); under.rotation.x = -Math.PI / 2; under.position.y = -14.9; wheel.add(under); }   // the bowl's floor, under everything (no gap shows through to what is below)
   // the ball track: polished black stone (a fine speckle in its roughness), its flare curving up into the wall (the
   // simulation's own profile); darker where it meets the wall and down at the cone
   const speck = tex(canvas(512, 64, (g, w, h) => {

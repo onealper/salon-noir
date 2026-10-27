@@ -130,7 +130,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const Z = v => v >= 0 ? zg - v * s.cv : v >= -1 ? zg - v * s.d : zg + s.d + (-v - 1) * s.e;
     const U = x => x < x0 ? (x - x0) / s.z0 : x <= x0 + 12 * s.cu ? (x - x0) / s.cu : 12 + (x - x0 - 12 * s.cu) / s.cc;
     const V = z => z <= zg ? (zg - z) / s.cv : z <= zg + s.d ? -(z - zg) / s.d : -1 - (z - zg - s.d) / s.e;
-    const xEnd = X(13), zFar = Z(3), zNear = Z(-2), wheelX = x0 - s.z0 - 5 - GEO.rimR, rect = { x0: wheelX + 30, x1: xEnd + 34, z0: zFar - 40, z1: zNear + 15 };
+    const xEnd = X(13), zFar = Z(3), zNear = Z(-2), wheelX = x0 - s.z0 - 5 - GEO.rimR, rect = { x0: wheelX + WELL + 1, x1: xEnd + 34, z0: zFar - 40, z1: zNear + 15 };   // (the cloth starts past the wheel's well: inside it, it would cut through the bowl)
     // the racetrack, a stadium printed on the croupier's side: only from the long side. On an upright phone it would lie
     // off the right edge of the picture, and the Racetrack sheet is the phone's track.
     const track = orient === 'land' ? (() => { const xa = X(-1), len = (xEnd - xa) * .78, H = Math.min(26, zFar - rect.z0 - 5 - 4); return { cx: (xa + xEnd) / 2, cz: zFar - 4 - H / 2, len, H }; })() : null;
