@@ -3,7 +3,8 @@
 //   chip rack · dealer's cards · wordmark · printed arcs · your cards ·
 //   side-bet crown · your main circle · padded armrest (radius 100).
 import * as THREE from '../vendor/three.module.min.js';
-import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor, salonEnvironment } from './stage.mjs';
+import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor } from './stage.mjs';
+import { acrylic, frosted, sheet, sheetBox, reflectionProbe, groundDecal } from './glass.mjs';
 import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, stackEdgeTexture, STACK_TILE, backTexture, setFaceDetail, onArtLanded, CARD_W, CARD_H, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
 
 export const EDGE_Z = -40, R = 100, CARD_T = .03;
@@ -38,7 +39,7 @@ export function toSeat(k, x, z) {
 
 export function createWorld(canvas, { specs, quality = detectQuality(), mode }) {
   // the renderer, its loop and frame watcher, the scene and the camera (stage.mjs: the same for the wheel)
-  const st = createStage(canvas, { quality, background: '#0c0c0d', environment: .42, fov: 42, far: 900, lights: () => [key], restored: () => reflectSalon() });
+  const st = createStage(canvas, { quality, background: '#0c0c0d', environment: .42, fov: 42, far: 900, lights: () => [key], restored: () => reflect() });
   const { renderer, scene, camera, view, tickers, requestRender, maxTex, aniso } = st;
   setChipDetail(quality.chipSegments); setFaceDetail(quality.face);
   onArtLanded(() => requestRender());
@@ -161,12 +162,11 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   });
 
   // ---- discard holder: clear acrylic like the shoe, low at the front, dealer's right ---------------------------------------
-  const glass = glassMaterials();
-  function reflectSalon() { const env = salonEnvironment(renderer, roomArt); for (const m of Object.values(glass)) { m.envMap = env; m.needsUpdate = true; } }
-  reflectSalon();
+  // (glass.mjs: the shoe's acrylic, its tongue's (lit red by the reader), the holder's, the frosted floor, and the fittings)
+  const glass = { shoe: acrylic(), tongue: acrylic({ piped: '#ff4658', glow: .22 }), holder: acrylic({ thick: .5 }), frost: frosted(null), ...shoeFittings() };
   const discard = new THREE.Group(); discard.position.set(LAYOUT.discard.x, 0, LAYOUT.discard.z); discard.rotation.y = LAYOUT.discard.yaw; table.add(discard);
-  const box = (w, h, d, x, y, z) => { const m = glassBox(w, h, d, glass); m.position.set(x, y, z); m.receiveShadow = true; return m; };
-  discard.add(box(11, .6, 8.4, 0, .3, 0), box(11, 8, .5, 0, 4, -4.1), box(11, 3.2, .5, 0, 1.6, 4.1), box(.5, 8, 8.4, -5.4, 4, 0), box(.5, 8, 8.4, 5.4, 4, 0));
+  const box = (w, h, d, x, y, z, order) => { const m = sheetBox(w, h, d, glass.holder); m.position.set(x, y, z); m.receiveShadow = true; m.renderOrder = order; return m; };   // (drawn far to near from the seat)
+  discard.add(box(11, .6, 8.4, 0, .3, 0, 1), box(11, 8, .5, 0, 4, -4.1, 1), box(.5, 8, 8.4, -5.4, 4, 0, 2), box(.5, 8, 8.4, 5.4, 4, 0, 2), box(11, 3.2, .5, 0, 1.6, 4.1, 3));
   const edgeTex = edgeTexture(true), flatEdge = edgeTexture(false);
   const discardStack = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, 1, CARD_H), [edgeMat(flatEdge), edgeMat(flatEdge), new THREE.MeshStandardMaterial({ map: backTexture(), roughness: .45 }), edgeMat(flatEdge), edgeMat(flatEdge), edgeMat(flatEdge)]);
   discardStack.castShadow = true; discard.add(discardStack);
@@ -175,11 +175,25 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   setDiscards(0);
 
   // ---- the shoe -----------------------------------------------------------------------
-  const key0 = key.intensity, shoe = buildShoe({ stackTex: stackEdgeTexture(), glass, light: () => key.intensity / key0 });   // the edges' glow follows the pendant (down with the house lights)
+  // the light the acrylic carries to its edges follows the pendant, down with the house lights (the reader's red does not)
+  const key0 = key.intensity, piped = glass.shoe.edge.emissiveIntensity, shoe = buildShoe({ stackTex: stackEdgeTexture(), glass });
+  shoe.beforeGlass(() => { const k = key.intensity / key0; glass.shoe.edge.emissiveIntensity = glass.holder.edge.emissiveIntensity = piped * k; });
   // the reader lights as each card slides over it, and dies back
   let readAt = -1e9; const readTick = () => { const k = (performance.now() - readAt) / 520; shoe.glow(k >= 1 ? 0 : (1 - k) ** 2); if (k >= 1) tickers.delete(readTick); requestRender(false); };
   readTick.still = true; shoe.read = () => { readAt = performance.now(); tickers.add(readTick); requestRender(false); };
   shoe.group.position.set(LAYOUT.shoe.x, 0, LAYOUT.shoe.z); shoe.group.rotation.y = LAYOUT.shoe.yaw; table.add(shoe.group);
+  // What the glass reflects: the table as seen from the shoe and from the holder, the pendant drawn in (glass.mjs). Again after
+  // a lost context, and for a new cloth.
+  const lamp = { at: key.position, size: 16, color: '#ffe2b8', power: 30 }, probes = [];
+  function reflect() {
+    scene.updateMatrixWorld(); for (const t of probes.splice(0)) t.dispose();
+    const look = (group, local) => group.localToWorld(local.clone());
+    const [atShoe, atHolder] = [look(shoe.group, new THREE.Vector3(14, 6, 0)), look(discard, new THREE.Vector3(0, 4, 0))].map(at => { const t = reflectionProbe(renderer, scene, at, { hide: [shoe.group, discard], lamp }); probes.push(t); return t; });
+    for (const m of [glass.shoe.face, glass.shoe.edge, glass.tongue.face, glass.tongue.edge, glass.frost, glass.bed, glass.steel, glass.black]) { m.envMap = atShoe; m.needsUpdate = true; }
+    for (const m of [glass.holder.face, glass.holder.edge]) { m.envMap = atHolder; m.needsUpdate = true; }
+    requestRender();
+  }
+  reflect();
 
   // ---- camera: your seat --------------------------------------------------------------
   // Keep the essentials in frame: your main circle and the side-bet arc, the dealer's edge, and
@@ -309,7 +323,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     requestRender();
   }
   function setMode(m, slotSpec) {
-    if (m !== mode) paintMode(m);
+    if (m !== mode) { paintMode(m); reflect(); }
     const top = spots.dpairs?.children[1];
     if (top && slotSpec && slotSpec !== slot) { slot = slotSpec; top.material.map = medallion(slotSpec); requestRender(); }
   }
@@ -340,73 +354,52 @@ export const SHOE = { len: 29, wid: 10.2, wall: .35, slope: 58 * Math.PI / 180, 
   SHOE.top = foot.x + up * Math.cos(slope); SHOE.topY = foot.y + up * Math.sin(slope);
   SHOE.topAt = x => SHOE.topY + (x - SHOE.top) * Math.tan(floor); SHOE.hgt = SHOE.topAt(SHOE.len);
 }
-// Clear acrylic as it looks, lit like everything else at the table, and the shoe's other fittings (frosted floor, steel,
-// the weight's black), all reflecting the salon. Its faces are next to nothing straight on and fuller as
-// they turn from you, and what they reflect (the salon: `env`, salonEnvironment) is added whole rather than faded with
-// them, as glass does: premultiplied, the shader weighing the body by its cover and the blend adding the rest. Its cut
-// edges are the pale green of acrylic end on, and glow: the room's light runs through the sheet and out at its edges,
-// whichever way they face (`emissive`, kept in step with the pendant: see buildShoe), brighter still where it catches them.
-// The tongue's edges glow red too, the card reader's light running through it (`tongue`); the reader's bed is a dark
-// coated glass with the rainbow sheen of its coating.
-function glassMaterials() {
-  const face = new THREE.MeshPhysicalMaterial({ color: '#c2d0cc', roughness: .03, metalness: 0, ior: 1.49, clearcoat: 1, clearcoatRoughness: .02, transparent: true, opacity: .07, depthWrite: false, envMapIntensity: 1.6,
-    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor });
-  face.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `float cover = mix(diffuseColor.a, .45, pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 3.0));
-    outgoingLight = totalDiffuse * cover + (outgoingLight - totalDiffuse); diffuseColor.a = cover;
-    #include <opaque_fragment>`); };
-  face.customProgramCacheKey = () => 'salon-glass';
-  const edge = new THREE.MeshPhysicalMaterial({ color: '#d4ebe4', emissive: '#a9d6cb', emissiveIntensity: .32, roughness: .1, metalness: 0, ior: 1.49, transparent: true, opacity: .88, depthWrite: false, envMapIntensity: 1.4 });
-  const tongue = edge.clone(); tongue.emissive.set('#ff4658'); tongue.emissiveIntensity = .22;
+// The shoe's fittings besides its acrylic (glass.mjs), all reflecting the table from the shoe (reflect): the reader's bed,
+// a dark coated glass with the rainbow sheen of its coating; brushed steel, which takes the lamp and not only the dark room;
+// and the weight's black.
+function shoeFittings() {
   const bed = new THREE.MeshPhysicalMaterial({ color: '#07080a', emissive: '#ff2a3c', emissiveIntensity: .015, roughness: .06, clearcoat: 1, clearcoatRoughness: .03, iridescence: .35, iridescenceIOR: 1.8, iridescenceThicknessRange: [220, 560], envMapIntensity: .7 });
-  const frost = new THREE.MeshPhysicalMaterial({ color: '#eef1f0', roughness: .55, metalness: 0, transparent: true, opacity: .8, depthWrite: false, envMapIntensity: .6 });
-  const chrome = new THREE.MeshStandardMaterial({ color: '#cfd3d7', metalness: .55, roughness: .3, envMapIntensity: 2 });   // brushed steel: takes the lamp, not only the dark room
+  const steel = new THREE.MeshStandardMaterial({ color: '#cfd3d7', metalness: .55, roughness: .3, envMapIntensity: 2 });
   const black = new THREE.MeshPhysicalMaterial({ color: '#0d0e10', roughness: .28, metalness: .2, clearcoat: 1, clearcoatRoughness: .05 });
-  return { face, edge, tongue, bed, frost, chrome, black };
+  return { bed, steel, black };
 }
-// A sheet of it: a box whose two broad faces are clear and whose four narrow ones are cut edges (BoxGeometry's faces run
-// +x, -x, +y, -y, +z, -z); and a sheet cut to an outline (x, y), `t` thick from z 0.
-function glassBox(w, h, d, { face, edge }) {
-  const dims = [w, h, d], t = Math.min(...dims);
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [0, 0, 1, 1, 2, 2].map(a => dims[a] === t ? face : edge));
-}
-const glassSheet = (outline, t, { face, edge }) =>
-  new THREE.Mesh(new THREE.ExtrudeGeometry(outline instanceof THREE.Shape ? outline : new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y))), { depth: t, bevelEnabled: false }), [face, edge]);
-function buildShoe({ stackTex, glass, light = () => 1 }) {
+function buildShoe({ stackTex, glass }) {
   const g = new THREE.Group(), inner = new THREE.Group(); g.add(inner);
   const { len, wid, wall, foot, top, topY, hgt } = SHOE, sin = Math.sin(SHOE.slope), cos = Math.cos(SHOE.slope);
   const V = (x, y, z = 0) => new THREE.Vector3(x, y, z), u = V(Math.cos(SHOE.floor), Math.sin(SHOE.floor)), n = V(-u.y, u.x), on = (p, along, out = 0) => p.clone().addScaledVector(u, along).addScaledVector(n, out);
-  const add = m => { m.receiveShadow = true; g.add(m); return m; };
+  const add = (m, order) => { m.receiveShadow = true; if (order) m.renderOrder = order; g.add(m); return m; };   // (glass drawn far to near from the seat: 1 to 5)
+  const A = glass.shoe;
   const B = V(foot.x, foot.y), W = wid / 2 - wall;   // the front card's foot; the inside half-width
   // the side panels: the trough's walls and the stand under it in one sheet, leaning back at the front with the cards
   const side = [[foot.x - foot.y / Math.tan(SHOE.slope), 0], [len, 0], [len, hgt], [top, topY]];
-  for (const z of [W, -wid / 2]) add(glassSheet(side, wall, glass)).position.z = z;
+  for (const z of [W, -wid / 2]) add(sheet(side, wall, A), z > 0 ? 5 : 1).position.z = z;
   // the floor, frosted, from the front card's foot to the back
-  const fl = (len - wall - foot.x) / u.x, floor = add(glassBox(fl, wall, 2 * W, { face: glass.frost, edge: glass.edge })); floor.position.copy(on(B, fl / 2, -wall / 2)); floor.rotation.z = SHOE.floor;
-  add(glassBox(wall, hgt, 2 * W, glass)).position.set(len - wall / 2, hgt / 2, 0);                                   // back
+  const fl = (len - wall - foot.x) / u.x, floor = add(sheetBox(fl, wall, 2 * W, { face: glass.frost, edge: A.edge }), 2); floor.position.copy(on(B, fl / 2, -wall / 2)); floor.rotation.z = SHOE.floor;
+  add(sheetBox(wall, hgt, 2 * W, A), 2).position.set(len - wall / 2, hgt / 2, 0);                                   // back
   // the lid, its whole length, and bent down over the back
-  const ll = (len + .3 - top) / u.x, lid = add(glassBox(ll, wall, wid, glass)); lid.position.copy(on(V(top, topY), ll / 2, wall / 2)); lid.rotation.z = SHOE.floor;
-  const bend = SHOE.floor - 1.05, lip = add(glassBox(2.6, wall, wid, glass)); lip.rotation.z = bend;
+  const ll = (len + .3 - top) / u.x, lid = add(sheetBox(ll, wall, wid, A), 4); lid.position.copy(on(V(top, topY), ll / 2, wall / 2)); lid.rotation.z = SHOE.floor;
+  const bend = SHOE.floor - 1.05, lip = add(sheetBox(2.6, wall, wid, A), 4); lip.rotation.z = bend;
   lip.position.copy(on(V(top, topY), ll, wall)).add(V(Math.cos(bend), Math.sin(bend)).multiplyScalar(1.3)).add(V(Math.sin(bend), -Math.cos(bend)).multiplyScalar(wall / 2));
   // clear fasteners where the floor is fixed to the side panels
   const screw = new THREE.CircleGeometry(.13, 14);
-  for (const along of [3, 11.5, 20]) for (const z of [1, -1]) { const m = add(new THREE.Mesh(screw, glass.edge)); m.position.copy(on(B, along, -wall / 2)).setZ(z * (wid / 2 + .006)); if (z < 0) m.rotation.y = Math.PI; }
+  for (const along of [3, 11.5, 20]) for (const z of [1, -1]) { const m = add(new THREE.Mesh(screw, A.edge), z > 0 ? 5 : 1); m.position.copy(on(B, along, -wall / 2)).setZ(z * (wid / 2 + .006)); if (z < 0) m.rotation.y = Math.PI; }
   // the frame round the front card, open at the foot for the mouth: in the card's plane, just in front of it, clear of the
   // card's edges so a drawn card passes it
-  const fu = SHOE.over / Math.sin(SHOE.slope - SHOE.floor), b = .55, frame = add(glassSheet([[1.5, -wid / 2], [fu, -wid / 2], [fu, wid / 2], [1.5, wid / 2], [1.5, wid / 2 - b], [fu - .9, wid / 2 - b], [fu - .9, -wid / 2 + b], [1.5, -wid / 2 + b]], wall, glass));
+  const fu = SHOE.over / Math.sin(SHOE.slope - SHOE.floor), b = .55, frame = add(sheet([[1.5, -wid / 2], [fu, -wid / 2], [fu, wid / 2], [1.5, wid / 2], [1.5, wid / 2 - b], [fu - .9, wid / 2 - b], [fu - .9, -wid / 2 + b], [1.5, -wid / 2 + b]], wall, A), 3);
   frame.matrixAutoUpdate = false; frame.matrix.makeBasis(V(cos, sin), V(0, 0, 1), V(sin, -cos)).setPosition(B.clone().add(V(-sin, cos).multiplyScalar(.05 + wall))); frame.updateMatrixWorld?.();
   // The chin: the frosted floor carried out of the mouth and down to the tongue, for the card to slide over.
-  const TT = .35, chin = add(glassBox(1.75, .3, 2 * W, { face: glass.frost, edge: glass.edge })), slope = Math.atan2(foot.y - TT, foot.x + .05);
+  const TT = .35, chin = add(sheetBox(1.75, .3, 2 * W, { face: glass.frost, edge: A.edge }), 2), slope = Math.atan2(foot.y - TT, foot.x + .05);
   chin.rotation.z = slope; chin.position.set((foot.x - .05) / 2 + Math.sin(slope) * .15, (foot.y + TT) / 2 - Math.cos(slope) * .15, 0);
   // The tongue, and the card reader in it, as on the real shoes: a narrow strip of thick clear acrylic the width of the
   // mouth, 4 cm deep, raised a little at its ends; set in it, a slot of a window across the mouth (7 x 1.5 cm) over a dark
   // coated bed, framed by a thin clear rim with small clips at its ends and a maker's label at one end, and along it a red
   // light guide lit from one end (brightest there). The red runs through the acrylic, so the tongue's edges glow with it.
   // The frame and clips lie all but flush, under a card going over. `glow(v)`: 0 at rest, 1 as a card goes over (world.read).
-  const tg = { face: glass.face, edge: glass.tongue }, part = (w, h, d, x, y, z) => { const p = add(glassBox(w, h, d, tg)); p.position.set(x, y, z); return p; };
+  const tg = glass.tongue, part = (w, h, d, x, y, z) => { const p = add(sheetBox(w, h, d, tg, .03), 3); p.position.set(x, y, z); return p; };
   part(4, TT, 2 * SHOE.wid / 2, -2, TT / 2, 0); for (const z of [-1, 1]) part(4, .1, .14, -2, TT + .05, z * (SHOE.wid / 2 - .07));
   const WX = -2, WL = 1.5, WZ = 3.4;   // the window: its middle, its depth along the card's way out, its half-length across
   const bed = add(new THREE.Mesh(new THREE.BoxGeometry(WL, .05, 2 * WZ), glass.bed)); bed.position.set(WX, .14, 0);
-  const piped = glass.edge.emissiveIntensity; bed.onBeforeRender = () => { glass.edge.emissiveIntensity = piped * light(); };   // (the bed is opaque, drawn before any glass)
+  let before = null; bed.onBeforeRender = () => before?.();   // (the bed is opaque, drawn before any glass: the owner's chance to set it)
   for (const x of [WX - WL / 2, WX + WL / 2]) part(.1, .05, 2 * WZ + .2, x, TT + .025, 0);
   for (const z of [-WZ, WZ]) part(WL, .05, .1, WX, TT + .025, z);
   for (const z of [-1, 1]) { part(WL + .7, .07, .16, WX, TT + .035, z * (WZ + .12)); for (const x of [WX - WL / 2 - .2, WX + WL / 2 + .2]) part(.16, .07, .5, x, TT + .035, z * (WZ - .05)); }   // clips: a bar across each end, over the rim
@@ -419,7 +412,26 @@ function buildShoe({ stackTex, glass, light = () => 1 }) {
   // the bloom at the guide's lit end, and a smaller one where it ends
   const bloom = (z, size, k) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture('rgba(255,90,110,1)', 'rgba(255,40,60,0)'), color: '#ff4a60', transparent: true, opacity: k, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); m.position.set(WX + .1, .3, z); m.scale.set(size, size, 1); g.add(m); return m; };
   const blooms = [bloom(WZ - .25, 2.4, .55), bloom(-WZ + .25, 1.3, .3)];
-  const glow = v => { guide.material.color.copy(LED).multiplyScalar(.9 + 1.2 * v); spill.material.opacity = .55 + .45 * v; blooms[0].material.opacity = .55 + .4 * v; blooms[1].material.opacity = .3 + .3 * v; glass.tongue.emissiveIntensity = .22 + .7 * v; glass.bed.emissiveIntensity = .015 + .12 * v; };
+  const glow = v => { guide.material.color.copy(LED).multiplyScalar(.9 + 1.2 * v); spill.material.opacity = .55 + .45 * v; blooms[0].material.opacity = .55 + .4 * v; blooms[1].material.opacity = .3 + .3 * v; glass.tongue.edge.emissiveIntensity = .22 + .7 * v; glass.bed.emissiveIntensity = .015 + .12 * v; reddened.material.opacity = .5 + .5 * v; };
+  // What the glass does to the cloth under it (the pendant is high and to the seat's left, so the light comes down a little
+  // toward the back and the far side): a faint shade where it passes through the sheets, darker in a line beside each side
+  // panel's foot, a bright caustic line where a panel's thickness gathers it, the same round the tongue's rim; and the
+  // reader's red spilling onto the felt round the tongue (stronger as a card goes over).
+  const x0 = foot.x - foot.y / Math.tan(SHOE.slope);
+  g.add(groundDecal(-5, len + 4, -wid / 2 - 4, wid / 2 + 2, (c, px, k) => {
+    c.filter = `blur(${k * .6}px)`; c.fillStyle = 'rgba(0,0,0,.16)'; const [a, b] = px(x0, -wid / 2 - .6), [e, f] = px(len + 1.2, wid / 2 - .4); c.fillRect(a, b, e - a, f - b);
+    c.fillStyle = 'rgba(0,0,0,.3)'; for (const z of [wid / 2 - .5, -wid / 2 - 1.1]) { const [p, q] = px(x0, z), [r] = px(len + 1.5, z); c.fillRect(p, q, r - p, k * .55); }
+    const [t0, t1] = px(-4.2, -wid / 2 - .3), [t2, t3] = px(.2, wid / 2 + .3); c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(t0, t1, t2 - t0, t3 - t1);
+  }, { y: .015 }));
+  g.add(groundDecal(-5, len + 4, -wid / 2 - 4, wid / 2 + 2, (c, px, k) => {
+    c.filter = `blur(${k * .12}px)`; c.fillStyle = 'rgba(255,246,226,.5)';
+    for (const z of [wid / 2 - .15, -wid / 2 - .45]) { const [p, q] = px(x0 + .4, z), [r] = px(len + .6, z); c.fillRect(p, q, r - p, k * .14); }
+    c.strokeStyle = 'rgba(255,246,226,.42)'; c.lineWidth = k * .12; const [t0, t1] = px(-4.15, -wid / 2 - .15), [t2, t3] = px(.1, wid / 2 + .15); c.strokeRect(t0, t1, t2 - t0, t3 - t1);
+  }, { additive: true, opacity: .6, y: .018 }));
+  const reddened = groundDecal(-8, 1.5, -wid / 2 - 3, wid / 2 + 3, (c, px, k) => {
+    const [cx, cz] = px(-2, 0), grad = c.createRadialGradient(cx, cz, 0, cx, cz, k * 6.5); grad.addColorStop(0, 'rgba(255,40,64,.5)'); grad.addColorStop(.45, 'rgba(255,40,64,.18)'); grad.addColorStop(1, 'rgba(255,40,64,0)');
+    c.save(); c.translate(cx, cz); c.scale(.62, 1.15); c.translate(-cx, -cz); c.fillStyle = grad; c.fillRect(0, 0, c.canvas.width, c.canvas.height); c.restore();
+  }, { additive: true, opacity: .5, y: .021 }); g.add(reddened);
   // The weight behind the stack (`roller`): a black block leaning with the cards, on a steel wheel each side with a hex nut
   // at its hub. Placed against the last card (setStack).
   const roller = new THREE.Group(); g.add(roller);
@@ -428,7 +440,7 @@ function buildShoe({ stackTex, glass, light = () => 1 }) {
     { depth: 2 * BW, bevelEnabled: true, bevelThickness: .12, bevelSize: .12, bevelOffset: -.12, bevelSegments: 2 }).translate(0, 0, -BW), glass.black);
   block.castShadow = true; roller.add(block);
   const wheel = new THREE.CylinderGeometry(1.25, 1.25, .45, 32).rotateX(Math.PI / 2), nut = new THREE.CylinderGeometry(.42, .42, .6, 6).rotateX(Math.PI / 2);
-  for (const z of [1, -1]) for (const geo of [wheel, nut]) { const m = new THREE.Mesh(geo, glass.chrome); m.position.copy(on(V(0, 0), 1.75, 1.25)).setZ(z * (BW + .3)); m.castShadow = true; roller.add(m); }
+  for (const z of [1, -1]) for (const geo of [wheel, nut]) { const m = new THREE.Mesh(geo, glass.steel); m.position.copy(on(V(0, 0), 1.75, 1.25)).setZ(z * (BW + .3)); m.castShadow = true; roller.add(m); }
   // The stack: a prism leaning with the slope on the climbing floor, its cards' edges on its sides.
   const stackMats = new THREE.MeshStandardMaterial({ map: stackTex, roughness: .82, side: THREE.DoubleSide });   // one material: an array would need geometry groups
   const stack = new THREE.Mesh(new THREE.BufferGeometry(), stackMats); stack.castShadow = true; g.add(stack);
@@ -472,7 +484,7 @@ function buildShoe({ stackTex, glass, light = () => 1 }) {
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
     return { pos: new THREE.Vector3(-3.4, .44, 0), quat: new THREE.Quaternion().setFromRotationMatrix(m) };   // (over the tongue, clear of the reader's rim)
   };
-  return { group: g, setStack, frontPose, exitPose, roller, stack, cut, glow };
+  return { group: g, setStack, frontPose, exitPose, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
 }
 
 class ArcXZ extends THREE.Curve {

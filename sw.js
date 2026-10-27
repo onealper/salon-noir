@@ -17,7 +17,7 @@ const n = (name, ...takes) => takes.map(t => `${name}-${t}`), to = k => Array.fr
 const CODE = ['./', 'manifest.webmanifest', 'src/app.css', 'src/fonts.css',
   ...['app', 'engine', 'sidebets', 'players', 'sound', 'ui-kit', 'ui-motion'].map(f => `src/${f}.mjs`),
   ...['bet-controls', 'brand', 'chips', 'feel', 'format', 'ledger', 'lobby', 'modes', 'rng', 'wallet'].map(f => `src/core/${f}.mjs`),
-  ...['stage', 'world', 'view', 'pieces', 'textures', 'lightning3d'].map(f => `src/scene/${f}.mjs`),
+  ...['stage', 'world', 'view', 'pieces', 'textures', 'glass', 'lightning3d'].map(f => `src/scene/${f}.mjs`),
   ...['controller', 'book', 'lightning-ui', 'storm', 'tray-icons'].map(f => `src/blackjack/${f}.mjs`),
   ...['rgame', 'rules', 'physics', 'replay', 'rscene', 'wheel3d', 'roller'].map(f => `src/roulette/${f}.mjs`),
   ...['three.module.min.js', 'RoomEnvironment.js', 'anime.mjs', 'confetti.mjs', 'torph.mjs', 'web-haptics.mjs', 'cuelume/index.js', 'cuelume/audio/engine.js',

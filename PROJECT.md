@@ -105,7 +105,10 @@ src/                       All code, styles, fonts, sounds and libraries
     feel.mjs               Haptics, synthesised UI cues, confetti
   scene/
     stage.mjs              What both 3D rooms share: renderer, render loop, frame-time watcher, quality presets,
-                           lost-context handling, leather and brass, the salon as glass reflects it (salonEnvironment)
+                           lost-context handling, leather and brass
+    glass.mjs              Clear acrylic: a reflection probe of the real table, one shader for faces (Fresnel at both
+                           surfaces, Beer-Lambert) and cut edges (the probe refracted, dispersed; piped light), polished
+                           sheets, and what glass does to the cloth (shade, caustics)
     world.mjs              Blackjack 3D table and seated camera; what holds the table up (tableBase: a lacquered apron with
                            lines of warm light, a pedestal, a brass-edged plinth lighting the carpet); the clear acrylic shoe (after real 8-deck shoes: a lidded
                            trough climbing to its back on a frosted floor, the weight on steel wheels behind the cards, a
