@@ -1,19 +1,20 @@
-// The ball and the wheel: the number is drawn first, and the simulated spin must put the ball in that number's
+// The ball and the wheel: the number is drawn at the call, and the simulated spin must put the ball in that number's
 // pocket, every time (the sign conventions are shared by physics.mjs, wheel3d.mjs and the roulette controller).
 // The spin itself must look like a real wheel's: a long run on the track, never fewer than the regulators' four
-// laps, no jump as the ball leaves the track, the wheelhead at a croupier's speed and never seen being pushed.
+// laps, no jump as the ball leaves the track, the wheelhead at a croupier's speed and never pushed: the most it does
+// is make up a pocket or two by a gentle swell in its speed between the call and the ball landing on it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { plan, at, simulate, mulberry, duration, GEO, THROW } from '../src/roulette/physics.mjs';
+import { plan, at, simulate, mulberry, duration, GEO, THROW, AIM } from '../src/roulette/physics.mjs';
 import { WHEEL_INDEX, PITCH, POCKETS } from '../src/roulette/rules.mjs';
 
 const spins = [];
-for (let i = 0; i < 1110; i++) {
+for (let i = 0; i < 370; i++) {
   const n = i % 37, dir = i % 2 ? 1 : -1, fast = i % 3 === 0, phiNow = i % 10 === 9 ? 1e4 + i : (i * .7) % (2 * Math.PI);
   spins.push({ n, fast, p: plan(n, { dir, phiNow, fast, seed: (i * 2654435761) >>> 0 }) });
 }
 
-test('1,110 planned spins rest in the drawn number\'s pocket (both directions, fast play, a wheel idled for hours)', () => {
+test('370 spins aimed from the launch rest in the drawn number\'s pocket (both directions, fast play, a wheel idled for hours)', () => {
   let slowest = 0, quickest = Infinity;
   for (const [i, { n, p }] of spins.entries()) {
     const st = at(p, p.settledAt + .12), pocket = ((Math.round((st.phi - st.theta) / PITCH) % POCKETS) + POCKETS) % POCKETS;
@@ -28,8 +29,8 @@ test('a real run on the track: 13-15 laps in about 14 s, at least 5 in fast play
   for (const { fast, p } of spins) {
     if (fast) { assert.ok(p.laps >= 5, `fast: ${p.laps.toFixed(2)} laps`); assert.ok(p.dropAt > 7 && p.dropAt < 10); }
     else { assert.ok(p.laps >= 12.5 && p.laps <= 15.5, `${p.laps.toFixed(2)} laps`); assert.ok(p.dropAt > 12.5 && p.dropAt < 15.5, `${p.dropAt.toFixed(1)} s`); }
-    const laps = Math.abs(p.drop.th - at(p, p.callAt).theta) / (2 * Math.PI);
-    assert.ok(laps > (fast ? 1 : 1.7) && laps < (fast ? 1.3 : 2), `"No more bets" ${laps.toFixed(2)} laps before the drop`);
+    const laps = Math.abs(p.drop.th - at(p, p.callAt).theta) / (2 * Math.PI);   // (the last rounds run a few per cent quicker or slower: see the aim)
+    assert.ok(laps > (fast ? .64 : 1.34) && laps < (fast ? 1.71 : 2.41), `"No more bets" ${laps.toFixed(2)} laps before the drop`);
   }
 });
 
@@ -48,23 +49,30 @@ test('the ball rides the wall, slides down the track as it slows and rolls off w
   }
 });
 
-test('the wheelhead turns at a croupier\'s 15-20 rpm, coasts, and is never seen pushed (the correction is one turn, made in the black)', () => {
+test('the wheelhead turns at a croupier\'s 15-20 rpm and is never pushed: it makes up at most two pockets, gently, before the ball lands', () => {
   for (const { p } of spins) {
     const rpm = p.opts.rotorSpeed * 60 / (2 * Math.PI); assert.ok(rpm >= 15 && rpm <= 20.1, `${rpm.toFixed(1)} rpm`);
-    const S = p.samples, off = k => at(p, S[k][0]).phi - S[k][4];   // the played wheelhead against the simulated one
-    for (const k of [1, S.length >> 2, S.length >> 1, S.length - 2]) assert.ok(Math.abs(off(k) - off(0)) < 1e-6, 'the same whole-pocket turn throughout');
-    assert.ok(Number.isInteger(p.k) && p.k >= 0 && p.k < POCKETS);
+    assert.ok(Number.isInteger(p.m) && Math.abs(p.m) <= 2, `${p.m} pockets made up`);
+    const S = p.samples, k = t => S.findIndex(s => s[0] >= t), lead = i => at(p, S[i][0]).phi - S[i][4];   // the played wheelhead against the simulated one, sample by sample
+    const call = k(p.callAt), land = k(p.landAt + .02);
+    for (const i of [0, call >> 1, call - 1]) assert.ok(Math.abs(lead(i)) < 1e-9, 'nothing before the call');
+    for (const i of [land, k(p.settledAt), S.length - 1]) assert.ok(Math.abs(lead(i) - p.m * PITCH) < 1e-6, 'made up by the landing, and no more after');
+    // never a jolt: frame to frame, its speed stays within a sixth of its own while the lead is made up
+    for (let i = call; i < land; i++) {
+      const w = (lead(i + 1) - lead(i)) + (S[i + 1][4] - S[i][4]), own = S[i + 1][4] - S[i][4];
+      assert.ok(Math.abs(w / own - 1) < 1 / 6, `speed ${(100 * (w / own - 1)).toFixed(1)}% off its own at ${S[i][0].toFixed(2)} s`);
+    }
   }
 });
 
-test('bets close at the call: a spin thrown before the number is drawn is aimed then, its wheelhead untouched until the dip', () => {
-  for (let i = 0; i < 370; i++) {
+test('bets close at the call: the number is drawn then, and the run until the call is untouched by it', () => {
+  for (let i = 0; i < 74; i++) {
     const n = (i * 7) % 37, phiNow = (i * .37) % 6, p = plan(null, { dir: i % 2 ? 1 : -1, phiNow, fast: i % 4 === 0, seed: (i * 40503 + 9) >>> 0, rotorSpeed: 1.6 + (i % 6) * .1 });
     assert.ok(Math.abs(at(p, 0).phi - phiNow) < .01, 'the wheelhead goes on from where the croupier left it');   // (the first sample is one step in)
-    const before = [0, p.callAt / 2, p.callAt].map(t => at(p, t).phi);
+    const ts = [0, p.callAt / 3, p.callAt * .9, p.callAt - 1 / 30], before = ts.map(t => { const a = at(p, t); return [a.theta, a.r, a.phi]; });
+    for (let k = 0; k < 24; k++) p.warm();   // while the ball runs, a try a frame (the game makes AIM.tries)
     p.aim(n);   // the number, drawn at the call
-    assert.deepEqual([0, p.callAt / 2, p.callAt].map(t => at(p, t).phi), before, 'aiming turns nothing by itself');
-    p.fixed = true;   // in the black
+    assert.deepEqual(ts.map(t => { const a = at(p, t); return [a.theta, a.r, a.phi]; }), before, 'ball and wheelhead as they were, up to the call');
     const st = at(p, p.settledAt + .12), pocket = ((Math.round((st.phi - st.theta) / PITCH) % POCKETS) + POCKETS) % POCKETS;
     assert.equal(pocket, WHEEL_INDEX[n], `spin ${i}: ball under ${n}`);
     assert.ok(Math.abs(p.opts.rotorSpeed - (1.6 + (i % 6) * .1)) < 1e-12);

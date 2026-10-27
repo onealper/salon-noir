@@ -40,6 +40,7 @@ export async function createRoulette(ctx) {
   // ---- the stage and the dock ----------------------------------------------------------------------------------------
   const stage = document.createElement('section'); stage.className = 'stage rstage'; stage.id = 'rstage'; stage.setAttribute('aria-label', 'Roulette table');
   stage.innerHTML = `<canvas class="rcanvas" aria-hidden="true"></canvas>
+    <div class="r-vignette" aria-hidden="true"></div>
     <div class="r-overlay">
       <ol class="r-history" aria-label="Recent numbers"></ol>
       <div class="r-loupe" hidden><b></b><span></span></div>
@@ -326,9 +327,10 @@ export async function createRoulette(ctx) {
   function clearRivals() { for (const r of RIVALS) { r.bets = []; for (const k of [...stacks.keys()]) if (k.startsWith(r.name + '|')) dropStack(k); } rivalJobs = []; for (const id of cols.keys()) settleCol(id); }   // (your chips that stood on theirs come down)
 
   // ---- the wheel at rest: the wheelhead keeps turning slowly, the last ball riding in its pocket -------------------------
-  // The drift is drawn at 30 frames a second (the ticker asks for its own frames), the shadows of the frets, turret
-  // and ball refreshed at 15. On the battery saver the wheelhead coasts to a stop and then nothing is drawn; with
-  // reduced motion it stands at once. Either way the ball rests in its pocket.
+  // The drift is drawn every frame the screen shows (a wheel turning at 30 frames a second judders on a 60 or 120 Hz
+  // screen); it moves nothing that casts a shadow, so no shadow is drawn again for it. On the battery saver the
+  // wheelhead coasts to a stop and then nothing is drawn; with reduced motion it stands at once. Either way the ball
+  // rests in its pocket.
   let idleOn = false, idleWant = false;
   const DRIFT = .63;   // rad/s: the wheelhead's slowest drift between spins
   const settle = { a: 0, r: 0, y: 0 };   // how far the ball still sits off the middle of its pocket after a spin: eased away
@@ -346,13 +348,10 @@ export async function createRoulette(ctx) {
     else if (Math.abs(rotorW) > DRIFT) rotorW -= rotorW * TUNE.rotorDecay * dt;
     else rotorW += (Math.sign(rotorW || 1) * DRIFT - rotorW) * .06 * dt;
     phi += rotorW * dt; S.wheel.setRotor(phi); restBall(dt);
-    if (stand && Math.abs(rotorW) < .004 && Math.abs(settle.r) < .004) { rotorW = 0; idleOn = false; S.tickers.delete(idle); S.requestRender(); return; }   // at rest: the last frame
-    if (now - (idle.drawn ?? -1e9) < 31) return;
-    const shade = now - (idle.shaded ?? -1e9) >= 64; idle.drawn = now; if (shade) idle.shaded = now;
+    if (stand && Math.abs(rotorW) < .004 && Math.abs(settle.r) < .004) { rotorW = 0; idleOn = false; S.tickers.delete(idle); S.requestRender(false); return; }   // at rest: the last frame
     if (bubble.dataset.on) placeBubble();
-    S.requestRender(shade);
   };
-  idle.lazy = idle.still = true;
+  idle.still = true;
   function setIdle(on) {
     idleWant = on; const run = on && !reduced() && (S.quality.name !== 'saver' || Math.abs(rotorW) >= .004);   // a saver wheel already at rest stays at rest
     if (run !== idleOn) { idleOn = run; idle.last = null; if (run) S.tickers.add(idle); else S.tickers.delete(idle); }
@@ -455,7 +454,7 @@ export async function createRoulette(ctx) {
     if ((want === 'all' || (want === 'mine' && yourStraight)) && !reduced() && !skipLevel) await replay(p, n, { chase: yourStraight });
     hideBubble(); audio.forget(numberClip(n));
     mode = 'paying'; refresh();
-    await cutTo('seat', () => S.mood(false, 0));
+    S.mood(false, 1300); await cameraTo('seat', 1300);
     await payout(r, n);
     mode = 'betting'; document.body.dataset.rmode = 'bet'; rivalJobs = []; refresh();
     say('place-bets', { prio: 2, fresh: 3000 }); othersWake();
@@ -486,16 +485,18 @@ export async function createRoulette(ctx) {
     audio.cue(`wheelhead-${k}`, { gain: .45, x: panX(S.wheel.group.position), delay: Math.max(0, t1 - lead), from: Math.max(0, lead - t1) });
   }
   // play the spin, frame by frame: the croupier's hand on the wheelhead, then the simulated throw (the wheelhead, the ball
-  // and its sound). `onCall`: "No more bets" (the bets close); the picture dips to the wheel then, and in the black the
-  // wheelhead is turned on by the whole pockets that bring the drawn number under the ball (physics.mjs, plan)
+  // and its sound). Until the call each frame also tries one more way the spin can end (physics.mjs, warm), so the aim
+  // at the call is ready at once. `onCall`: "No more bets" (the bets close and the number is drawn: the spin takes the
+  // ending that brings it under the ball); the camera glides down to the wheel then, and to the pocket at the drop.
   function playSpin(p, f, pre, onCall) {
     return new Promise(done => {
-      let roll = { update() {}, stop() {} }; const dur = p.settledAt + .12, evs = p.events, phi0 = phi;
+      let roll = { update() {}, stop() {} }; const phi0 = phi;   // (p.settledAt and p.events are read as they stand: the aim replaces them)
       let t = -pre.T, last = performance.now(), ev = 0, launched = false, warned = false, called = false, pushed = false;
       const pace = f ? 1.25 : 1;   // fast play: the softer throw, run a little quicker
-      const fix = () => { p.fixed = true; };
       const tick = now => {
+        const dur = p.settledAt + .12, evs = p.events;
         const dt = Math.min(turbo ? .5 : .05, (now - last) / 1000) * hurry * pace; last = now; t = Math.min(dur, t + dt);
+        if (!called) p.warm();
         if (t < 0) {   // his hand on the wheelhead: the ball rides in its pocket until he stops it, then he takes it out
           phi = phi0 + pre.at(t + pre.T); S.wheel.setRotor(phi);
           if (t + pre.T < pre.T1) restBall(); else if (restIdx != null) { restIdx = null; S.wheel.ball.visible = false; }
@@ -523,12 +524,12 @@ export async function createRoulette(ctx) {
         if (!warned && t >= p.callAt - (f ? 2.6 : 3.5)) { warned = true; say('last-bets', { prio: 1, fresh: 400 }); }   // "Last bets, please": a few seconds' warning
         if (!called && t >= p.callAt) {   // as it is about to make its last two rounds
           called = true; hush(true); S.mood(true); say('no-more-bets', { prio: 2 }); onCall();   // the room and the music stay down until the number is called: the rattle is heard
-          cutTo(hurry === 1 ? 'wheel' : 'push', fix).then(fix);   // (a shot that isn't there makes no dip: the turn is made all the same)
+          cameraTo(hurry === 1 ? 'wheel' : 'push', hurry === 1 ? 1500 : 700);
         }
-        if (!pushed && p.dropAt && t >= p.dropAt) { pushed = true; wheelOnly(true); if (hurry === 1 && S.current !== S.shots.push) cutTo('push'); }
+        if (!pushed && p.dropAt && t >= p.dropAt) { pushed = true; wheelOnly(true); if (hurry === 1 && S.current !== S.shots.push) cameraTo('push', 1100); }
         if (t >= dur) { S.tickers.delete(tick); S.wheel.setTrail(0, 0, 0, 0); roll.stop(.2); done(); }
       };
-      spinTick = tick; S.tickers.add(tick); S.requestRender();
+      tick.still = true; spinTick = tick; S.tickers.add(tick); S.requestRender();   // (the wheelhead and the ball cast no shadow: see wheel3d.mjs)
     });
   }
   // The last moments again, slowly: from a camera placed for the screen beside the pocket (replay.mjs), or, `chase`, from
@@ -557,15 +558,12 @@ export async function createRoulette(ctx) {
         while (ev < p.events.length && p.events[ev].t <= t) { const e = p.events[ev++], pw = e.power ?? .5; if (skipLevel < 2 && e.type !== 'launch' && e.type !== 'drop') click(.15 + .45 * pw, .6); }
         if (t >= t1) { S.tickers.delete(tick); done(); }
       };
-      S.tickers.add(tick); S.requestRender();
+      tick.still = true; S.tickers.add(tick); S.requestRender();
     });
     // back to now: the wheelhead where it would be by now
     phi = at(p, p.settledAt + 2.9).phi; tag.hidden = true;
     await fadeCut(() => { S.setPose(S.shots.push); setIdle(true); wheelOnly(false); S.wheel.glow.set(S.wheel.glow.base); }); showBubble(n); await sleep(700);   // in the black: no jump of the wheelhead seen
   }
-  // a cut: a dip to black of a few frames, the way a vision mixer cuts between cameras
-  // `onCut` runs while the picture is black
-  async function cutTo(name, onCut) { const to = S.shots[name]; if (!to) return; fadeEl.classList.add('quick', 'on'); await sleep(reduced() ? 120 : 90); S.setPose(to); onCut?.(); await sleep(30); fadeEl.classList.remove('on'); await sleep(110); fadeEl.classList.remove('quick'); }
   async function fadeCut(fn) { fadeEl.classList.add('on'); await sleep(reduced() ? 120 : 220); fn(); await sleep(40); fadeEl.classList.remove('on'); await sleep(200); }
   function cameraTo(name, ms, easing) {
     const to = S.shots[name]; if (!to) return Promise.resolve();

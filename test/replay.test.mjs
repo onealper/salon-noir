@@ -16,13 +16,14 @@ function camera(aspect) {
   return { cam, aim, fit };
 }
 
+const spins = Array.from({ length: 120 }, (_, i) => plan(i % 37, { dir: i % 2 ? 1 : -1, phiNow: (i * 1.3) % (2 * Math.PI), fast: i % 5 === 0, seed: (i * 2654435761 + 17) >>> 0 }));
 // desktop 1280x650 under the bar, phone landscape 557x296, phone upright 390x568 (aspect 0.69) and a taller one
 for (const [name, aspect, want] of [['desktop', 1280 / 650, .99], ['phone landscape', 557 / 296, .99], ['phone upright', .69, .95], ['tall phone upright', .62, .95]]) {
   test(`the replay keeps the ball in the picture: ${name}`, () => {
     const { cam, aim, fit } = camera(aspect);
     let frames = 0, seen = 0, ends = 0; const N = 120;
     for (let i = 0; i < N; i++) {
-      const p = plan(i % 37, { dir: i % 2 ? 1 : -1, phiNow: (i * 1.3) % (2 * Math.PI), fast: i % 5 === 0, seed: (i * 2654435761 + 17) >>> 0 });
+      const p = spins[i];
       const s = replayShot(p, fit);
       assert.ok(s.fov >= 30 && s.fov <= 62, `spin ${i}: lens ${s.fov}`); assert.ok(s.t1 > s.t0 && s.t1 - s.t0 <= 1.6 + 1e-9);
       aim(s.pos, s.look); cam.fov = s.fov; cam.updateProjectionMatrix();

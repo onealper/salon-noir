@@ -68,10 +68,10 @@ When a multiplier you carried pays, a gold bolt drives into your stack, the pict
 <tr>
 <td valign="middle">
 <h3>A wheel that plays fair</h3>
-The ball is simulated, not animated (after Small and Tse's study of the roulette wheel), and the croupier spins with bets still open, just as at a real table.<br><br>
+A live-studio wheel in piano-black lacquer, chrome frets and a French-cross turret. The ball is simulated, not animated (after Small and Tse's study of the roulette wheel), and the croupier spins with bets still open, just as at a real table; at "No more bets" the camera glides down to the wheel.<br><br>
 From the call, the numbers you cover light up on the wheel. The croupier rakes in the losing chips, cuts the winnings in stacks of twenty and pushes each player's chips home; a straight-up win gets a low camera over the cloth and a slow-motion replay behind the ball.
 </td>
-<td width="44%"><img src="docs/screenshots/roulette-win.jpg" alt="The roulette wheel at the call, on a phone"></td>
+<td width="44%"><img src="docs/screenshots/roulette-win.jpg" alt="The wheel from above mid-spin: the chrome French-cross turret, your numbers framed on the ring"></td>
 </tr>
 </table>
 

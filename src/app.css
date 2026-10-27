@@ -752,9 +752,10 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .rdock, .r-overlay, .r-hint { transition: opacity .5s var(--ease); }
 .rcanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
+/* the room falls away into the dark round the table, as under its pendants */
+.r-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 95% at 50% 58%, transparent 52%, rgba(5, 4, 3, .38) 82%, rgba(5, 4, 3, .62) 100%); }
 .r-fade { position: absolute; inset: 0; background: #050505; opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 2; }
 .r-fade.on { opacity: 1; }
-.r-fade.quick { transition-duration: .09s; }
 .r-hint, body[data-table] .r-hint { top: auto; bottom: 12px; }   /* beat the blackjack tables' hint placement, which may still be on the body */
 /* An upright phone: the layout runs down to the foot of the picture (the column bets are its last row), so the line
    hangs over the wheel instead, under the recent numbers, and is hidden while a result is up (a result keeps its place

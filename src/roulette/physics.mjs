@@ -9,10 +9,11 @@
 //   rotor  it lands on the spinning wheelhead, skips over the frets, rebounds, and settles in a pocket.
 // The whole spin is computed ahead in fixed steps, then played back. The track stage holds no chance at all
 // (it follows from the croupier's throw); the small randomness of the canoes and frets starts at the drop.
-// The result is drawn first: from the ball's drop, several descents are tried and the one landing nearest
-// the drawn number is kept, the remaining whole pockets made up by turning the wheelhead, given while the
-// picture is black at the launch. The frets repeat every pocket, so this changes nothing about how the ball
-// moves.
+// The number is drawn at the croupier's call, while the ball still runs: from the ball's drop, descents are tried
+// until one comes to rest within a pocket or two of the drawn number, and the wheelhead makes up that pocket or two
+// by running a touch quicker or slower between the call and the ball reaching it (a smooth swell in its speed, a
+// few per cent, gone before the ball lands). The frets repeat every pocket, so the ball's own path is unchanged:
+// nothing is ever pushed, and nothing is hidden.
 import { PITCH, POCKETS, WHEEL_INDEX } from './rules.mjs';
 import { mulberry } from '../core/rng.mjs';
 
@@ -83,12 +84,15 @@ export const TUNE = {
 };
 const sample = (st, phase, speed) => [st.t, st.th, st.r, st.y, st.phi, phase, speed];
 
-// The track stage: deterministic from the throw. Returns the samples and the state at the drop.
-function runTrack({ dir, theta0, phi0, rotorSpeed, v0 }) {
-  const st = { t: 0, th: theta0, v: v0, phi: phi0, wr: -dir * Math.abs(rotorSpeed), r: 0, y: 0, u: 1 };
-  [st.r, st.y, st.u] = onTrack(v0);
-  const samples = [], { trackA: A, trackK: K, tilt, tiltAt } = TUNE; let next = 0;
+// The track stage: deterministic from the throw. Returns the samples and the state at the drop. `stopAt`: stop at
+// that time and return the state there instead (`state`), for `from` to run on from it; `drag`: the track's slowing
+// scaled by this much (a few per cent either way, after the call: see plan).
+function runTrack({ dir, theta0, phi0, rotorSpeed, v0 }, { from = null, drag = 1, stopAt = Infinity } = {}) {
+  const st = from ? { ...from.st } : { t: 0, th: theta0, v: v0, phi: phi0, wr: -dir * Math.abs(rotorSpeed), r: 0, y: 0, u: 1 };
+  if (!from) [st.r, st.y, st.u] = onTrack(v0);
+  const samples = [], { tilt, tiltAt } = TUNE, A = TUNE.trackA * drag, K = TUNE.trackK * drag; let next = from ? from.next : 0;
   for (let i = 0; i < 120 / DT; i++) {
+    if (st.t >= stopAt) return { samples, state: { st: { ...st }, next } };
     st.wr -= st.wr * TUNE.rotorDecay * DT; st.phi += st.wr * DT;
     st.v -= (A + K * st.v * st.v) * DT;
     const [r, y, u] = onTrack(st.v); st.r += (r - st.r) * Math.min(1, 10 * DT); st.y += (y - st.y) * Math.min(1, 10 * DT); st.u = u;
@@ -102,13 +106,14 @@ function runTrack({ dir, theta0, phi0, rotorSpeed, v0 }) {
 }
 
 // The descent: from the drop down the stator, onto the wheelhead and into a pocket. `rnd` holds all its chance.
-function runDescent(drop, dir, rnd, next) {
+// `quick`: only where it comes to rest (no samples, and it stops there), for trying descents.
+function runDescent(drop, dir, rnd, next, quick = false) {
   let t = drop.t, th = drop.th, r = drop.r, y = drop.y, phi = drop.phi, wr = drop.wr;
   let phase = 'cone', L = r * drop.v, vr = -(6 + rnd() * 10), h = 0, vh = 0, psi = 0, psiRate = 0, bounced = 0;
   const hit = new Set(), samples = [], events = [{ t, type: 'drop' }];
-  let settledAt = null, pocket = null, fretCount = 0, crossed = 0, lastFret = null, defl = 0;
+  let settledAt = null, pocket = null, fretCount = 0, crossed = 0, lastFret = null, defl = 0, landAt = null;
   const half = GEO.deflLen / 2, w2 = GEO.deflW / 2, b = GEO.ball;
-  for (let i = 0; i < 40 / DT; i++) {
+  for (let i = 0; i < (quick ? 9 : 40) / DT; i++) {   // (a try that hasn't come to rest in 9 s is given up)
     wr -= wr * TUNE.rotorDecay * DT; phi += wr * DT;
     if (phase === 'cone') {
       const w = L / (r * r);
@@ -126,7 +131,7 @@ function runDescent(drop, dir, rnd, next) {
         L *= keep; vh = (radial ? 34 : 16) + rnd() * 26; vr += (rnd() - .55) * (radial ? 30 : 16);
         events.push({ t, type: 'deflector', power: Math.min(1, s / 160) * (radial ? 1 : .6), radial });
       }
-      if (r <= GEO.rotorR) { phase = 'rotor'; psi = th - phi; psiRate = dir * (L / (r * r)) - wr; events.push({ t, type: 'land', power: Math.min(1, Math.abs(psiRate) * r / 150) }); vh = Math.max(vh, 14 + rnd() * 16); }
+      if (r <= GEO.rotorR) { phase = 'rotor'; landAt = t; psi = th - phi; psiRate = dir * (L / (r * r)) - wr; events.push({ t, type: 'land', power: Math.min(1, Math.abs(psiRate) * r / 150) }); vh = Math.max(vh, 14 + rnd() * 16); }
     } else if (phase === 'rotor') {
       // in the wheelhead's frame: the ball's angle relative to it (psi), sliding in over the number ring
       const target = GEO.pocketMid + (rnd() - .5) * .8;
@@ -151,6 +156,7 @@ function runDescent(drop, dir, rnd, next) {
       // it comes to rest when it is barely moving in its pocket
       if (h === 0 && Math.abs(psiRate) * r < TUNE.restBelow && r < GEO.pocketR0 && Math.abs(vr) < 4 && t - (lastFret ?? 0) > .12) {
         pocket = ((Math.round(-psi / PITCH) % POCKETS) + POCKETS) % POCKETS; phase = 'rest'; settledAt = t; events.push({ t, type: 'settle' });
+        if (quick) break;
       }
     } else {
       // resting: the ball eases to the middle of its pocket, out against the outer wall, and rides round with the wheelhead
@@ -158,10 +164,10 @@ function runDescent(drop, dir, rnd, next) {
       psi += (goal - psi) * Math.min(1, 6 * DT); th = phi + psi; r += (GEO.restR - r) * Math.min(1, 6 * DT); y = floorY(r);
       if (t - settledAt > 3) break;
     }
-    if (t >= next) { samples.push([t, th, r, y, phi, phase === 'cone' ? 1 : phase === 'rotor' ? 2 : 3, phase === 'cone' ? L / r : Math.abs(psiRate) * r]); next += SAMPLE; }
+    if (!quick && t >= next) { samples.push([t, th, r, y, phi, phase === 'cone' ? 1 : phase === 'rotor' ? 2 : 3, phase === 'cone' ? L / r : Math.abs(psiRate) * r]); next += SAMPLE; }
     t += DT;
   }
-  return { samples, events, pocket, settledAt, frets: fretCount, crossed, deflectors: defl };
+  return { samples, events, pocket, settledAt, landAt, frets: fretCount, crossed, deflectors: defl };
 }
 
 // One spin from its parameters. Returns the samples (60 a second) and the events for the sound.
@@ -174,37 +180,68 @@ export function simulate({ dir = 1, theta0 = 0, phi0 = 0, rotorSpeed = 1.8, v0 =
 }
 function join(tr, de, dir, rotorSpeed) {
   const laps = Math.abs(tr.drop.th - tr.samples[0][1]) / (Math.PI * 2);
-  return { samples: tr.samples.concat(de.samples), events: [{ t: 0, type: 'launch' }, ...de.events], pocket: de.pocket, settledAt: de.settledAt, dir, rotorSpeed, crossed: de.crossed, frets: de.frets, deflectors: de.deflectors, dropAt: tr.drop.t, laps, drop: tr.drop };
+  return { samples: tr.samples.concat(de.samples), events: [{ t: 0, type: 'launch' }, ...de.events], pocket: de.pocket, settledAt: de.settledAt, landAt: de.landAt, dir, rotorSpeed, crossed: de.crossed, frets: de.frets, deflectors: de.deflectors, dropAt: tr.drop.t, laps, drop: tr.drop };
 }
 // The croupier's throw: a strong one in normal play (about 1.7-1.9 revolutions a second, 13-15 laps), a softer
 // one in fast play (5-6 laps, still past every regulator's four).
 export const THROW = { normal: [1.7, 1.9], fast: [1.0, 1.1] };
 const throwV = (fast, x) => { const [a, b] = THROW[fast ? 'fast' : 'normal']; return (a + (b - a) * x) * 2 * Math.PI * (GEO.wallR - GEO.ball); };
 
-// A spin. The throw is made once, and its descent from the drop (the first of `tries` that comes to rest in a pocket);
-// the number is drawn apart from it. At a real wheel the bets close while the ball still runs, at the croupier's call,
-// so the number is aimed at then: `aim(n)` finds the whole pockets the wheelhead must be turned on by to bring that
-// number under the ball, and the controller makes the turn while the picture is black (`fixed`), so no push is ever
-// seen. With `result` the spin is aimed from the launch. `phiNow`: the wheelhead's angle when the ball is launched;
-// `theta0`: where the croupier releases it; `rotorSpeed`: the wheelhead's speed then (rad/s), when the controller has
-// already spun it up.
-export function plan(result = null, { dir = 1, phiNow = 0, fast = false, seed = (Math.random() * 2 ** 32) >>> 0, tries = 48, theta0 = null, rotorSpeed = null } = {}) {
+// A spin. The throw is made once; the number is drawn apart from it. At a real wheel the bets close while the ball
+// still runs, at the croupier's call, so the number is aimed at then. Everything up to the call is fixed by the throw;
+// what follows is tried several ways ahead: the last rounds on the track with its slowing a few per cent either way
+// (`DRAGS`: the ball drops a little sooner or later, a pocket or two round), and from each drop, descents with their
+// own small chances. `aim(n)` takes one that comes to rest in n's pocket, or failing that within a pocket of it (`m`
+// pockets off), and the wheelhead makes up that pocket between the call and the ball landing on it by a smooth swell
+// in its speed that starts and ends at the speed it had (`rotorAt`). Until the call the spin plays its first resting
+// descent. `warm()` tries one more: the controller calls it a frame at a time while the ball runs, so the aim at the
+// call is ready at once. With `result` the spin is aimed from the launch. `phiNow`: the wheelhead's angle when the
+// ball is launched; `theta0`: where the croupier releases it; `rotorSpeed`: its speed then (rad/s), when the
+// controller has already spun it up.
+export const DRAGS = [0, -.015, .015, -.03, .03, -.045, .045];
+export const AIM = { tries: 96, most: 192 };   // tried ahead while the ball runs; at most this many to find one within a pocket
+export function plan(result = null, { dir = 1, phiNow = 0, fast = false, seed = (Math.random() * 2 ** 32) >>> 0, theta0 = null, rotorSpeed = null } = {}) {
   const rnd = mulberry(seed);
   const opts = { dir, theta0: theta0 ?? rnd() * Math.PI * 2, phi0: phiNow, rotorSpeed: rotorSpeed ?? 1.6 + rnd() * .5, v0: throwV(fast, rnd()) };
-  const tr = runTrack(opts), rot = Math.sign(-dir);   // the wheelhead turns opposite to the ball
-  let de = null;
-  for (let i = 0; i < tries && !de; i++) { const d = runDescent(tr.drop, dir, mulberry((rnd() * 2 ** 32) >>> 0), tr.next); if (d.pocket != null) de = d; }
-  const spin = join(tr, de, dir, opts.rotorSpeed);
-  spin.opts = opts; spin.k = 0; spin.extra = 0; spin.result = null; spin.fixed = false;
-  // pockets run clockwise (pocket i sits i pitches clockwise of zero), so turning the wheelhead by (i_result - i_landed)
-  // pitches puts the drawn number under the ball; k counts them in the direction it already turns
-  spin.aim = n => { const need = ((WHEEL_INDEX[n] - de.pocket) % POCKETS + POCKETS) % POCKETS; spin.k = rot > 0 ? need : (POCKETS - need) % POCKETS; spin.extra = spin.k * PITCH; spin.result = n; return spin; };
-  spin.rotorAt = () => spin.fixed ? rot * spin.extra : 0;
   // "No more bets": as the ball is about to make its last two rounds (one in fast play), as the Monte-Carlo rules have it
-  const lapsBefore = fast ? 1.1 : 1.8, end = tr.drop.th; let callAt = 0;
-  for (const s of tr.samples) if (Math.abs(end - s[1]) >= lapsBefore * Math.PI * 2) callAt = s[0];
-  spin.callAt = callAt;
-  if (result != null) { spin.aim(result); spin.fixed = true; }
+  const whole = runTrack(opts), lapsBefore = fast ? 1.1 : 1.8, end = whole.drop.th; let callAt = 0;
+  let callTh = 0; for (const s of whole.samples) if (Math.abs(end - s[1]) >= lapsBefore * Math.PI * 2) [callAt, callTh] = s;
+  let head = null; const tails = new Map([[0, whole]]);   // the track to the call, run again only when a varied drag is first tried
+  const track = drag => {
+    if (!tails.has(drag)) { head ??= runTrack(opts, { stopAt: callAt }); const t = runTrack(opts, { from: head.state, drag: 1 + drag }); tails.set(drag, { samples: head.samples.concat(t.samples), drop: t.drop, next: t.next }); }
+    return tails.get(drag);
+  };
+  const tried = [];   // ways it can go after the call that came to rest: { drag, seed, pocket }
+  const warm = () => {
+    if (tried.length >= AIM.most) return;
+    const drag = DRAGS[tried.length % DRAGS.length], tr = track(drag), s = (rnd() * 2 ** 32) >>> 0, d = runDescent(tr.drop, dir, mulberry(s), tr.next, true);
+    tried.push({ drag, seed: s, pocket: d.pocket, laps: Math.abs(tr.drop.th - callTh) / (2 * Math.PI) });   // (one that never came to rest counts as tried)
+  };
+  const resting = () => tried.filter(d => d.pocket != null);
+  while (!resting().length) warm();
+  const build = d => { const tr = track(d.drag); return join(tr, runDescent(tr.drop, dir, mulberry(d.seed), tr.next), dir, opts.rotorSpeed); };
+  const spin = Object.assign(build(resting()[0]), { opts, m: 0, result: null, warm, callAt, from: callAt });
+  // pockets run clockwise (pocket i sits i pitches clockwise of zero), so turning the wheelhead on by m pitches more
+  // than it would have turned puts pocket (landed + m) under the ball; m is the nearer way round
+  const off = (n, pocket) => { const need = ((WHEEL_INDEX[n] - pocket) % POCKETS + POCKETS) % POCKETS; return need > POCKETS / 2 ? need - POCKETS : need; };
+  spin.aim = n => {
+    // the nearest; of equals, the one whose last rounds after the call run closest to the throw's own (and never one
+    // that leaves the call too close to the drop, or too far from it)
+    const cost = d => Math.abs(off(n, d.pocket)) * 10 + Math.abs(d.laps - lapsBefore) + (d.laps < lapsBefore - .45 || d.laps > lapsBefore + .6 ? 100 : 0);
+    const best = () => resting().reduce((a, d) => cost(d) < cost(a) ? d : a);
+    while (cost(best()) >= 20 && tried.length < AIM.most) warm();   // (warmed ahead, the best is mostly exact)
+    const d = best(), sp = build(d);
+    Object.assign(spin, sp, { m: off(n, sp.pocket), result: n, drag: d.drag });
+    return spin;
+  };
+  // the wheelhead's lead over its own coasting: none until the call, then m pitches gained by the landing along
+  // x - sin(2πx)/2π (its speed swells and settles back, with no jolt either end)
+  spin.rotorAt = t => {
+    if (!spin.m || t <= spin.from) return 0;
+    const x = Math.min(1, (t - spin.from) / Math.max(.5, spin.landAt - spin.from));
+    return spin.m * PITCH * (x - Math.sin(2 * Math.PI * x) / (2 * Math.PI));
+  };
+  if (result != null) spin.aim(result);
   return spin;
 }
 // Where things are at time t (seconds since launch), interpolated from the samples.
@@ -212,7 +249,7 @@ export function at(spin, t) {
   const S = spin.samples, i = Math.min(S.length - 2, Math.max(0, Math.floor(t * 60))), a = S[i], b = S[i + 1], f = Math.min(1, Math.max(0, (t - a[0]) / (b[0] - a[0] || 1)));
   const lerp = (x, y) => x + (y - x) * f;
   const phi = lerp(a[4], b[4]) + spin.rotorAt(t);
-  // the ball keeps its own path: the correction is whole pockets, so the frets it meets are where they were
+  // the ball keeps its own path: the wheelhead's lead is whole pockets by the time the ball lands, so the frets it meets are where they were
   return { theta: lerp(a[1], b[1]), r: lerp(a[2], b[2]), y: lerp(a[3], b[3]), phi, phase: a[5], speed: lerp(a[6], b[6]) };
 }
 export const duration = spin => spin.samples.at(-1)[0];

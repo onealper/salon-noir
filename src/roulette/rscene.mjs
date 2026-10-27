@@ -34,17 +34,19 @@ export function preloadRouletteArt() {
 export function createRouletteScene(canvas, { quality = detectQuality() } = {}) {
   // the renderer, its loop and frame watcher, the scene and the camera (scene/stage.mjs: the same as the blackjack table's);
   // a lost and restored context makes the wheel's studio light again too (the rest re-uploads by itself)
-  const st = createStage(canvas, { quality, background: '#0b0a09', environment: .5, fov: 40, far: 1400, lights: () => [keyW, keyL],
+  const st = createStage(canvas, { quality, background: '#0b0a09', environment: .38, fov: 40, far: 1400, lights: () => [keyL],
     restored: () => { const old = studioEnv; studioEnv = studio(); wheel.group.traverse(o => { if (o.material?.envMap === old) o.material.envMap = studioEnv; }); } });
   const { renderer, scene, camera, tickers, requestRender, maxTex, aniso } = st;
   setChipDetail(quality.chipSegments);
 
   // ---- light: one pendant over the wheel and one over the layout, a cool fill, warm room glow -------------
-  const keyW = new THREE.SpotLight('#fff1dc', 5200, 0, .62, .8, 1.6); keyW.castShadow = true;
-  keyW.shadow.mapSize.set(quality.shadow, quality.shadow); keyW.shadow.bias = -.0001; keyW.shadow.normalBias = .02; keyW.shadow.radius = 4; keyW.shadow.camera.near = 60; keyW.shadow.camera.far = 240;
-  const keyL = new THREE.SpotLight('#fff0d8', 4200, 0, .72, .85, 1.6); keyL.castShadow = true;
+  // Only the layout's pendant casts shadows (the chips, the rake, the bowl on the wood): the wheel is shaded by its own
+  // painted occlusion and the ball's contact shadow (wheel3d.mjs), so one shadow map serves the table, and it is drawn
+  // again only when a chip or the rake moves, never for the turning wheel.
+  const keyW = new THREE.SpotLight('#fff1dc', 5400, 0, .5, .7, 1.6);
+  const keyL = new THREE.SpotLight('#fff0d8', 4400, 0, .6, .75, 1.6); keyL.castShadow = true;
   keyL.shadow.mapSize.set(quality.shadow, quality.shadow); keyL.shadow.bias = -.0001; keyL.shadow.normalBias = .02; keyL.shadow.radius = 5; keyL.shadow.camera.near = 60; keyL.shadow.camera.far = 240;
-  const hemi = new THREE.HemisphereLight('#5b626e', '#0b0a09', .5);
+  const hemi = new THREE.HemisphereLight('#5b626e', '#0b0a09', .3);
   const glow = new THREE.PointLight('#ffb866', 900, 320, 1.6);
   scene.add(keyW, keyW.target, keyL, keyL.target, hemi, glow);
   // The light follows the spin (mood): from the croupier's call the layout's pendant and the fill dim by a quarter and the
@@ -68,15 +70,17 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   // ---- the room: the salon round the table, out of focus (scene/stage.mjs), the carpet underfoot ------------------
   // Its middle faces where your seat looks (placeBackdrop); without the picture the room is simply dark.
   const FLOOR_Y = -80;
-  const salon = ART.salon ? salonWall(ART.salon, { radius: 420, eye: 90, floorY: FLOOR_Y, aniso }) : null; if (salon) scene.add(salon.mesh);
+  const salon = ART.salon ? salonWall(ART.salon, { radius: 420, eye: 90, floorY: FLOOR_Y, aniso, level: .48 }) : null; if (salon) scene.add(salon.mesh);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: '#0b0a09', roughness: 1 }));
   if (artImage('table:carpet')) carpetFloor(floor, artImage('table:carpet'), { aniso });
   floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y; scene.add(floor);
 
   // ---- the table ---------------------------------------------------------------------------------------------------
   const table = new THREE.Group(); scene.add(table);
-  const woodTex = (img, rx, ry, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
-  const walnut = new THREE.MeshPhysicalMaterial({ color: ART.veneer ? '#d9c2b0' : '#1c120c', map: woodTex(ART.veneer, 4, 1, Math.PI / 2), roughness: .4, clearcoat: .9, clearcoatRoughness: .3, envMapIntensity: .6 });   // the table: Macassar ebony, its stripes along the length (a satin lacquer: a glossier one blew out white beside the wheel at the seat's grazing angle)
+  // (the top's shape gives texture coordinates in centimetres: one picture of the veneer to every 80 cm, its stripes
+  // along the table)
+  const woodTex = (img, cm, rot = 0) => { if (!img) return null; const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / cm, 1 / cm); t.rotation = rot; t.anisotropy = aniso; t.needsUpdate = true; return t; };
+  const walnut = new THREE.MeshStandardMaterial({ color: ART.veneer ? '#e6d6c8' : '#1c120c', map: woodTex(ART.veneer, 80, Math.PI / 2), roughness: .34, envMapIntensity: .7 });   // the table: Macassar ebony, its stripes along the length, in a satin lacquer (one coat, drawn as one: a clear coat on the largest wood in the picture costs every pixel of it twice)
   const leather = leatherMaterial();
   const grain = artImage('table:leather'); if (grain) { const t = new THREE.Texture(grain); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(24, 2); t.needsUpdate = true; leather.bumpMap = t; leather.bumpScale = 1.8; }
   const brass = brassMaterial();
@@ -352,9 +356,25 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       corner(xF - rc, zD + rc, Math.PI / 2);                      // round the far corner
       straight(xF - rc - (R.x1 - 34), 'x', R.x1 - 34, zD);         // a short way up the croupier's side
     }
-    // the base: a dark plinth set back under the top, and a brass foot-rail on the players' side
-    const plinth = new THREE.Mesh(new THREE.BoxGeometry(x1T - x0T - 50, 66, z1T - z0T - 52), new THREE.MeshPhysicalMaterial({ color: '#0e0c0b', roughness: .5, clearcoat: .6, clearcoatRoughness: .3 }));
-    plinth.position.set((x0T + x1T) / 2 + 4, -13.5 - 33, (z0T + z1T) / 2 - 4); body.add(plinth);
+    // what holds it up, as at the blackjack table: a lacquered apron under the top with two lines of warm light round it,
+    // a pedestal set well back, and a low plinth with a brass edge and a line of light at its foot that lies warm on the
+    // carpet; a brass foot-rail on the players' side
+    { const lacquer = new THREE.MeshStandardMaterial({ color: '#16110d', roughness: .34, envMapIntensity: .8 }), glowM = new THREE.MeshBasicMaterial({ color: '#ffd9a6', toneMapped: false });
+      const rect = (inset, r) => { const a = x0T + inset, b = x1T - inset, c = z0T + inset, d = z1T - inset, q = Math.min(r, (b - a) / 2, (d - c) / 2), sh = new THREE.Shape();
+        sh.moveTo(a + q, -c); sh.lineTo(b - q, -c); sh.absarc(b - q, -(c + q), q, Math.PI / 2, 0, true); sh.lineTo(b, -(d - q)); sh.absarc(b - q, -(d - q), q, 0, -Math.PI / 2, true);
+        sh.lineTo(a + q, -d); sh.absarc(a + q, -(d - q), q, -Math.PI / 2, -Math.PI, true); sh.lineTo(a, -(c + q)); sh.absarc(a + q, -(c + q), q, Math.PI, Math.PI / 2, true); return sh; };
+      const slab = (inset, r, y0, y1, mat) => { const g = new THREE.ExtrudeGeometry(rect(inset, r), { depth: y1 - y0, bevelEnabled: false, curveSegments: 24 }); g.rotateX(-Math.PI / 2); g.translate(0, y0, 0); const m = new THREE.Mesh(g, mat); m.receiveShadow = true; body.add(m); return m; };
+      const band = (inset, r, y, h, mat, t = .3) => { const sh = rect(inset - t, r + t); sh.holes.push(rect(inset, r)); const g = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: 24 }); g.rotateX(-Math.PI / 2); g.translate(0, y - h / 2, 0); body.add(new THREE.Mesh(g, mat)); };
+      const A0 = -13.1, A1 = -30, P1 = FLOOR_Y + 4.5;
+      slab(4, rr, A1, A0, lacquer); for (const y of [-17.5, -24.5]) band(4, rr, y, .45, glowM, .15); band(4, rr, A1 + .6, 1.2, brass, .25);
+      slab(34, 18, P1, A1, lacquer); band(34, 18, A1 - 1.2, .5, glowM, .12);
+      slab(24, 22, FLOOR_Y, P1, lacquer); band(24, 22, P1 - .5, 1, brass, .2); band(24, 22, FLOOR_Y + .5, .4, glowM, .25);
+      // its light on the carpet: a warm band round the plinth, strongest at its edge
+      { const pad = 36, w = x1T - x0T - 48 + 2 * pad, d = z1T - z0T - 48 + 2 * pad, k = 6, c = document.createElement('canvas'); c.width = Math.round(w * k / 4); c.height = Math.round(d * k / 4); const g = c.getContext('2d'), sx = c.width / w, sz = c.height / d;
+        g.filter = `blur(${Math.round(9 * sx)}px)`; g.strokeStyle = 'rgba(255,200,140,.95)'; g.lineWidth = 14 * sx; g.beginPath(); g.roundRect(pad * sx, pad * sz, (w - 2 * pad) * sx, (d - 2 * pad) * sz, 22 * sx); g.stroke();
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: .5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+        pool.rotation.x = -Math.PI / 2; pool.position.set((x0T + x1T) / 2, FLOOR_Y + .15, (z0T + z1T) / 2); pool.renderOrder = 1; body.add(pool); } }
     const footRail = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, x1T - x0T - 70, 20), brass); footRail.rotation.z = Math.PI / 2; footRail.position.set((x0T + x1T) / 2 + 6, -64, z1T - 14); body.add(footRail);
     { const len = x1T - x0T - 70, cx = (x0T + x1T) / 2 + 6, legG = new THREE.CylinderGeometry(1.1, 1.4, 16, 12);      // standing on short brass posts, not floating
       for (const k of [-.46, 0, .46]) { const leg = new THREE.Mesh(legG, brass); leg.position.set(cx + k * len, -72, z1T - 14); body.add(leg); } }
@@ -502,33 +522,40 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     const foot = new THREE.Mesh(new THREE.BoxGeometry(W + 1.6, .5, 3.4), brass); foot.position.y = .25; foot.castShadow = foot.receiveShadow = true;
     lean.add(frame, face); sign.add(foot); table.add(sign); return sign;
   })();
-  // The results board: a slim black display in a brass frame on a brass post, standing at the croupier's side of the
-  // wheel, as the casinos' marquees do: the newest number large at the top, the earlier ones below it in two columns, red
-  // to the left, black to the right, zero across the middle. Repainted when a number lands (setBoard).
+  // The results board: a low black marquee in a brass frame on a brass post, standing at the head of the table behind the
+  // wheel beside the croupier's chip tray, turned toward your seat (wide and low, so it shows whole under the bar at your
+  // seat and never stands over the wheel): the newest number large at its left in its colour, the twelve before it in a
+  // grid to the right, newest first. Repainted when a number lands (setBoard).
+  const BOARD_Y = 2;   // the display's foot, over the felt
   const board = (() => {
-    const W = 20, H = 36.7, c = document.createElement('canvas'); c.width = 384; c.height = Math.round(384 * H / W);
+    const W = 30, H = 13, c = document.createElement('canvas'); c.width = 900; c.height = Math.round(900 * H / W);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso;
     const g3 = new THREE.Group(), face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(W + 1.4, H + 1.4, 1.2), brass), post = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, 100, 16), brass), foot = new THREE.Mesh(new THREE.CylinderGeometry(9, 10, 1.5, 32), brass);
-    frame.position.y = face.position.y = 1 + H / 2; face.position.z = .61; post.position.y = -49; foot.position.y = -79.25; frame.castShadow = post.castShadow = true;
+    const pole = BOARD_Y - FLOOR_Y, frame = new THREE.Mesh(new THREE.BoxGeometry(W + 1.4, H + 1.4, 1.6), brass), post = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, pole, 16), brass), foot = new THREE.Mesh(new THREE.CylinderGeometry(11, 12, 1.5, 40), brass);
+    frame.position.y = face.position.y = BOARD_Y + H / 2; face.position.z = .81; post.position.y = FLOOR_Y + pole / 2; foot.position.y = FLOOR_Y + .75; frame.castShadow = post.castShadow = true;
     g3.add(frame, face, post, foot); table.add(g3);
     return { group: g3, canvas: c, tex: t };
   })();
   function setBoard(history) {
-    const c = board.canvas, g = c.getContext('2d'), k = c.width / 24, ink = { red: '#ff4b55', black: '#f1ece0', green: '#3fd98a' };   // laid out 24 units wide
+    const c = board.canvas, g = c.getContext('2d'), k = c.width / 30, ink = { red: '#ff4b55', black: '#f1ece0', green: '#3fd98a' };   // laid out in the board's own centimetres
     g.fillStyle = '#060606'; g.fillRect(0, 0, c.width, c.height);
-    g.strokeStyle = 'rgba(214,180,104,.7)'; g.lineWidth = .12 * k; g.strokeRect(.6 * k, .6 * k, c.width - 1.2 * k, c.height - 1.2 * k);
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#c9a45c'; g.font = `700 ${1.5 * k}px Cinzel, serif`; g.letterSpacing = `${.2 * k}px`; g.fillText('SALON NOIR', 12 * k + .1 * k, 2.4 * k); g.letterSpacing = '0px';
+    g.strokeStyle = 'rgba(214,180,104,.7)'; g.lineWidth = .1 * k; g.strokeRect(.4 * k, .4 * k, c.width - .8 * k, c.height - .8 * k);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#c9a45c'; g.font = `700 ${.95 * k}px Cinzel, serif`; g.letterSpacing = `${.14 * k}px`; g.fillText('SALON NOIR', 5.6 * k, 1.5 * k); g.letterSpacing = '0px';
     const [first, ...rest] = history;
-    if (first != null) { const col = colorOf(first); g.fillStyle = ink[col]; g.font = `800 ${9 * k}px "Barlow Condensed", sans-serif`; g.fillText(String(first), col === 'red' ? 7.5 * k : col === 'black' ? 16.5 * k : 12 * k, 9.4 * k); }
-    g.fillStyle = 'rgba(214,180,104,.45)'; g.fillRect(2 * k, 14.6 * k, 20 * k, .1 * k);
-    g.font = `700 ${2.2 * k}px "Barlow Condensed", sans-serif`;
-    rest.slice(0, 11).forEach((n, i) => { const col = colorOf(n), y = (17 + i * 2.45) * k; g.fillStyle = ink[col]; g.globalAlpha = 1 - i * .045; g.fillText(String(n), col === 'red' ? 7.5 * k : col === 'black' ? 16.5 * k : 12 * k, y); });
+    if (first != null) { g.fillStyle = ink[colorOf(first)]; g.font = `800 ${8.4 * k}px "Barlow Condensed", sans-serif`; g.fillText(String(first), 5.6 * k, 7.6 * k); }
+    g.fillStyle = 'rgba(214,180,104,.45)'; g.fillRect(11.2 * k, 1.2 * k, .08 * k, 10.6 * k);
+    g.font = `700 ${2.3 * k}px "Barlow Condensed", sans-serif`;
+    rest.slice(0, 12).forEach((n, i) => { const col = i % 4, row = Math.floor(i / 4); g.fillStyle = ink[colorOf(n)]; g.globalAlpha = 1 - i * .045; g.fillText(String(n), (13.9 + col * 4.4) * k, (2.9 + row * 3.6) * k); });
     g.globalAlpha = 1; board.tex.needsUpdate = true; requestRender(false);
   }
-  // beside the head of the table, past the wheel and a little toward the croupier, turned toward your side: in the
-  // picture beside the wheel while the ball makes its last rounds (an upright phone, seated at the foot, has it behind)
-  function placeBoard() { const port = L.orient === 'port', cz = (L.zFar + L.zNear) / 2; board.group.position.set(L.wheelX - WELL - (port ? 14 : 11), 0, cz - (port ? 4 : 4)); board.group.rotation.y = port ? Math.PI / 2 : .55; }
+  // behind the wheel, beside the croupier's chip tray, turned toward your seat (from the foot, on an upright phone, it
+  // stands beyond the wheel)
+  function placeBoard() {
+    const port = L.orient === 'port', cz = (L.zFar + L.zNear) / 2, x = L.wheelX - WELL + 4, z = cz - WELL - 22;
+    const seat = port ? new THREE.Vector3(L.xEnd + 120, 0, cz) : new THREE.Vector3((L.wheelX + L.xEnd) / 2, 0, L.zNear + 140);   // (where it faces)
+    board.group.position.set(x, 0, z); board.group.rotation.y = Math.atan2(seat.x - x, seat.z - z);
+  }
   function placePlaque() { const port = L.orient === 'port'; plaque.position.set(L.xEnd + (port ? 10 : -4), 0, L.zFar - (port ? 22 : 17)); plaque.rotation.y = port ? Math.PI / 2 : -.22; }
   function placeMarkers() { if (!L) return; const cz = (L.zFar + L.zNear) / 2; markers.position.set(L.wheelX + WELL * .55, 0, cz - WELL * .9); markers.rotation.y = 0; }
   // The croupier's rake: a slim ebony stick with a T head and a brass ferrule where they meet. Its group sits on the felt
@@ -580,15 +607,21 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
         if (!p) continue; const score = cellPx(p) - Math.max(0, p.fov - 42) * .8; if (!best || score > best.score) best = { ...p, score };
       }
     } else {
-      // seated at the long side: a long lens from a good way back keeps the table from bending
-      // the layout and the printed racetrack first (the wheel may run off the picture's left edge)
-      const T = L.track, must = [...layoutCorners(), ...rimPts(WELL, 1.5, 24).filter(p => p.x > L.wheelX + 22), ...(T ? [[-1, 0], [1, 0], [-.5, -1], [.5, -1]].map(([a, b]) => new THREE.Vector3(T.cx + a * (b ? T.len - T.H : T.len) / 2, 0, T.cz + b * T.H / 2)) : [])], cx = (L.wheelX + 22 + L.xEnd) / 2;
+      // standing at the long side, as a player leans in to bet: eyes about a metre over the cloth, looking down at about
+      // 50 degrees through a natural lens, so the table has depth (near boxes larger, the track and the wheel's far side
+      // receding) and the whole wheel stands at your left. What must show: the layout, the printed racetrack and the
+      // whole bowl. Of the places that show it all, the one whose boxes are largest, kept near that height and lens.
+      const T = L.track, must = [...layoutCorners(), ...rimPts(WELL, 1.5, 24), ...(T ? [[-1, 0], [1, 0], [-.5, -1], [.5, -1]].map(([a, b]) => new THREE.Vector3(T.cx + a * (b ? T.len - T.H : T.len) / 2, 0, T.cz + b * T.H / 2)) : [])];
+      const cx = (L.wheelX - WELL + L.xEnd) / 2;
       // aimed at the middle of what must show, seen from the camera (the track makes it lopsided): the lens can be no wider
       // than the content needs. The camera has no yaw, so a point's height in the picture depends on its y and z alone.
       const aim = pos => { let a0 = Infinity, a1 = -Infinity; for (const q of must) { const a = Math.atan2(pos.y - q.y, pos.z - q.z); a0 = Math.min(a0, a); a1 = Math.max(a1, a); } const yL = WHEEL_Y * .4; return new THREE.Vector3(cx, yL, pos.z - (pos.y - yL) / Math.tan((a0 + a1) / 2)); };
-      for (let h = 100; h <= 380; h += 12) for (let d = 30; d <= 380; d += 12) {
+      for (let h = 60; h <= 220; h += 6) for (let d = 10; d <= 240; d += 6) {
         const pos = new THREE.Vector3(cx, h, L.zNear + d), look = aim(pos), p = fit(pos, look, must, .97, .93);
-        if (!p) continue; const score = cellPx(p) - Math.max(0, p.fov - 26) * 1.6; if (!best || score > best.score) best = { ...p, score };
+        if (!p) continue;
+        const pitch = Math.atan2(pos.y - look.y, pos.z - look.z) * 180 / Math.PI;
+        const score = cellPx(p) - Math.abs(pitch - 50) * 1.2 - Math.max(0, 32 - p.fov) * 2 - Math.max(0, p.fov - 46) * 2;
+        if (!best || score > best.score) best = { ...p, score };
       }
     }
     shots.seat = best ?? pose(new THREE.Vector3(L.xEnd + 40, 120, 60), new THREE.Vector3(0, 0, 0), 45);
