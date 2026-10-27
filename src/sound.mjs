@@ -28,6 +28,10 @@ const CLIPS = [...new Set(Object.values(EVENTS).flatMap(e => e.clips))];
 // Levels for each bus, before your own sliders.
 const BUS = { table: 1, voice: 1, room: .16, music: .22, ui: .7 };
 const DUCK = .42;   // how far the room and the music dip under the dealer's voice
+// Sounds are fetched as they are first wanted, long after the page loaded, so a reload doesn't recheck them: from a plain
+// server (python -m http.server sends no cache rules) the browser would keep playing a replaced file under its old name.
+// `no-cache` asks the server each time, a 304 when nothing changed. (The service worker, where there is one, answers first.)
+const FRESH = { cache: 'no-cache' };
 
 export class TableAudio {
   constructor() {
@@ -49,7 +53,7 @@ export class TableAudio {
     for (const b of ['voice', 'room', 'music', 'ui']) { this.bus[b] = this.ctx.createGain(); this.bus[b].connect(b === 'voice' || b === 'ui' ? comp : this.master); }   // menus stay dry, out of the room
     this.applyLevels(0);
     this.kit = new Map(); this.raw = new Map(); this.voiceNow = null; this.loops = {};
-    this.ready = Promise.all(CLIPS.map(name => fetch(new URL(`./sounds/${name}.wav`, import.meta.url)).then(r => r.arrayBuffer()).then(b => this.decode(b)).then(buf => this.buffers.set(name, buf)).catch(() => null)));
+    this.ready = Promise.all(CLIPS.map(name => fetch(new URL(`./sounds/${name}.wav`, import.meta.url), FRESH).then(r => r.arrayBuffer()).then(b => this.decode(b)).then(buf => this.buffers.set(name, buf)).catch(() => null)));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.ctx.suspend(); this.musicEl?.pause(); }
       else this.revive();
@@ -107,7 +111,7 @@ export class TableAudio {
     if (!this.kit.has(path)) { const raw = this.raw.get(path); this.kit.set(path, (raw ? raw.then(b => b ? b.slice(0) : this.bytes(path)) : this.bytes(path)).then(b => b && this.decode(b, path.startsWith('room-') ? 32000 : 0)).catch(() => null)); }   // (decoding takes the bytes it is given: a kept copy stays whole)
     return this.kit.get(path);
   }
-  bytes(path) { return fetch(new URL(`./sounds/kit/${path}.mp3`, import.meta.url)).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null); }
+  bytes(path) { return fetch(new URL(`./sounds/kit/${path}.mp3`, import.meta.url), FRESH).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null); }
   preload(paths) { for (const p of paths) void this.clip(p); }
   // A set of clips of which one plays now and then (the roulette numbers: half a megabyte as MP3, ten decoded): the
   // bytes are fetched ahead and kept, each is decoded when it is wanted, and `forget` lets the decoded sound go again.
