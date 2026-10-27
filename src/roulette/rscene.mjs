@@ -28,7 +28,7 @@ const ART = {};
 export function preloadRouletteArt() {
   const load = (k, src) => new Promise(r => { const i = new Image(); i.onload = () => { ART[k] = i; r(); }; i.onerror = () => r(); i.src = src; });
   const fonts = document.fonts ? Promise.all(['700 80px "Barlow Condensed"', '700 80px Cinzel', '700 40px Inter', '500 80px "Bodoni Moda"', 'italic 600 80px "Bodoni Moda"'].map(f => document.fonts.load(f).catch(() => {}))) : Promise.resolve();
-  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('salon', './assets/roulette/salon.webp'), fonts]);
+  return Promise.all([load('veneer', './assets/roulette/macassar.webp'), load('salon', './assets/roulette/salon.webp'), load('stone', './assets/roulette/stone.webp'), fonts]);
 }
 
 export function createRouletteScene(canvas, { quality = detectQuality() } = {}) {
@@ -96,7 +96,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     pmrem.dispose(); e.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); return env;
   };
   let studioEnv = studio();
-  const wheel = createWheel(THREE, { aniso, env: studioEnv, glow: '#ffb85a' }); table.add(wheel.group);   // black lacquer, a warm gold ring light
+  const wheel = createWheel(THREE, { aniso, env: studioEnv, glow: '#ffb85a', stone: ART.stone }); table.add(wheel.group);   // black lacquer, a warm gold ring light
   // the cloth: matte wool, and on the high preset a fabric sheen at grazing angles and the nap as a fine bump (the other
   // presets keep the plain material: the cloth is the largest surface in the picture, and a phone pays for every pixel)
   const feltMats = new Map(), nap = artImage('table:felt');

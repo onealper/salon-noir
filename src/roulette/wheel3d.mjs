@@ -18,7 +18,7 @@ export const polar = (r, a, y = 0) => [r * Math.cos(a), y, -r * Math.sin(a)];
 const INK = { red: '#a8131f', black: '#111214', green: '#0d6a3b', ivory: '#f5eedf' };
 const FLOOR = { red: '#8a111b', black: '#0d0e10', green: '#0b5a33' };
 
-export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) {
+export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a', stone = null }) {
   const wheel = new THREE.Group(), rotor = new THREE.Group(); wheel.add(rotor);
   // its own studio light for reflections (rscene.mjs: a ring light overhead, soft boxes), so the lacquer and chrome carry
   // the arcs and streaks of light a filmed wheel shows
@@ -60,7 +60,11 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
   }), false);
   speck.wrapS = speck.wrapT = THREE.RepeatWrapping; speck.repeat.set(48, 3);
   const trackGeo = lathe(TRACK.filter((_, i) => i % 3 === 0 || i === TRACK.length - 1));
-  const track = new THREE.Mesh(trackGeo, shine(new THREE.MeshPhysicalMaterial({ color: '#0c0c0d', roughness: .5, roughnessMap: speck, metalness: 0, clearcoat: .85, clearcoatRoughness: .06, envMapIntensity: 1.1,
+  // with `stone` (assets/roulette/stone.webp), the stone itself: black granite with silver flecks, a picture to every 9 cm
+  // of track (the track runs about 240 cm round and 5.8 cm across its flare)
+  let grain = null;
+  if (stone) { grain = new THREE.Texture(stone); grain.colorSpace = THREE.SRGBColorSpace; grain.wrapS = grain.wrapT = THREE.RepeatWrapping; grain.repeat.set(27, .64); grain.anisotropy = aniso; grain.needsUpdate = true; }
+  const track = new THREE.Mesh(trackGeo, shine(new THREE.MeshPhysicalMaterial({ color: grain ? '#ffffff' : '#0c0c0d', map: grain, roughness: .5, roughnessMap: speck, metalness: 0, clearcoat: .85, clearcoatRoughness: .06, envMapIntensity: 1.1,
     aoMap: ramp([[0, .6], [.15, .95], [.88, 1], [1, .5]]) })));
   track.material.side = THREE.DoubleSide; wheel.add(track);
   // the stator cone, the same lacquer as the bowl, down to the wheelhead, darkening into the gap at its foot
@@ -80,7 +84,7 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a' }) 
     halo.material.map = new THREE.CanvasTexture(hc); halo.rotation.x = -Math.PI / 2; halo.position.y = WY + .3; halo.renderOrder = 3; wheel.add(halo); }
   const alphaRamp = stops => tex(canvas(4, 256, (g, w, h) => { const gr = g.createLinearGradient(0, h, 0, 0); for (const [o, a] of stops) gr.addColorStop(o, `rgba(255,255,255,${a})`); g.fillStyle = gr; g.fillRect(0, 0, w, h); }), false);
   const wash = (geo, stops, k) => { const m = new THREE.Mesh(geo, lit(new THREE.MeshBasicMaterial({ map: alphaRamp(stops), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false, side: THREE.DoubleSide }), k)); m.renderOrder = 2; wheel.add(m); return m; };
-  wash(trackGeo, [[0, .04], [.55, .18], [.85, .55], [1, 1]], .55); wash(coneGeo, [[0, 0], [.6, .05], [1, .22]], .5);
+  wash(trackGeo, [[0, 0], [.5, .05], [.85, .42], [1, 1]], .42); wash(coneGeo, [[0, 0], [.6, .05], [1, .22]], .5);   // (strongest up at the wall: the stone shows across the rest)
   // the eight canoes: chrome ball stops 5.2 cm long and 1 cm wide (US 6,047,965), a pointed hull with a rounded crown,
   // alternately lying across the ball's path (radial) and along it (tangential), as in the simulation
   const hull = new THREE.SphereGeometry(1, 40, 12, 0, Math.PI * 2, 0, Math.PI / 2);
