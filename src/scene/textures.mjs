@@ -164,6 +164,20 @@ export function edgeTexture(standing = true) {
   return texture(c, { repeat: true });
 }
 
+// A shoe's stack of cards seen from above and the side, close: 128 cards to the tile (STACK_TILE thick), each a shade of
+// its own with a fine shadow after it, and broader bands of light and shade where cards don't lie quite square (decks
+// shuffled together never make one smooth block). Lines run along v, one card after another along u.
+export const STACK_TILE = 128;
+export function stackEdgeTexture() {
+  const c = canvas(512, 32), ctx = c.getContext('2d');
+  for (let i = 0; i < STACK_TILE; i++) {
+    ctx.fillStyle = `hsl(40, 12%, ${83 + Math.random() * 10}%)`; ctx.fillRect(i * 4, 0, 4, 32);
+    ctx.fillStyle = `rgba(58,54,48,${.25 + Math.random() * .25})`; ctx.fillRect(i * 4 + 3, 0, 1, 32);
+  }
+  for (let x = 0; x < 512;) { const w = 6 + Math.random() * 40, dark = Math.random() < .55; ctx.fillStyle = dark ? `rgba(40,37,33,${Math.random() * .2})` : `rgba(255,252,244,${Math.random() * .14})`; ctx.fillRect(x, 0, Math.min(w, 512 - x), 32); x += w; }
+  return texture(c, { repeat: true });
+}
+
 // ---- felt: 200 x 100 cm, the dealer's straight edge at the top of the image -----
 export const FELT = { w: 200, d: 100, zTop: -40 };
 export function paintFelt(px = 2048, mode = MODES.classic) {
