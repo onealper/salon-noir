@@ -44,9 +44,10 @@ Music (played through the music bus, streamed)
                       CC BY 4.0. At the blackjack tables.
   music-lobby.mp3     "Lobby Time" by Kevin MacLeod (https://incompetech.com)
                       CC BY 4.0. In the lobby.
-  music-roulette.mp3  Kevin MacLeod (https://incompetech.com), CC BY 4.0; title to be
-                      confirmed by the owner (the file carries no title tag). 48 s,
-                      looped. At the roulette table.
+  music-roulette.mp3  Made for Salon Noir with ElevenLabs Music (v2.5) on 2026-09-29: an
+                      instrumental late-night lounge jazz piece, the owner's own (see the
+                      ElevenLabs section below for the terms). 48 s cut from the 60 s
+                      render (1.5 s in), looped. At the roulette table.
 
 Room
   room-casino-1.mp3   The casino room bed: recordings by felix.blume, SholeColtis and

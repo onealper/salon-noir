@@ -27,7 +27,7 @@ Bodoni Moda (The Bodoni Moda Project Authors) · Cinzel (The Cinzel Project Auth
 
 File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CREDITS.txt). Every kit file was cut, levelled and re-encoded as MP3 for Salon Noir.
 
-- **Music:** "Bossa Antigua", "Lobby Time" and the roulette table's track (`music-roulette.mp3`, title to be confirmed by the owner) by Kevin MacLeod ([incompetech.com](https://incompetech.com)), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- **Music:** "Bossa Antigua" and "Lobby Time" by Kevin MacLeod ([incompetech.com](https://incompetech.com)), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the roulette table's track (`music-roulette.mp3`) made for Salon Noir with ElevenLabs Music
 - **Thunder:** cut from "Thunderstorm" by [RHumphries](https://freesound.org/people/RHumphries/) (freesound.org), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
 - **Spark and lightning:** from [/tg/station 13](https://github.com/tgstation/tgstation) and [Space Station 14](https://github.com/space-wizards/space-station-14), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/); our edits of them stay CC BY-SA 3.0
 - **Roulette ball clicks:** from [matiasvallejosdev/casino-roulette-game](https://github.com/matiasvallejosdev/casino-roulette-game), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); our edits of them stay CC BY-SA 4.0
