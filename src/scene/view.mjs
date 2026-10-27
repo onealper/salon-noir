@@ -3,7 +3,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { LAYOUT, CARD_T, SHOE, toSeat, seatAngle } from './world.mjs';
 import { CARD_W, CARD_H, CHIP_H } from './textures.mjs';
-import { createCard, createChip, createMarker, cardQuat, headingOf, ease, chipToss } from './pieces.mjs';
+import { createCard, createChip, createMarker, cardQuat, headingOf, ease, chipToss, bendCard } from './pieces.mjs';
 import { breakDown } from '../engine.mjs';
 
 export const TIMING = { dealPlayer: 720, dealDealer: 640, reveal: 620, peek: 560, chip: 300, chipToss: 440, chipMove: 460, payout: 500, square: 180, gather: 300, discard: 620, toPlayer: 560, split: 440, shoeFill: 1100 };
@@ -37,6 +37,13 @@ function profile(keys) {
   };
 }
 // A polyline sampled from any curve, walked by distance.
+// A card turned over by its edge flexes: bowed across its short side while it is up (most as it stands on edge), and a
+// little ripple as it lands. f: 0 to 1 through the turn.
+const flex = f => { const k = f < .85 ? Math.sin(Math.PI * f / .85) / 20 : -Math.sin((f - .85) / .15 * Math.PI) / 90; return { s0: 0, k, both: true }; };
+// The peek's bend, in the card's own frame (face down, its top toward the dealer): across the corner nearest the dealer
+// on his left, 2.3 cm in from it, round a 1.3 cm radius, lifting it (-z: the back is up) by up to `lift` radians.
+const PEEK = (() => { const dir = [-CARD_W, CARD_H * .9], n = Math.hypot(...dir), u = dir.map(v => v / n), corner = (-CARD_W / 2) * u[0] + (CARD_H / 2) * u[1];
+  return { dir: u, s0: corner - 2.3, k: -1 / 1.3, r: 1.3, lift: .75 }; })();
 function track(points) {
   const acc = [0]; for (let k = 1; k < points.length; k++) acc.push(acc[k - 1] + points[k].distanceTo(points[k - 1]));
   const length = acc.at(-1);
@@ -246,10 +253,11 @@ export class TableView {
       const s = speed(t), p = at(s);
       // sounds on the frames they happen: the snap as the face lands, the slide across the cloth
       if (!snapped && s > LA + turnLen * .9) { snapped = true; this.audio?.play('turn', { x: p.x }); }
-      if (s <= LA) { const q = this.shoeToTable(this.world.shoe.slidePose(s / (LA || 1))); m.quaternion.copy(q.quat); p.copy(q.pos); }   // drawn out of the mouth (world.mjs)
+      if (s <= LA) { const q = this.shoeToTable(this.world.shoe.slidePose(s / (LA || 1))); m.quaternion.copy(q.quat); p.copy(q.pos); bendCard(m, q.bend); }   // drawn out of the mouth (world.mjs)
       else {
         if (!staged) { staged = true; next?.(); }    // the next card settles into the mouth
         const f = clamp01((s - LA) / turnLen), th = Math.PI * smooth(f);
+        bendCard(m, faceDown ? null : flex(f));
         const qTurn = faceDown ? exit.quat : turnAbout(axis, th).multiply(exit.quat);
         const w = smooth(clamp01((s - LA - turnLen * .6) / (S - LA - turnLen * .6) * 1.15));   // square up to the spot on the way
         m.quaternion.slerpQuaternions(qTurn, qT, w);
@@ -258,7 +266,7 @@ export class TableView {
       }
       m.position.copy(p);
     });
-    m.position.copy(p3); m.quaternion.copy(qT);
+    m.position.copy(p3); m.quaternion.copy(qT); bendCard(m, null);
     if (!staged) next?.();
     const c = { card, mesh: m, owner, i, turn, hidden, heading: h1, flipFace, yaw: tgt.seat != null ? seatAngle(tgt.seat) : 0 }; this.cards.push(c);
     if (atSpot) await this.turnOver(c, 300 * D.speed);
@@ -271,17 +279,18 @@ export class TableView {
     const d = this.world.discard.group; d.updateMatrixWorld();
     const into = V(0, this.world.discard.topY() + .3, 0).applyMatrix4(d.matrix), qD = cardQuat(d.rotation.y + Math.PI / 2, 0);
     this.audio?.play('slide', { x: p0.x });
-    await this.motion.tween(300, t => { const q = this.shoeToTable(this.world.shoe.slidePose(t)); m.position.copy(q.pos); m.quaternion.copy(q.quat); }, ease.in);
-    next?.();
+    await this.motion.tween(300, t => { const q = this.shoeToTable(this.world.shoe.slidePose(t)); m.position.copy(q.pos); m.quaternion.copy(q.quat); bendCard(m, q.bend); }, ease.in);
+    bendCard(m, null); next?.();
     const a = exit.pos.clone();
     await this.motion.tween(620, t => { m.position.lerpVectors(a, into, t); m.position.y += Math.sin(Math.PI * t) * 7; m.quaternion.slerpQuaternions(exit.quat, qD, smooth(t)); }, ease.inOut);
     this.T.remove(m); this.world.discard.set(this.world.discard.count + 1);
   }
-  // Checking the hole card: the dealer bends up its near corner, looks, lays it flat.
+  // Checking the hole card, as it was done by hand before peek devices: the dealer bends up its corner nearest him on
+  // his left, the rest of the card flat on the cloth, reads the index under it and lets it fall back flat.
   async peek() {
-    const c = this.handCards('dealer')[1]; if (!c) return; const m = c.mesh, base = m.position.clone();
-    await this.motion.tween(TIMING.peek * this.dealer.speed, t => { const a = Math.sin(Math.PI * t) * .3; m.quaternion.copy(cardQuat(c.heading, 0, -a)); m.position.set(base.x, base.y + Math.sin(a) * CARD_H * .22, base.z); }, ease.inOut);
-    m.position.copy(base); m.quaternion.copy(cardQuat(c.heading, 0));
+    const c = this.handCards('dealer')[1]; if (!c) return; const m = c.mesh;
+    await this.motion.tween(TIMING.peek * this.dealer.speed, t => bendCard(m, { ...PEEK, L: PEEK.r * PEEK.lift * Math.sin(Math.PI * t) }), ease.inOut);
+    bendCard(m, null);
   }
   // The reveal as dealers do it: the up card's corner slides under the hole card and levers it
   // over. It pivots on its far long edge while that edge slides back, so it lands where it lay.
@@ -300,9 +309,9 @@ export class TableView {
       const th = Math.PI * t, hinge = base.clone().addScaledVector(across, half - CARD_W * smooth(t));
       const off = across.clone().multiplyScalar(-half).applyAxisAngle(axis, th);
       m.position.copy(hinge).add(off); m.position.y = base.y + Math.max(0, off.y) + .02;
-      m.quaternion.copy(turnAbout(axis, th).multiply(q0));
+      m.quaternion.copy(turnAbout(axis, th).multiply(q0)); bendCard(m, flex(t));
     }, ease.inOut);
-    m.position.copy(base); m.quaternion.copy(cardQuat(c.heading, 1));
+    m.position.copy(base); m.quaternion.copy(cardQuat(c.heading, 1)); bendCard(m, null);
   }
   // Split: hand `at`'s second card slides across to become a new hand beside it (`at + 1`; the hands after it move
   // up one), and every hand and stake shuffles over to its place for `n` hands. `seat`: another player's, else yours.

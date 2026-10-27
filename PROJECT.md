@@ -116,7 +116,7 @@ src/                       All code, styles, fonts, sounds and libraries
                            frosted chin, and in the tongue the card reader: a slot window with a red light guide that brightens
                            as each card goes over it), and the matching discard holder
     view.mjs               Dealer choreography: how cards and chips move
-    pieces.mjs             Card and chip objects plus a small motion engine
+    pieces.mjs             Card and chip objects (a card bends as paper does: bendCard) plus a small motion engine
     textures.mjs           Canvas-drawn card faces, felt layout, chips
     lightning3d.mjs        Lightning-table bolts and their afterimages, felt burns, sparks, the static before a strike
   roulette/

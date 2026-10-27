@@ -493,21 +493,29 @@ function buildShoe({ stackTex, glass }) {
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
     return { pos: new THREE.Vector3(-3.4, .44, 0), quat: new THREE.Quaternion().setFromRotationMatrix(m) };   // (over the tongue, clear of the reader's rim)
   };
-  // The card on its way out, f from 0 (the front card, leaning in the shoe) to 1 (flat on the tongue), as a dealer draws it:
-  // its foot pulled out over the chin and along the tongue while its head slides down the face of the stack behind the
-  // frame, like a ladder sliding down a wall, until the head reaches the mouth; then it drops flat as it comes clear.
-  const TY = .44, poseOf = (A, B) => {   // the card from its foot A to its head B (CARD_W apart), its back out of the shoe
+  // The card on its way out, f from 0 (the front card, leaning in the shoe) to 1 (flat on the tongue), as a dealer draws
+  // it: a finger on its back through the frame pushes it down, so its foot slides out over the chin and the tongue while
+  // its top is still pressed to the stack, the card bowed between them round the foot of the stack; as its top leaves
+  // the stack it springs straight, a wobble running out of it, and drops flat onto the tongue. Returns its pose and its
+  // bend (for bendCard: the pose is that of its lower, straight part, the bend from there up).
+  const TY = .44, RB = 1.1, poseOf = (A, B) => {   // the card from its foot A toward B, its back out of the shoe
     const x = B.clone().sub(A).normalize(), m = new THREE.Matrix4().makeBasis(x, V(0, 0, 1), V(0, 0, 0).crossVectors(x, V(0, 0, 1)));
-    return { pos: A.clone().lerp(B, .5).addScaledVector(V(-x.y, x.x), .02), quat: new THREE.Quaternion().setFromRotationMatrix(m) };
+    return { pos: A.clone().addScaledVector(x, CARD_W / 2).addScaledVector(V(-x.y, x.x), .02), quat: new THREE.Quaternion().setFromRotationMatrix(m) };
   };
-  const F = V(foot.x, foot.y), mouth = V(-.05, TY), headOn = A => { const w = F.clone().sub(A), b = w.dot(d), t = -b + Math.sqrt(Math.max(0, b * b - w.lengthSq() + CARD_W * CARD_W)); return F.clone().addScaledVector(d, Math.max(0, t)); };
-  const out = V(foot.x - Math.sqrt(CARD_W * CARD_W - (foot.y - TY) ** 2), TY), legs = [F.distanceTo(mouth), mouth.distanceTo(out)], SPLIT = .62;
-  const footAlong = k => { const s = k * (legs[0] + legs[1]); return s <= legs[0] ? F.clone().lerp(mouth, s / legs[0]) : mouth.clone().lerp(out, (s - legs[0]) / legs[1]); };
-  const flatAt = exitPose(), clear = poseOf(out, F);
+  const F = V(foot.x, foot.y), mouth = V(-.05, TY), chinDir = F.clone().sub(mouth).normalize(), legs = [F.distanceTo(mouth), CARD_W];
+  const footOut = l => l <= legs[0] ? F.clone().addScaledVector(chinDir, -l) : V(mouth.x - (l - legs[0]), TY);
+  const bowed = l => {   // the foot drawn l along its way: the lower part from the foot to the stack, the bend, the rest up the stack
+    const A = footOut(l), c = F.distanceTo(A), e = c > 1e-4 ? F.clone().sub(A).divideScalar(c) : chinDir, phi = Math.atan2(e.x * d.y - e.y * d.x, e.dot(d));
+    const r = Math.max(.001, Math.min(RB, c / Math.tan(phi / 2))), tl = r * Math.tan(phi / 2);
+    return { A, e, s0: c - tl - CARD_W / 2, k: -1 / r, L: r * phi, up: CARD_W - (c - tl) - r * phi };
+  };
+  let lo = 0, hi = legs[0] + legs[1]; for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (bowed(mid).up > 0) lo = mid; else hi = mid; }
+  const free = bowed(lo), SPLIT = .6, RING = .35, flatAt = exitPose();   // `free`: the moment its top leaves the stack
   const slidePose = f => {
-    if (f <= SPLIT) { const A = footAlong(f / SPLIT); return poseOf(A, headOn(A)); }
-    const k = (f - SPLIT) / (1 - SPLIT), e = k * k * (3 - 2 * k);
-    return { pos: clear.pos.clone().lerp(flatAt.pos, e).add(V(0, Math.sin(Math.PI * k) * .25)), quat: clear.quat.clone().slerp(flatAt.quat, e) };
+    if (f <= SPLIT) { const b = bowed(lo * f / SPLIT), p = poseOf(b.A, b.A.clone().add(b.e)); return { ...p, bend: { s0: b.s0, k: b.k, L: b.L } }; }
+    const k = (f - SPLIT) / (1 - SPLIT), clear = poseOf(free.A, free.A.clone().add(free.e)), e = k * k * (3 - 2 * k);
+    const w = k < RING ? Math.cos(k / RING * Math.PI * 2.5) * (1 - k / RING) ** 2 : 0;   // the spring as it lets go, dying out
+    return { pos: clear.pos.clone().lerp(flatAt.pos, e).add(V(0, Math.sin(Math.PI * k) * .2)), quat: clear.quat.clone().slerp(flatAt.quat, e), bend: w ? { s0: free.s0, k: free.k * w, L: free.L } : null };
   };
   return { group: g, setStack, frontPose, exitPose, slidePose, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
 }
