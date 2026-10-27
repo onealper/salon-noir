@@ -106,5 +106,6 @@ under ElevenLabs' terms; not openly licensed
                       The croupier at the roulette table: his palm stopping the wheelhead
                       and pushing it round, the ball flicked into the track, the rake's
                       stroke over the cloth, the dolly set down on the number. Generated
-                      for Salon Noir with ElevenLabs Sound Effects v2 on 2026-10-27; mono,
-                      70 Hz high-pass, cut to the onset, tails faded, peaks at -3 dBFS.
+                      for Salon Noir with ElevenLabs Sound Effects v3 on 2026-10-27; mono
+                      (rake-2/3: the left channel of a wide stereo take), 70 Hz high-pass,
+                      cut to the onset, tails faded, peaks at -3 dBFS.

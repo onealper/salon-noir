@@ -167,7 +167,7 @@ Most AI models can't view the images and audio directly:
 - **Dealer voices:** James and Sofia (made with ElevenLabs), e.g. `james-n17.mp3` = calls "17" at roulette, `sofia-bj-dealer-busts.mp3` = blackjack call. Marco deals with James's voice and Elena with Sofia's
 - **Music:** `music-lobby.mp3`, `music-bossa.mp3`, `music-roulette.mp3` (all Kevin MacLeod, CC BY 4.0; every sound's source is in `src/sounds/CREDITS.txt`)
 - **Lightning:** `thunder-*`, `spark-*`, `zap-*`, `strike.mp3`, `charge.mp3`
-- **The roulette croupier** (ElevenLabs Sound Effects v2): `wheelhead-*` (his palm on the wheelhead, then the push: `PUSH` in `rgame.mjs` says where), `ball-launch-*`, `rake-*` (one per stroke), `dolly-*`
+- **The roulette croupier** (ElevenLabs Sound Effects v3): `wheelhead-*` (his palm on the wheelhead, then the push: `PUSH` in `rgame.mjs` says where), `ball-launch-*`, `rake-*` (one per stroke), `dolly-*`
 
 ## Next up
 

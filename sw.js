@@ -8,7 +8,7 @@
 // Media (sounds, images, fonts): cache first. They are large and don't change in place: if you
 // replace one under the same name, bump VERSION, or friends who installed the game keep the old one.
 // (A new worker re-fills fresh caches and deletes the old ones when it takes over.)
-const VERSION = '1';
+const VERSION = '2';
 const SHELL = `salon-noir-shell-${VERSION}`, MEDIA = `salon-noir-media-${VERSION}`;
 
 // Fetched as the worker installs, so the first visit is enough to play offline. Anything not listed

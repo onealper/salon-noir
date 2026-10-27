@@ -480,7 +480,7 @@ export async function createRoulette(ctx) {
   }
   // ...and heard: his palm on the wood, then the push. Each take's push (s into wheelhead-1, -2) lands as the wheelhead
   // starts its new turn, T1 into the pre-roll (`pace`: fast play runs it quicker)
-  const PUSH = [.24, .37];
+  const PUSH = [.16, .24];
   function handOnWheel(pre, pace) {
     const k = pick('wheelhead', 2), lead = PUSH[k - 1], t1 = pre.T1 / pace;
     audio.cue(`wheelhead-${k}`, { gain: .45, x: panX(S.wheel.group.position), delay: Math.max(0, t1 - lead), from: Math.max(0, lead - t1) });
