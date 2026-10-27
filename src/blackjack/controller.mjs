@@ -27,7 +27,7 @@ const SPOT_NAME = { main: 'Main bet', ...Object.fromEntries(SIDE_BETS.map(b => [
 const keyOf = spot => spot === 'main' ? 'h0' : spot;
 const maxPays = id => Math.max(...SIDE[id].table.map(r => r[1]));   // the slot's own bet; the Free Bet table repaints the last slot
 // The dealer's lines (both voices), fetched with the salon's sounds.
-const BJ_LINES = ['place-bets', 'dealer-ace', 'insurance', 'blackjack', 'dealer-blackjack', 'dealer-17', 'dealer-18', 'dealer-19', 'dealer-20', 'dealer-21', 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
+const BJ_LINES = ['place-bets', 'dealer-ace', 'insurance', 'even-money', 'blackjack', 'dealer-blackjack', 'dealer-17', 'dealer-18', 'dealer-19', 'dealer-20', 'dealer-21', 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
 
 export function createBlackjack(ctx) {
   const { settings, store, audio, feel, uiSound, sting, take } = ctx;
@@ -369,7 +369,7 @@ export function createBlackjack(ctx) {
       await Promise.all([settleSides(), settleSeatSides(inPlay)]);
       const up = table.upCard;
       if (res === 'insurance') {
-        const even = table.canEvenMoney; dealerSays('dealer-ace', { prio: 2 }).then(() => { if (mode === 'insurance') dealerSays('insurance', { prio: 2 }); });   // the ace, then the offer while you still decide
+        const even = table.canEvenMoney; dealerSays('dealer-ace', { prio: 2 }).then(() => { if (mode === 'insurance') dealerSays(even ? 'even-money' : 'insurance', { prio: 2 }); });   // the ace, then the offer while you still decide (even money on your blackjack)
         setMode('insurance', even);
         const yes = (await choice()) === 'yes' && (even ? table.canEvenMoney : table.canInsure), stake = table.stakes.main;
         setMode('busy');

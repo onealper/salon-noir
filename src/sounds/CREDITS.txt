@@ -33,7 +33,7 @@ for Spader, the game's earlier name). The game adds a small generated room rever
 random pitch and level variation, and stereo placement by table position at play time.
 
 
-The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (133 files)
+The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (136 files)
 ===================================================================
 
 Changes, every kit file: cut to length, levels matched and encoded as MP3 with ffmpeg
@@ -89,13 +89,25 @@ Chip-select thock
 
 Made for Salon Noir with ElevenLabs (https://elevenlabs.io): the owner's own sounds, used
 under ElevenLabs' terms; not openly licensed
-  voice/james-*.mp3 (56 files), voice/sofia-*.mp3 (14 files)
-                      The dealers' voices, James and Sofia (text to speech).
-                      Blackjack calls, both voices: bj-place-bets, bj-insurance,
+  voice/james-*.mp3 (58 files), voice/sofia-*.mp3 (15 files)
+                      The dealers' voices, James and Sofia (text to speech), recorded
+                      again on 2026-10-27 with Eleven v4 in two ElevenLabs library
+                      voices: James is "Jerry B. - British RP | Posh & Refined", Sofia
+                      "Claire - British Classy Mature". Cut to 40 ms before the speech,
+                      speech levelled to -17 dB RMS; the number calls' comma shortened.
+                      Blackjack calls, both voices: bj-place-bets, bj-insurance, bj-even-money,
                       bj-dealer-ace, bj-blackjack, bj-dealer-blackjack, bj-dealer-17..21,
                       bj-dealer-busts, bj-push, bj-nicely-played, bj-new-shoe.
-                      Roulette calls, James: place-bets, no-more-bets, good-luck,
+                      Roulette calls, James: place-bets, last-bets, no-more-bets, good-luck,
                       winning-number, n0..n36 (the numbers), congrats.
+                      The words, as recorded: "Place your bets." "Insurance?" "Even money?"
+                      "Dealer shows an ace." "[warmly] Blackjack!" "Dealer has blackjack."
+                      "Dealer has seventeen." (to twenty-one) "Dealer busts." "Push."
+                      "[warmly] Nicely played." "New shoe. One moment, please." At
+                      roulette: "Place your bets, please." "Last bets, please." "No more
+                      bets." "Good luck, everyone." "The winning number is…" "[warmly]
+                      Congratulations!" and each number with its colour: "Zero, green.",
+                      "Seventeen, black." ([warmly] is an Eleven v4 direction, not said.)
   crowd-cheer-1.mp3, crowd-cheer-2.mp3                  The table cheering a big win.
   win-small-1/2, win-side-1/2, win-blackjack-1/2, win-big-1/2, win-bling, reveal-sting
                       Win stings.

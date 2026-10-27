@@ -34,7 +34,7 @@ File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CRED
 - **Cards and chips:** [Casino Audio](https://kenney.nl/assets/casino-audio) by [Kenney](https://kenney.nl) and ["Card Game sounds"](https://opengameart.org/content/card-game-sounds) by haeldb, CC0
 - **The room:** recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0, mixed into one loop (`room-casino-1.mp3`)
 - **Chip-select thock:** a [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) wood knock with a Kenney clay-chip click, CC0
-- **Dealer voices (James and Sofia), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs
+- **Dealer voices (James and Sofia), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs (the dealers in the library voices "Jerry B." and "Claire", Eleven v4)
 - **The roulette croupier's sounds** (his hand on the wheelhead, the ball's launch, the rake, the dolly): generated for Salon Noir with ElevenLabs Sound Effects v3
 
 ## Images

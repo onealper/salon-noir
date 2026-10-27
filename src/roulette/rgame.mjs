@@ -107,7 +107,7 @@ export async function createRoulette(ctx) {
   const turns = {}, pick = (name, n) => (turns[name] = ((turns[name] ?? Math.floor(Math.random() * n)) + 1) % n) + 1;
   const say = (line, opts) => audio.say(`voice/james-${line}`, opts);
   const numberClip = n => `voice/james-n${n}`;
-  audio.preload([...[1, 2, 3, 4, 5, 6].map(i => `ball-click-${i}`), 'ball-launch-1', 'ball-launch-2', 'wheelhead-1', 'wheelhead-2', 'rake-1', 'rake-2', 'rake-3', 'dolly-1', 'dolly-2', 'voice/james-place-bets', 'voice/james-no-more-bets', 'voice/james-good-luck', 'voice/james-winning-number', 'voice/james-congrats']);   // not the music: it streams (decoded, it would be 17 MB nobody plays)
+  audio.preload([...[1, 2, 3, 4, 5, 6].map(i => `ball-click-${i}`), 'ball-launch-1', 'ball-launch-2', 'wheelhead-1', 'wheelhead-2', 'rake-1', 'rake-2', 'rake-3', 'dolly-1', 'dolly-2', 'voice/james-place-bets', 'voice/james-last-bets', 'voice/james-no-more-bets', 'voice/james-good-luck', 'voice/james-winning-number', 'voice/james-congrats']);   // not the music: it streams (decoded, it would be 17 MB nobody plays)
   // while you place bets: the rolling sound's loops, and the bytes of the 37 numbers (the drawn one is decoded as bets
   // close, so the croupier's call is never late or lost to a slow first fetch)
   if (audio.available) { const go = () => { prepareRoller(audio.ctx); audio.prefetch(WHEEL.map(numberClip)); }; window.requestIdleCallback ? requestIdleCallback(go, { timeout: 3000 }) : setTimeout(go, 1500); }
@@ -491,7 +491,7 @@ export async function createRoulette(ctx) {
   function playSpin(p, f, pre, onCall) {
     return new Promise(done => {
       let roll = { update() {}, stop() {} }; const dur = p.settledAt + .12, evs = p.events, phi0 = phi;
-      let t = -pre.T, last = performance.now(), ev = 0, launched = false, called = false, pushed = false;
+      let t = -pre.T, last = performance.now(), ev = 0, launched = false, warned = false, called = false, pushed = false;
       const pace = f ? 1.25 : 1;   // fast play: the softer throw, run a little quicker
       const fix = () => { p.fixed = true; };
       const tick = now => {
@@ -520,6 +520,7 @@ export async function createRoulette(ctx) {
         // the roll: a smooth whirr that follows the ball, falling in pitch as it slows (made live, see roller.mjs)
         const v = st.speed;
         roll.update({ speed: v, theta: st.theta, phase: st.phase, level: hurry > 1 ? .6 : 1, near: camAz(), pan: Math.max(-.7, Math.min(.7, ballX() / 70)) });
+        if (!warned && t >= p.callAt - (f ? 2.6 : 3.5)) { warned = true; say('last-bets', { prio: 1, fresh: 400 }); }   // "Last bets, please": a few seconds' warning
         if (!called && t >= p.callAt) {   // as it is about to make its last two rounds
           called = true; hush(true); S.mood(true); say('no-more-bets', { prio: 2 }); onCall();   // the room and the music stay down until the number is called: the rattle is heard
           cutTo(hurry === 1 ? 'wheel' : 'push', fix).then(fix);   // (a shot that isn't there makes no dip: the turn is made all the same)

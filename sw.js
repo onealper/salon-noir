@@ -8,7 +8,7 @@
 // Media (sounds, images, fonts): cache first. They are large and don't change in place: if you
 // replace one under the same name, bump VERSION, or friends who installed the game keep the old one.
 // (A new worker re-fills fresh caches and deletes the old ones when it takes over.)
-const VERSION = '2';
+const VERSION = '3';
 const SHELL = `salon-noir-shell-${VERSION}`, MEDIA = `salon-noir-media-${VERSION}`;
 
 // Fetched as the worker installs, so the first visit is enough to play offline. Anything not listed
@@ -22,11 +22,11 @@ const CODE = ['./', 'manifest.webmanifest', 'src/app.css', 'src/fonts.css',
   ...['rgame', 'rules', 'physics', 'replay', 'rscene', 'wheel3d', 'roller'].map(f => `src/roulette/${f}.mjs`),
   ...['three.module.min.js', 'RoomEnvironment.js', 'anime.mjs', 'confetti.mjs', 'torph.mjs', 'web-haptics.mjs', 'cuelume/index.js', 'cuelume/audio/engine.js',
     'cuelume/interactions/bind.js', ...['bubble', 'context', 'mech', 'press', 'recipes', 'themes'].map(f => `cuelume/sounds/${f}.js`)].map(f => `src/vendor/${f}`)];
-const BJ = ['place-bets', 'insurance', 'dealer-ace', 'blackjack', 'dealer-blackjack', ...n('dealer', 17, 18, 19, 20, 21), 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
+const BJ = ['place-bets', 'insurance', 'even-money', 'dealer-ace', 'blackjack', 'dealer-blackjack', ...n('dealer', 17, 18, 19, 20, 21), 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
 const KIT = [...n('ball-click', ...to(6)), ...n('ball-launch', 1, 2), ...n('wheelhead', 1, 2), ...n('rake', ...to(3)), ...n('dolly', 1, 2), ...n('chip-thock', ...to(5)), ...n('crowd-cheer', 1, 2), ...n('spark', ...to(4)), ...n('zap', 1, 2), ...n('thunder', 1, 2, 'mega', 'rumble'),
   'charge', 'strike', 'whoosh', 'reveal-sting', 'win-bling', 'room-casino-1', ...['big', 'blackjack', 'side', 'small'].flatMap(k => n(`win-${k}`, 1, 2)),
   ...n('ui-click', 1, 2), ...['open', 'select', 'toggle'].flatMap(k => n(`ui-${k}`, ...to(4))),
-  ...['james', 'sofia'].flatMap(v => BJ.map(l => `voice/${v}-bj-${l}`)), ...['place-bets', 'no-more-bets', 'good-luck', 'winning-number', 'congrats', ...to(37).map(i => `n${i - 1}`)].map(l => `voice/james-${l}`)];
+  ...['james', 'sofia'].flatMap(v => BJ.map(l => `voice/${v}-bj-${l}`)), ...['place-bets', 'last-bets', 'no-more-bets', 'good-luck', 'winning-number', 'congrats', ...to(37).map(i => `n${i - 1}`)].map(l => `voice/james-${l}`)];
 const WAV = [...n('card-slide', 3, 4, 7, 8), ...n('card-place', ...to(4)), ...n('card-shove', ...to(4)), 'card-fan-1', 'card-shuffle', ...n('chip-lay', ...to(3)), ...n('chips-collide', ...to(4)),
   ...n('chips-handle', 1, 3, 4, 6), ...n('chips-stack', 1, 2, 4, 5, 6), 'hael-draw'];
 const FONTS = [...n('barlow-condensed-latin', '600-normal', '700-normal', '800-normal'), ...n('bodoni-moda-latin', '400-italic', '500-italic', '500-normal', '600-italic', '700-normal'),

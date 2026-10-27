@@ -164,7 +164,7 @@ Settings worth knowing: **Flashing effects** (Full / Soft / Off; Soft by default
 Most AI models can't view the images and audio directly:
 
 - **Cards:** jumbo-index faces are drawn in code (`textures.mjs`); the WebP files are court-card (J/Q/K) art plus the ace of spades (`ace_of_spades_2.webp`). The set in play is `assets/cards/court-belt/`; the top-level J/Q/K files are only the fallback if it fails to load
-- **Dealer voices:** James and Sofia (made with ElevenLabs), e.g. `james-n17.mp3` = calls "17" at roulette, `sofia-bj-dealer-busts.mp3` = blackjack call. Marco deals with James's voice and Elena with Sofia's
+- **Dealer voices:** James and Sofia (made with ElevenLabs: the library voices "Jerry B. - British RP" and "Claire - British Classy Mature", Eleven v4), e.g. `james-n17.mp3` = "Seventeen, black." at roulette, `james-last-bets.mp3` = "Last bets, please." before the call, `sofia-bj-even-money.mp3` = the offer on your blackjack against an ace. Marco deals with James's voice and Elena with Sofia's. A new line must be made in the same voice (the exact wording of every line is in `src/sounds/CREDITS.txt`)
 - **Music:** `music-lobby.mp3`, `music-bossa.mp3` (Kevin MacLeod, CC BY 4.0) and `music-roulette.mp3` (made with ElevenLabs Music: late-night lounge jazz); every sound's source is in `src/sounds/CREDITS.txt`
 - **Lightning:** `thunder-*`, `spark-*`, `zap-*`, `strike.mp3`, `charge.mp3`
 - **The roulette croupier** (ElevenLabs Sound Effects v3): `wheelhead-*` (his palm on the wheelhead, then the push: `PUSH` in `rgame.mjs` says where), `ball-launch-*`, `rake-*` (one per stroke), `dolly-*`
