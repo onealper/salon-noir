@@ -111,6 +111,15 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   };
   let feltMat = feltMaterial(quality);
   const felt = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), feltMat); felt.rotation.x = -Math.PI / 2; felt.receiveShadow = true; table.add(felt);
+  // the cloth beyond the printed layout, over the whole top round the wheel: the same wool, the nap alone (one tile
+  // painted as the layout paints its own), cut to the table in buildTable, with a brass rule at its edge and round the well
+  const NAP = 512 / 24;   // cm a nap tile covers, as the sharpest layout paints it
+  const napTile = (() => { const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d'); g.fillStyle = '#17533a'; g.fillRect(0, 0, 512, 512);
+    if (nap) { g.globalAlpha = .5; g.globalCompositeOperation = 'overlay'; g.drawImage(nap, 0, 0, 512, 512); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / NAP, 1 / NAP); t.anisotropy = aniso; return t; })();
+  const clothMats = new Map(), clothMaterial = q => { const f = feltMaterial(q); if (clothMats.has(f)) return clothMats.get(f);
+    const m = f.clone(); m.map = napTile; if (f.bumpMap) { m.bumpMap = f.bumpMap.clone(); m.bumpMap.repeat.set(1 / NAP, 1 / NAP); m.bumpMap.needsUpdate = true; } clothMats.set(f, m); return m; };
+  const cloth = new THREE.Mesh(new THREE.BufferGeometry(), clothMaterial(quality)); cloth.position.y = -.05; cloth.receiveShadow = true; table.add(cloth);
   const body = new THREE.Group(); table.add(body);
   const hi = new THREE.Group(); table.add(hi);             // highlight tiles over the layout
   const chipsG = new THREE.Group(); table.add(chipsG);
@@ -311,17 +320,25 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     // chip tray cut in beside it, a padded leather armrest round the players' side and the foot, a dark base
     clearGroup(body);
     const cz = (L.zFar + L.zNear) / 2, wx = L.wheelX;
-    const x0T = wx - WELL - 4, x1T = R.x1 + 24, z1T = R.z1 + 25, z0T = Math.min(R.z0 - 6, cz - WELL - 34);
+    const x0T = wx - WELL - 14, x1T = R.x1 + 24, z1T = R.z1 + 25, z0T = Math.min(R.z0 - 14, cz - WELL - 42);   // (room for the cloth round the well and the tray)
     const tray = { x0: wx - 30, x1: wx + 26, z0: cz - WELL - 30, z1: cz - WELL - 7 };
     L.tray = new THREE.Vector3((tray.x0 + tray.x1) / 2, 0, (tray.z0 + tray.z1) / 2);
-    // the top: rounded at the head and the foot, the well and the tray cut out
-    const shape = new THREE.Shape(), rr = 22, P = (x, z) => new THREE.Vector2(x, -z);
-    shape.moveTo(x0T + rr, -z0T); shape.lineTo(x1T - rr, -z0T); shape.absarc(x1T - rr, -(z0T + rr), rr, Math.PI / 2, 0, true);
-    shape.lineTo(x1T, -(z1T - rr)); shape.absarc(x1T - rr, -(z1T - rr), rr, 0, -Math.PI / 2, true);
-    shape.lineTo(x0T + rr * 1.6, -z1T); shape.absarc(x0T + rr * 1.6, -(z1T - rr * 1.6), rr * 1.6, -Math.PI / 2, -Math.PI, true);
-    shape.lineTo(x0T, -(z0T + rr)); shape.absarc(x0T + rr, -(z0T + rr), rr, Math.PI, Math.PI / 2, true);
-    const hole = new THREE.Path(); hole.absarc(wx, -cz, WELL, 0, Math.PI * 2, true); shape.holes.push(hole);
-    shape.holes.push(new THREE.Path([P(tray.x0, tray.z0), P(tray.x0, tray.z1), P(tray.x1, tray.z1), P(tray.x1, tray.z0)]));
+    // the top: rounded at the head and the foot (more at the near corner of the head), drawn d in from its edge; the
+    // well and the tray cut out
+    const rr = 22, P = (x, z) => new THREE.Vector2(x, -z);
+    const outline = (d = 0) => { const a = x0T + d, b = x1T - d, c = z0T + d, e = z1T - d, r = rr - d, r2 = rr * 1.6 - d, sh = new THREE.Shape();
+      sh.moveTo(a + r, -c); sh.lineTo(b - r, -c); sh.absarc(b - r, -(c + r), r, Math.PI / 2, 0, true);
+      sh.lineTo(b, -(e - r)); sh.absarc(b - r, -(e - r), r, 0, -Math.PI / 2, true);
+      sh.lineTo(a + r2, -e); sh.absarc(a + r2, -(e - r2), r2, -Math.PI / 2, -Math.PI, true);
+      sh.lineTo(a, -(c + r)); sh.absarc(a + r, -(c + r), r, Math.PI, Math.PI / 2, true); return sh; };
+    const cut = (sh, well) => { const hole = new THREE.Path(); hole.absarc(wx, -cz, well, 0, Math.PI * 2, true); sh.holes.push(hole);
+      sh.holes.push(new THREE.Path([P(tray.x0, tray.z0), P(tray.x0, tray.z1), P(tray.x1, tray.z1), P(tray.x1, tray.z0)])); return sh; };
+    const shape = cut(outline(), WELL);
+    // the cloth: the whole top inside a rim of wood, cut round the well a little wide; under it a brass sheet a little
+    // larger, showing as a fine rule at the cloth's edge and a ring round the wheel. (The armrest lies over its edge.)
+    const RIM = 5, flat = (sh, y) => { const g = new THREE.ShapeGeometry(sh, 48); g.rotateX(-Math.PI / 2); g.translate(0, y, 0); return g; };
+    cloth.geometry.dispose(); cloth.geometry = flat(cut(outline(RIM), WELL + 1.2), 0);
+    const rule = new THREE.Mesh(flat(cut(outline(RIM - .7), WELL - .2), -.15), brass); rule.receiveShadow = true; body.add(rule);
     const topGeo = new THREE.ExtrudeGeometry(shape, { depth: 12, bevelEnabled: true, bevelThickness: .8, bevelSize: .8, bevelSegments: 3, curveSegments: 64 }); topGeo.rotateX(-Math.PI / 2); topGeo.translate(0, -13.1, 0);
     const top = new THREE.Mesh(topGeo, walnut); top.receiveShadow = true; top.castShadow = true; body.add(top);
     const dark = new THREE.MeshStandardMaterial({ color: '#0b0908', roughness: .9, side: THREE.BackSide });
@@ -340,9 +357,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
         m.position.set(tray.x0 + 2 + gap * (i + .5), -6.2 + cr, L.tray.z); m.receiveShadow = true; body.add(m);
       }
     }
-    // a brass rule round the cloth
-    const tx0 = wx + 47, trim = new THREE.Mesh(new THREE.BoxGeometry(R.x1 - tx0 + .6, .5, R.z1 - R.z0 + .6), brass); trim.position.set((tx0 + R.x1) / 2, -.3, felt.position.z); body.add(trim);
-    // the armrest: a padded leather roll 22 cm wide, along the players' side, round the foot and a little way up the croupier's side
+    // the armrest: a padded leather roll 22 cm wide, along the players' side and round the foot, each end rounded
     { const half = 11, hgt = 9.5, rc = 18, prof = [];
       prof.push([-half, 0], [half, 0]);
       for (let k = 0; k <= 8; k++) { const a = k / 8 * Math.PI / 2; prof.push([half - 4.6 + 4.6 * Math.cos(a), hgt - 4.6 + 4.6 * Math.sin(a)]); }
@@ -361,12 +376,14 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       const inCm = (g, pts, around) => { let len = 0; for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getY(k) * len, uv.getX(k) * around); return g; };
       const corner = (cx, cz2, phi0) => { const g = inCm(new THREE.LatheGeometry(prof.concat([prof[0]]).map(([o, y]) => new THREE.Vector2(rc + o, y)), 24, phi0, Math.PI / 2), prof.concat([prof[0]]), rc * Math.PI / 2); const m = new THREE.Mesh(g, leather); m.material = leather; m.position.set(cx, y0, cz2); m.castShadow = m.receiveShadow = true; body.add(m); };
       const xs = wx + 50;
-      { const halfP = prof.filter(([o]) => o >= 0).sort((a, b) => a[1] - b[1] || b[0] - a[0]); const capP = [[0, 0], ...halfP, [0, hgt]], capG = inCm(new THREE.LatheGeometry(capP.map(([o, y]) => new THREE.Vector2(o, y)), 20, Math.PI, Math.PI), capP, half * Math.PI / 2); const m = new THREE.Mesh(capG, leather); m.position.set(xs, y0, zP); m.castShadow = true; body.add(m); }   // the near end, rounded
+      const halfP = prof.filter(([o]) => o >= 0).sort((a, b) => a[1] - b[1] || b[0] - a[0]), capP = [[0, 0], ...halfP, [0, hgt]];
+      const cap = (x, z) => { const m = new THREE.Mesh(inCm(new THREE.LatheGeometry(capP.map(([o, y]) => new THREE.Vector2(o, y)), 20, Math.PI, Math.PI), capP, half * Math.PI / 2), leather); m.position.set(x, y0, z); m.castShadow = m.receiveShadow = true; body.add(m); };   // an end, rounded off toward the head
+      cap(xs, zP);                                                // the near end
       straight(xF - rc - xs, 'x', xs, zP);                       // along the players' side
       corner(xF - rc, zP - rc, 0);                                // round the near corner of the foot
       straight((zP - rc) - (zD + rc), 'z', xF, zD + rc);          // across the foot
       corner(xF - rc, zD + rc, Math.PI / 2);                      // round the far corner
-      straight(xF - rc - (R.x1 - 34), 'x', R.x1 - 34, zD);         // a short way up the croupier's side
+      cap(xF - rc, zD);                                           // and it ends there: the croupier's side is his
     }
     // what holds it up, as at the blackjack table: a lacquered apron under the top with two lines of warm light round it,
     // a pedestal set well back, and a low plinth with a brass edge and a line of light at its foot that lies warm on the
@@ -691,14 +708,16 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
       f.still = true; tickers.add(f); requestRender(false);   // only the camera moves: the shadows stand
     });
   }
-  function frame(w, h, top = 0) {
+  // the canvas is w x h; the picture is framed for the part of it between `top` (the bar, the strip of numbers) and
+  // `bottom` (the dock, which the canvas runs on under, blurred)
+  function frame(w, h, top = 0, bottom = 0) {
     st.size(w, h);
-    const vh = Math.max(1, h - top); view.w = w; view.h = vh; view.top = top;
+    const vh = Math.max(1, h - top - bottom); view.w = w; view.h = vh; view.top = top;
     camera.clearViewOffset(); camera.aspect = w / vh;
     const orient = w / vh < .9 ? 'port' : 'land';
     if (!L || L.orient !== orient) buildTable(orient);
     computeShots();
-    view.h = h; if (top > 0) camera.setViewOffset(w, vh, 0, -top, w, h);
+    view.h = h; if (top > 0 || bottom > 0) camera.setViewOffset(w, vh, 0, -top, w, h);
     if (show.on) placeShowcase(performance.now()); else if (current) setPose(shots[current.name] ?? shots.seat);
     requestRender();
   }
@@ -756,6 +775,7 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
   function setQuality(q) {
     const was = quality; quality = q; st.setQuality(q);
     const m = feltMaterial(q); if (m !== feltMat) { m.map = feltMat.map; feltMat.map = null; feltMat = felt.material = m; m.needsUpdate = true; }
+    cloth.material = clothMaterial(q);
     if (q.felt !== was.felt && L) repaintLayout();
     setChipDetail(q.chipSegments); swapChipGeometry(scene); requestRender();
   }

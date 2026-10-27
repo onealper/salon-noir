@@ -750,10 +750,12 @@ body:not([data-room="roulette"]) .rstage, body:not([data-room="roulette"]) .rdoc
 body[data-room="roulette"] .shoe-meter { display: none; }
 body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flying .rdock, body.flying .r-overlay, body.flying .r-hint { opacity: 0; pointer-events: none; }
 .rdock, .r-overlay, .r-hint { transition: opacity .5s var(--ease); }
-.rcanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+/* the picture runs on under a dock along its foot (--under: the dock's height, set as the room frames itself) */
+.rstage { overflow: visible; }
+.rcanvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; touch-action: none; }
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* the room falls away into the dark round the table, as under its pendants */
-.r-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 95% at 50% 58%, transparent 52%, rgba(5, 4, 3, .38) 82%, rgba(5, 4, 3, .62) 100%); }
+.r-vignette { position: absolute; inset: 0 0 calc(-1 * var(--under, 0px)); pointer-events: none; background: radial-gradient(120% 95% at 50% 58%, transparent 52%, rgba(5, 4, 3, .38) 82%, rgba(5, 4, 3, .62) 100%); }
 .r-fade { position: absolute; inset: 0; background: #050505; opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 2; }
 .r-fade.on { opacity: 1; }
 .r-hint, body[data-table] .r-hint { top: auto; bottom: 12px; }   /* beat the blackjack tables' hint placement, which may still be on the body */
@@ -877,6 +879,24 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 
 /* the dock */
 .rdock { display: flex; align-items: center; justify-content: center; gap: 14px 18px; flex-wrap: wrap; }
+/* A progressive blur in place of the solid bar: the table goes on under the controls, softening by degrees toward the
+   foot (each layer twice the blur of the one before, faded in a step further down), with a shade over it so the
+   controls keep their contrast. Not in the side column of a phone on its side, nor on the battery saver. */
+.r-blur { display: none; }
+@media not ((orientation: landscape) and (max-height: 520px)) {
+  .rdock { background: none; border-top: 0; }
+  .r-blur { display: block; position: absolute; left: 0; right: 0; top: -40px; bottom: 0; z-index: -1; pointer-events: none;
+    background: linear-gradient(rgba(11, 11, 12, 0), rgba(11, 11, 12, .42) 34%, rgba(11, 11, 12, .72) 70%, rgba(11, 11, 12, .86)); }
+  .r-blur i { position: absolute; inset: 0; --m: linear-gradient(transparent var(--a), #000 var(--c));
+    -webkit-backdrop-filter: blur(var(--b)); backdrop-filter: blur(var(--b)); -webkit-mask-image: var(--m); mask-image: var(--m); }
+  .r-blur i:nth-child(1) { --b: 1px; --a: 0%; --c: 18%; }
+  .r-blur i:nth-child(2) { --b: 2.5px; --a: 9%; --c: 30%; }
+  .r-blur i:nth-child(3) { --b: 5px; --a: 20%; --c: 44%; }
+  .r-blur i:nth-child(4) { --b: 10px; --a: 32%; --c: 60%; }
+  .r-blur i:nth-child(5) { --b: 18px; --a: 46%; --c: 78%; }
+  .rdock[data-q="saver"] .r-blur i { display: none; }
+  .rdock[data-q="saver"] .r-blur { background: linear-gradient(rgba(11, 11, 12, 0), rgba(11, 11, 12, .8) 40%, #0b0b0c 75%); }
+}
 .rdock .bet-actions { grid-template-areas: 'u c s d'; }
 #rUndo { grid-area: u; } #rClear { grid-area: c; } #rRebet, #rX2 { grid-area: s; justify-self: stretch; justify-content: center; } #rSpin { grid-area: d; }
 .r-tools { display: flex; gap: 8px; }
