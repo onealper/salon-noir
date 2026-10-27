@@ -105,6 +105,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   const brass = brassMaterial();
   table.add(new THREE.Mesh(new THREE.TubeGeometry(arc(R - .3, .35), 200, .42, 10, false), brass));
   const lip = new THREE.Mesh(new THREE.BoxGeometry(2 * R + 22, 1.1, 1.4), brass); lip.position.set(0, .2, EDGE_Z - .7); table.add(lip);
+  table.add(tableBase({ brass, floorY: FLOOR_Y }));   // what holds it up, seen from the lobby
 
   // ---- betting positions: the main circle printed on the cloth; the six side bets as raised
   // medallions set in a recessed band that hugs it ---------------------------------------------
@@ -477,6 +478,41 @@ function buildShoe({ stackTex, glass, light = () => 1 }) {
 class ArcXZ extends THREE.Curve {
   constructor(r, y) { super(); this.r = r; this.y = y; }
   getPoint(t, out = new THREE.Vector3()) { const a = Math.PI * t; return out.set(-Math.cos(a) * this.r, this.y, EDGE_Z + Math.sin(a) * this.r); }
+}
+// The table below its top, down to the carpet: a lacquered apron under the rail with two lines of warm light run round it
+// and brass at its foot; set back beneath it a pedestal, its top washed by the light from under the apron; and a plinth
+// on the floor, edged in brass, with a line of light at its foot throwing a warm pool onto the carpet. All of it follows
+// the table's half round, closed flat on the dealer's side. The lines are lit, not lights: they glow as they are, the
+// house lights up or down.
+function tableBase({ brass, floorY }) {
+  const g = new THREE.Group(), HALF = [-Math.PI / 2, Math.PI];   // (a cylinder's theta: the half toward the players)
+  const lacquer = new THREE.MeshPhysicalMaterial({ color: '#17120e', roughness: .38, metalness: 0, clearcoat: .8, clearcoatRoughness: .12 });
+  const glow = new THREE.MeshBasicMaterial({ color: '#ffd9a6', toneMapped: false });
+  const shell = (r, h, y, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 160, 1, true, ...HALF), mat); m.position.set(0, y, EDGE_Z); g.add(m); return m; };
+  const back = (w, h, y, mat) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.rotation.y = Math.PI; m.position.set(0, y, EDGE_Z); g.add(m); };
+  const under = (r0, r1, y, mat) => { const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 160, 1, 0, Math.PI), mat); m.rotation.x = Math.PI / 2; m.position.set(0, y, EDGE_Z); g.add(m); };
+  // the apron: from under the top (-10) to -27
+  const RA = R + 4, RP = 64, RB = 74, A0 = -10, A1 = -27, P1 = floorY + 4;
+  shell(RA, A0 - A1, (A0 + A1) / 2, lacquer); back(2 * RA, A0 - A1, (A0 + A1) / 2, lacquer); under(RP, RA, A1, lacquer);
+  for (const y of [-14.5, -21.5]) shell(RA + .15, .45, y, glow);
+  shell(RA + .3, 1.2, A1 + .6, brass);
+  // the pedestal, its top in the apron's light
+  const wash = document.createElement('canvas'); wash.width = 4; wash.height = 128; const w = wash.getContext('2d'), grad = w.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#fff'); grad.addColorStop(.35, '#3a3a3a'); grad.addColorStop(1, '#000'); w.fillStyle = grad; w.fillRect(0, 0, 4, 128);
+  const washTex = new THREE.CanvasTexture(wash); washTex.colorSpace = THREE.SRGBColorSpace;
+  const pedestal = new THREE.MeshStandardMaterial({ color: '#100d0b', roughness: .55, emissive: '#ffcf96', emissiveMap: washTex, emissiveIntensity: .32 });
+  shell(RP, A1 - P1, (A1 + P1) / 2, pedestal); back(2 * RP, A1 - P1, (A1 + P1) / 2, pedestal);
+  // the plinth, its brass edge and the line of light at its foot
+  const plinth = new THREE.Mesh(extrudeHalfDisc(RB, 4), lacquer); plinth.position.set(0, P1, EDGE_Z); g.add(plinth);
+  shell(RB + .12, 1, P1 - .6, brass); shell(RB + .2, .4, floorY + .5, glow);
+  // its light on the carpet: a warm pool round the plinth, strongest at its edge
+  const pool = document.createElement('canvas'); pool.width = pool.height = 256; const q = pool.getContext('2d'), rg = q.createRadialGradient(128, 128, 0, 128, 128, 128), k = RB / (RB + 34);
+  rg.addColorStop(0, 'rgba(255,200,140,0)'); rg.addColorStop(k - .01, 'rgba(255,200,140,0)'); rg.addColorStop(k, 'rgba(255,205,150,.9)'); rg.addColorStop(k + (1 - k) * .3, 'rgba(255,190,130,.35)'); rg.addColorStop(1, 'rgba(255,180,120,0)');
+  q.fillStyle = rg; q.fillRect(0, 0, 256, 256);
+  const light = new THREE.Mesh(new THREE.CircleGeometry(RB + 34, 96, Math.PI, Math.PI), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pool), transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  light.rotation.x = -Math.PI / 2; light.position.set(0, floorY + .15, EDGE_Z); light.renderOrder = 1; g.add(light);
+  g.traverse(o => { if (o.isMesh && o.material !== glow && o !== light) o.receiveShadow = true; });
+  return g;
 }
 function extrudeHalfDisc(r, depth) {
   const s = new THREE.Shape(); s.absarc(0, 0, r, 0, Math.PI, false); s.lineTo(r, 0);

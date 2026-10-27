@@ -106,7 +106,8 @@ src/                       All code, styles, fonts, sounds and libraries
   scene/
     stage.mjs              What both 3D rooms share: renderer, render loop, frame-time watcher, quality presets,
                            lost-context handling, leather and brass, the salon as glass reflects it (salonEnvironment)
-    world.mjs              Blackjack 3D table and seated camera; the clear acrylic shoe (after real 8-deck shoes: a lidded
+    world.mjs              Blackjack 3D table and seated camera; what holds the table up (tableBase: a lacquered apron with
+                           lines of warm light, a pedestal, a brass-edged plinth lighting the carpet); the clear acrylic shoe (after real 8-deck shoes: a lidded
                            trough climbing to its back on a frosted floor, the weight on steel wheels behind the cards, a
                            frosted chin, and in the tongue the card reader: a slot window with a red light guide that brightens
                            as each card goes over it), and the matching discard holder
