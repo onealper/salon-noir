@@ -60,10 +60,10 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a', st
   }), false);
   speck.wrapS = speck.wrapT = THREE.RepeatWrapping; speck.repeat.set(48, 3);
   const trackGeo = lathe(TRACK.filter((_, i) => i % 3 === 0 || i === TRACK.length - 1));
-  // with `stone` (assets/roulette/stone.webp), the stone itself: black granite with silver flecks, a picture to every 9 cm
-  // of track (the track runs about 240 cm round and 5.8 cm across its flare)
+  // with `stone` (assets/roulette/stone.webp), the stone itself: black galaxy granite, silver and gold flecks, a 2048 px
+  // picture to every 17 cm of track (the track runs about 240 cm round, a whole number of pictures, and 5.8 cm across its flare)
   let grain = null;
-  if (stone) { grain = new THREE.Texture(stone); grain.colorSpace = THREE.SRGBColorSpace; grain.wrapS = grain.wrapT = THREE.RepeatWrapping; grain.repeat.set(27, .64); grain.anisotropy = aniso; grain.needsUpdate = true; }
+  if (stone) { grain = new THREE.Texture(stone); grain.colorSpace = THREE.SRGBColorSpace; grain.wrapS = grain.wrapT = THREE.RepeatWrapping; grain.repeat.set(14, .34); grain.anisotropy = aniso; grain.needsUpdate = true; }
   const track = new THREE.Mesh(trackGeo, shine(new THREE.MeshPhysicalMaterial({ color: grain ? '#ffffff' : '#0c0c0d', map: grain, roughness: .5, roughnessMap: speck, metalness: 0, clearcoat: .85, clearcoatRoughness: .06, envMapIntensity: 1.1,
     aoMap: ramp([[0, .6], [.15, .95], [.88, 1], [1, .5]]) })));
   track.material.side = THREE.DoubleSide; wheel.add(track);
