@@ -88,10 +88,11 @@ export const SECTIONS = {
 
 // ---- the table ---------------------------------------------------------------------------------------
 // Your chips on the layout, spot by spot, with undo (a call bet undoes as one), rebet and double. The
-// balance lives in the wallet: `bank` reads and writes it.
+// balance lives in the wallet: `bank` reads and writes it. A Lightning table (roulette/lightning.mjs) prices an
+// unstruck straight-up lower (`straight`, to 1) and plays no la partage.
 export class RouletteTable {
-  constructor({ bank, random = Math.random } = {}) {
-    this.bank = bank; this.random = random;
+  constructor({ bank, random = Math.random, straight = KINDS.straight.pays, partage = true } = {}) {
+    this.bank = bank; this.random = random; this.straight = straight; this.partage = partage;
     this.bets = new Map();     // spot id → chip values, in the order placed
     this.history = [];         // each gesture: [[spot, value], ...]
     this.last = null;          // the layout of the last spin, for Rebet
@@ -139,19 +140,20 @@ export class RouletteTable {
   // Bets close: the stake leaves the balance.
   close() { if (this.phase !== 'betting' || !this.bets.size || this.total > this.balance) return false; this.phase = 'spinning'; this.staked = this.total; this.last = this.layout(); this.bank.set(this.balance - this.staked); return true; }
   // Settle on the winning number: each spot wins or loses whole, except la partage: on zero, red, black, odd, even,
-  // 1-18 and 19-36 lose half and the other half comes back (`back` on that loss). Returns the wins, the losses,
-  // what came back on zero (`partage`) and the net.
-  settle(n) {
+  // 1-18 and 19-36 lose half and the other half comes back (`back` on that loss). At a Lightning table `struck`
+  // (number → multiplier) prices a straight-up on a struck number at its multiplier (`x` on that win). Returns the
+  // wins, the losses, what came back on zero (`partage`) and the net.
+  settle(n, struck = null) {
     if (this.phase !== 'spinning') return null;   // only a spin whose bets closed is paid
     const wins = [], losses = []; let back = 0, partage = 0;
     for (const [id, vs] of this.bets) {
       const s = SPOTS.get(id), stake = vs.reduce((a, b) => a + b, 0);
-      if (s.nums.includes(n)) { const pay = stake * s.pays; wins.push({ id, stake, pay, kind: s.kind }); back += stake + pay; }
-      else if (n === 0 && s.kind === 'even') { const half = stake / 2; losses.push({ id, stake, kind: s.kind, back: half }); back += half; partage += half; }
+      if (s.nums.includes(n)) { const x = s.kind === 'straight' ? struck?.get(n) : undefined, pay = stake * (x ?? (s.kind === 'straight' ? this.straight : s.pays)); wins.push({ id, stake, pay, kind: s.kind, ...(x ? { x } : {}) }); back += stake + pay; }
+      else if (n === 0 && s.kind === 'even' && this.partage) { const half = stake / 2; losses.push({ id, stake, kind: s.kind, back: half }); back += half; partage += half; }
       else losses.push({ id, stake, kind: s.kind });
     }
     this.bank.set(this.balance + back);
-    const r = { n, color: colorOf(n), staked: this.staked, back, net: back - this.staked, wins, losses, partage, straight: wins.some(w => w.kind === 'straight') };
+    const r = { n, color: colorOf(n), staked: this.staked, back, net: back - this.staked, wins, losses, partage, straight: wins.some(w => w.kind === 'straight'), x: wins.find(w => w.x)?.x ?? 0 };
     this.bets.clear(); this.history = []; this.phase = 'betting'; return r;
   }
   // A spin that couldn't finish hands the stake back; the chips stay on the layout as they were.
