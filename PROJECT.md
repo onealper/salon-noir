@@ -105,8 +105,10 @@ src/                       All code, styles, fonts, sounds and libraries
     feel.mjs               Haptics, synthesised UI cues, confetti
   scene/
     stage.mjs              What both 3D rooms share: renderer, render loop, frame-time watcher, quality presets,
-                           lost-context handling, leather and brass
-    world.mjs              Blackjack 3D table and seated camera
+                           lost-context handling, leather and brass, the salon as glass reflects it (salonEnvironment)
+    world.mjs              Blackjack 3D table and seated camera; the clear acrylic shoe (after a real 8-deck shoe: a trough
+                           climbing to its back, a frame round the front card, a tray for a tongue) with a card reader at the
+                           mouth that lights as each card is drawn, and the matching discard holder
     view.mjs               Dealer choreography: how cards and chips move
     pieces.mjs             Card and chip objects plus a small motion engine
     textures.mjs           Canvas-drawn card faces, felt layout, chips

@@ -156,9 +156,11 @@ export function setFaceDetail(k = 1) {
 }
 // Card edges seen in a stack: paper-white with a fine line per card. Standing cards (the shoe)
 // stripe across u; cards lying flat (the discard holder) stripe across v.
+// The edges of a stack of cards: one ivory band a card (16 to the tile, which the shoe repeats twice a centimetre), each a
+// shade apart, with a fine shadow between.
 export function edgeTexture(standing = true) {
-  const c = canvas(standing ? 256 : 64, standing ? 64 : 256), ctx = c.getContext('2d'); ctx.fillStyle = '#ebe8e1'; ctx.fillRect(0, 0, c.width, c.height);
-  for (let i = 0; i < 256; i += 4) { ctx.fillStyle = `rgba(92,90,86,${.2 + Math.random() * .22})`; standing ? ctx.fillRect(i, 0, 1, 64) : ctx.fillRect(0, i, 64, 1); }
+  const c = canvas(standing ? 256 : 64, standing ? 64 : 256), ctx = c.getContext('2d'); ctx.fillStyle = '#8f897d'; ctx.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 256; i += 16) { ctx.fillStyle = `hsl(40, 22%, ${80 + Math.random() * 7}%)`; standing ? ctx.fillRect(i, 0, 14.6, 64) : ctx.fillRect(0, i, 64, 14.6); }
   return texture(c, { repeat: true });
 }
 

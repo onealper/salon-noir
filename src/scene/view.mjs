@@ -218,7 +218,7 @@ export class TableView {
     const D = this.dealer, atSpot = D.flip === 'spot' && !hidden;   // turned over where it lands
     const faceDown = hidden || atSpot;
     if (!this.front || this.front.userData.card !== card) this.stageFront(card);
-    const m = this.front; this.front = null; this.T.attach(m);
+    const m = this.front; this.front = null; this.T.attach(m); this.world.shoe.read?.();   // out over the reader at the mouth
     const q0 = m.quaternion.clone(), p0 = m.position.clone(), exit = this.shoeToTable(this.world.shoe.exitPose()), pE = exit.pos;
     const tgt = this.anchor(owner, i, turn), total = (owner === 'dealer' ? TIMING.dealDealer : TIMING.dealPlayer) * D.speed;
     // a less exact hand lands a touch off the mark and off square
@@ -266,7 +266,7 @@ export class TableView {
   // After a new shoe the first card is burned: out face down, straight into the discard holder.
   async burn(card, next) {
     if (!this.front || this.front.userData.card !== card) this.stageFront(card);
-    const m = this.front; this.front = null; this.T.attach(m);
+    const m = this.front; this.front = null; this.T.attach(m); this.world.shoe.read?.();   // out over the reader at the mouth
     const p0 = m.position.clone(), q0 = m.quaternion.clone(), exit = this.shoeToTable(this.world.shoe.exitPose());
     const d = this.world.discard.group; d.updateMatrixWorld();
     const into = V(0, this.world.discard.topY() + .3, 0).applyMatrix4(d.matrix), qD = cardQuat(d.rotation.y + Math.PI / 2, 0);

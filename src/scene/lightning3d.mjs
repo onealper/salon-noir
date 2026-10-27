@@ -8,7 +8,7 @@
 //    over the cloth and sparks thrown up;
 //  - while a multiplier waits on your bet, an arc of live current runs round your circle;
 //  - before the board is struck the air charges: static jumps over the brass lip, the shoe and the chips in the rack.
-import { EDGE_Z, LAYOUT } from './world.mjs';
+import { EDGE_Z, LAYOUT, SHOE } from './world.mjs';
 
 export const GROUND_Z = EDGE_Z + 44;                        // where the board's bolts ground: the printed band in front of the dealer
 
@@ -322,8 +322,8 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
   const V = (x, y, z) => new THREE.Vector3(x, y, z), side = () => Math.random() < .5 ? -1 : 1;
   const SITES = [
     () => { const a = V(rnd(-100, 100), .85, EDGE_Z - .7); return [a, a.clone().add(V(side() * rnd(3, 10), rnd(0, .3), 0))]; },             // the brass lip
-    () => { const z = side() * 5.1, x = rnd(10, 26), s = world.shoe.group;   // the shoe: along its lid's edges, down its back corners (not across: that runs at the seat)
-      return (Math.random() < .7 ? [V(x, 10.9, z), V(x + rnd(3, 6), 10.9, z + rnd(-.3, .3))] : [V(31.1, 10.9, z), V(31.1, rnd(4, 8), z)]).map(p => s.localToWorld(p)); },
+    () => { const z = side() * SHOE.wid / 2, x = rnd(SHOE.top, SHOE.len - 5), x2 = x + rnd(3, 5), s = world.shoe.group;   // the shoe: along its walls' top edges, down its back corners (not across: that runs at the seat)
+      return (Math.random() < .7 ? [V(x, SHOE.topAt(x) + .1, z), V(x2, SHOE.topAt(x2) + .1, z + rnd(-.3, .3))] : [V(SHOE.len, SHOE.hgt + .1, z), V(SHOE.len, rnd(2, SHOE.hgt - 1.5), z)]).map(p => s.localToWorld(p)); },
     () => { const i = Math.floor(rnd(0, 9)), z = LAYOUT.rack.z + rnd(-2.6, 2.2); return [V(LAYOUT.rack.x - 21.6 + i * 4.8, 3.7, z), V(LAYOUT.rack.x - 16.8 + i * 4.8, 3.7, z + rnd(-1.5, 1.5))]; },   // chip to chip
   ];
   const arcMat = ribbonMat(); arcMat.uniforms.uLead.value = 2; arcMat.uniforms.uI.value = 1;

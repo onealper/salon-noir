@@ -30,6 +30,21 @@ export function roomEnvironment(renderer, blur = .04) {
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment(), rt = pmrem.fromScene(room, blur);
   pmrem.dispose(); room.dispose(); return rt.texture;
 }
+// The salon as its glass sees it, for the clear things at a table (the shoe, the discard holder) to reflect the room they
+// stand in rather than the studio of the shared environment: the room's picture all round at eye level, a dark ceiling
+// and floor, and the warm pendant over the table overhead, far brighter than white (the map keeps it). Made from the
+// picture, once (again after a lost context); null without it.
+export function salonEnvironment(renderer, img, { lamp = '#ffd9a8', power = 14 } = {}) {
+  if (!img) return null;
+  const scene = new THREE.Scene(), tex = new THREE.Texture(img), H = Math.PI * 10 * img.height / img.width;
+  tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = THREE.MirroredRepeatWrapping; tex.repeat.x = 2; tex.needsUpdate = true;
+  scene.add(new THREE.Mesh(new THREE.CylinderGeometry(10, 10, H, 64, 1, true), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide })));
+  const disc = (r, y, color) => { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })); m.rotation.x = Math.PI / 2; m.position.y = y; scene.add(m); };
+  disc(10, H / 2, '#0d0b09'); disc(10, -H / 2, '#0a0a0a'); disc(1.6, H / 2 - .01, new THREE.Color(lamp).multiplyScalar(power));
+  const pmrem = new THREE.PMREMGenerator(renderer), rt = pmrem.fromScene(scene, .015);
+  pmrem.dispose(); tex.dispose(); scene.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
+  return rt.texture;
+}
 // iOS drops WebGL contexts under memory pressure and in the background. three rebuilds its own state and
 // re-uploads every texture that has an image; `restored` remakes what has none (the environment maps) and
 // redraws. If the browser never gives the context back, the page offers a reload.
