@@ -8,17 +8,23 @@ import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 // Rendering detail per device class, dearest first (Sharp, Balanced, Battery saver). 'auto' picks one;
 // the frame-time watcher can step down.
 export const QUALITY = {
-  // ratio: the most device pixels drawn per CSS pixel. mpx: a budget for the whole canvas, in megapixels:
-  // an iPhone's 3x screen at 3x is 2.25 times the work of 2x for a picture the eye can't tell apart.
+  // ratio: the most device pixels drawn per CSS pixel. mpx: a budget for the whole canvas, in megapixels.
+  // On an iPhone's 3x screen a 2x picture is stretched by half again, and that softness, not jagged edges, is most of
+  // what it loses (measured against a supersampled frame: the busiest detail is about half as far off at 3x, and at
+  // the 2.7x the 2.4 MP budget allows on a 6.1" phone it recovers most of that). Desktops stay at their own 2x.
   // felt: the largest painted cloth (px); face: card faces at this share of 512 px wide.
-  high: { name: 'high', ratio: 2, shadow: 2048, soft: true, felt: 4096, chipSegments: 48, face: 1 },
-  phone: { name: 'phone', ratio: 2, mpx: 2.4, shadow: 1024, soft: true, felt: 2048, chipSegments: 40, face: .5 },
+  high: { name: 'high', ratio: 3, shadow: 2048, soft: true, felt: 4096, chipSegments: 48, face: 1 },
+  phone: { name: 'phone', ratio: 3, mpx: 2.4, shadow: 1024, soft: true, felt: 2048, chipSegments: 40, face: .5 },
   saver: { name: 'saver', ratio: 1.5, mpx: 1.2, shadow: 1024, soft: false, felt: 1024, chipSegments: 28, face: .5 },
 };
 // The device pixels per CSS pixel a w x h canvas gets under a preset (and the watcher's cap).
 export const pixelRatio = (q, w, h, cap = q.ratio) => Math.min(devicePixelRatio || 1, cap, q.mpx ? Math.sqrt(q.mpx * 1e6 / Math.max(1, w * h)) : Infinity);
-// Multisampling is for 1x screens: at 2x and up its edges are invisible and it costs most of the framebuffer.
-export const glOptions = q => ({ antialias: (devicePixelRatio || 1) < 2, powerPreference: q.name === 'high' ? 'high-performance' : 'default' });
+// Multisampling (4x) smooths the edges of the geometry, not the textures: on a 2x desktop it takes about a quarter
+// off the error at the wheel's frets and pockets and the chips' rims, so the Sharp preset has it at any density, and
+// every 1x screen has it. The Balanced preset draws a phone at a fractional ratio stretched to the screen, where it
+// measurably adds nothing, and the battery saver goes without. It is chosen with the context, at load: a preset
+// changed in Settings keeps the multisampling the page started with.
+export const glOptions = q => ({ antialias: q.name === 'high' || (devicePixelRatio || 1) < 2, powerPreference: q.name === 'high' ? 'high-performance' : 'default' });
 // A room environment for reflections, made once; the generator and the room it was rendered from are freed.
 export function roomEnvironment(renderer, blur = .04) {
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment(), rt = pmrem.fromScene(room, blur);
@@ -108,7 +114,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // Frame-time watch: while things move, compare each frame with the display's own refresh (the
   // shortest recent interval - 8, 16 or 33 ms), so a 30 Hz screen or Low Power Mode is not mistaken
   // for a slow GPU. Only frames that miss well behind it count. After a stretch of mostly late
-  // frames, draw a quarter fewer pixels per CSS pixel (never below one less than the tier's own);
+  // frames, draw a quarter fewer pixels per CSS pixel (never below one);
   // after a few smooth stretches, step back up.
   let last = 0, late = 0, frames = 0, base = 1e9, good = 0;
   function watch(t) {
@@ -116,7 +122,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
     const dt = t - last; last = t; if (dt > 250) return;
     frames++; base = Math.min(base * 1.002, dt); if (dt > base * 1.7) late++;
     if (frames < 90) return;
-    const floor = Math.max(1, quality.ratio - 1), now = ratio();   // steps start from what is drawn (the pixel budget may already hold it under the cap)
+    const floor = 1, now = ratio();   // steps start from what is drawn (the pixel budget may already hold it under the cap)
     if (late > 45 && now > floor) { ratioCap = Math.max(floor, now - .25); good = 0; resize(); }
     else if (late < 5 && ratioCap < quality.ratio && ++good >= 3) { ratioCap = Math.min(quality.ratio, ratioCap + .25); good = 0; resize(); }
     frames = late = 0;

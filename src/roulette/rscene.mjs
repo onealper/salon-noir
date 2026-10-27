@@ -427,13 +427,13 @@ export function createRouletteScene(canvas, { quality = detectQuality() } = {}) 
     g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = '600 30px Inter, sans-serif'; g.fillText('SALON NOIR', m, m - 26); g.font = '700 26px Inter, sans-serif'; g.fillText('ROULETTE', m, m + 22);
     g.fillRect(m - 40, m - 2, 80, 3);
-    const face = new THREE.CanvasTexture(c); face.colorSpace = THREE.SRGBColorSpace;
+    const face = new THREE.CanvasTexture(c); face.colorSpace = THREE.SRGBColorSpace; face.anisotropy = aniso;   // (seen edge-on across the cloth)
     // the rim: u runs once round the chip from the face's angle 0 (as chipEdgeTexture lines its spots up)
     const r = document.createElement('canvas'); r.width = 1024; r.height = 32; const e = r.getContext('2d');
     e.fillStyle = color; e.fillRect(0, 0, 1024, 32); e.fillStyle = '#f3eee2';
     for (let i = 0; i <= n; i++) { const u = i / n * 1024, hw = half / (Math.PI * 2) * 1024; e.fillRect(u - hw, 0, hw * 2, 32); }
     e.fillStyle = 'rgba(0,0,0,.22)'; e.fillRect(0, 0, 1024, 4); e.fillRect(0, 28, 1024, 4);
-    const rim = new THREE.CanvasTexture(r); rim.colorSpace = THREE.SRGBColorSpace; rim.wrapS = THREE.RepeatWrapping;
+    const rim = new THREE.CanvasTexture(r); rim.colorSpace = THREE.SRGBColorSpace; rim.wrapS = THREE.RepeatWrapping; rim.anisotropy = aniso;
     const side = new THREE.MeshStandardMaterial({ map: rim, roughness: .5 }), top = new THREE.MeshStandardMaterial({ map: face, bumpMap: chipBumpTexture(1), bumpScale: .9, roughness: .46 });
     const mats = [side, top]; wheelChipMats.set(color, mats); return mats;   // rim, both faces
   }

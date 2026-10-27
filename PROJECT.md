@@ -65,6 +65,7 @@ node --test                     # from the repo root, Node 22+; about 6 s, no in
 - **Motion/UI:** anime.js, Torph, canvas-confetti, web-haptics, cuelume, all vendored in `src/vendor/`
 - **State:** one shared chip balance in localStorage (`src/core/wallet.mjs`, key `salonnoir.balance`, starts at 1,000); every key is listed under Storage below
 - **Targets:** desktop browsers and iPhone Safari. Phone performance matters (graphics presets, battery saver, reduced motion).
+- **Anti-aliasing** (measured against supersampled frames, see `glOptions` and `QUALITY` in `scene/stage.mjs`): 4x multisampling on the Sharp preset and on every 1x screen, where it smooths the geometry's edges; phones on Balanced draw up to 3x within a 2.4 MP budget instead, because on a 3x screen the stretch of a 2x picture costs far more than jagged edges. Textures get mipmaps and the GPU's full anisotropic filtering.
 
 ## File map
 
