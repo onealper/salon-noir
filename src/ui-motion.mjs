@@ -44,6 +44,18 @@ export function enter(els, { y = 14, gap = 35, from = 'first' } = {}) {
   if (reduced) { utils.remove(els, null, 'opacity'); utils.remove(els, null, 'translate'); release(els); return; }
   animate(els, { opacity: [0, 1], translate: [`0px ${y}px`, '0px 0px'], ease: S.soft, delay: stagger(gap, { from }), onComplete: () => release(els) });
 }
+// Something going: it fades and softens out (dropping `y` px, or shrinking to `scale`) and is then hidden, instead of
+// vanishing in a frame (transitions.dev's panel and tooltip closes: quicker out than in). `shown` puts it back at once,
+// cancelling an exit still running.
+const settle = el => { delete el.dataset.leaving; for (const p of ['opacity', 'filter', 'translate', 'scale']) el.style.removeProperty(p); };
+export function leave(el, { y = 0, scale = 1, ms = 220 } = {}) {
+  if (!el || el.hidden) return;
+  if (reduced) { el.hidden = true; settle(el); return; }
+  const mark = el.dataset.leaving = String(Math.random());
+  animate(el, { opacity: [1, 0], filter: ['blur(0px)', 'blur(2px)'], ...(y ? { translate: ['0px 0px', `0px ${y}px`] } : {}), ...(scale !== 1 ? { scale: [1, scale] } : {}),
+    duration: ms, ease: 'outQuad', onComplete: () => { if (el.dataset.leaving === mark) { el.hidden = true; settle(el); } } });
+}
+export function shown(el) { if (!el) return; if (el.dataset.leaving) { utils.remove(el); settle(el); } el.hidden = false; }
 // A value that changed: a quick bump so the eye catches it.
 export function bump(el, k = 1.14) {
   if (reduced || !el) return;

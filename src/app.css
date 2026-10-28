@@ -810,6 +810,9 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 
 /* the bet under your finger or pointer */
 .r-loupe { position: absolute; left: 0; top: 0; translate: -50% -100%; display: grid; justify-items: center; gap: 2px; padding: 6px 12px 6px; border-radius: 12px; background: rgba(14, 14, 15, .9); border: 1px solid rgba(226, 196, 131, .55); box-shadow: 0 8px 20px rgba(0, 0, 0, .45); white-space: nowrap; z-index: 3; }
+/* the loupe and the replay tag come in softly (gone at once, as a tooltip goes, when the pointer leaves) */
+@starting-style { .r-loupe, .r-replay { opacity: 0; scale: .96; } }
+.r-loupe, .r-replay { transition: opacity var(--duration-quick) ease-out, scale var(--duration-quick) ease-out; }
 .r-loupe b { font: 700 13.5px/1.1 Inter, system-ui, sans-serif; color: var(--ivory); }
 .r-loupe span { font: 600 11px/1 Inter, system-ui, sans-serif; color: var(--gold); letter-spacing: .04em; }
 

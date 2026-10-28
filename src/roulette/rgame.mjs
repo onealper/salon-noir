@@ -548,7 +548,7 @@ export async function createRoulette(ctx) {
       ride.pos = ride.pos ? ride.pos.lerp(want, .18) : want;
       return poseAt(ride.pos.clone(), b.clone().addScaledVector(dir, 5).add(new THREE.Vector3(0, -1.5, 0)), 52);
     };
-    const tag = $('.r-replay'); tag.hidden = false; hideBubble(); setIdle(false); wheelOnly(true); S.wheel.glow.set(S.wheel.glow.base, .5);
+    const tag = $('.r-replay'); ui.shown(tag); hideBubble(); setIdle(false); wheelOnly(true); S.wheel.glow.set(S.wheel.glow.base, .5);
     await fadeCut(() => { const st = at(p, t0); S.wheel.setRotor(st.phi); S.setPose(chase ? rider(t0) : poseAt(eye, V(shot.look), shot.fov)); });
     await new Promise(done => {
       let t = t0, last = performance.now(), ev = p.events.findIndex(e => e.t >= t0); if (ev < 0) ev = p.events.length;
@@ -562,7 +562,7 @@ export async function createRoulette(ctx) {
       tick.still = true; S.tickers.add(tick); S.requestRender();
     });
     // back to now: the wheelhead where it would be by now
-    phi = at(p, p.settledAt + 2.9).phi; tag.hidden = true;
+    phi = at(p, p.settledAt + 2.9).phi; ui.leave(tag, { y: -6, ms: 200 });
     await fadeCut(() => { S.setPose(S.shots.push); setIdle(true); wheelOnly(false); S.wheel.glow.set(S.wheel.glow.base); }); showBubble(n); await sleep(700);   // in the black: no jump of the wheelhead seen
   }
   async function fadeCut(fn) { fadeEl.classList.add('on'); await sleep(reduced() ? 120 : 220); fn(); await sleep(40); fadeEl.classList.remove('on'); await sleep(200); }
@@ -575,9 +575,9 @@ export async function createRoulette(ctx) {
   // ---- the number beside the ball -----------------------------------------------------------------------------------------------
   function showBubble(n) {
     const c = colorOf(n); bubble.className = `r-bubble ${c}`; bubble.querySelector('b').textContent = n; bubble.querySelector('small').textContent = c === 'green' ? 'Zero' : `${c === 'red' ? 'Red' : 'Black'} · ${n % 2 ? 'Odd' : 'Even'} · ${n <= 18 ? '1–18' : '19–36'}`;
-    bubble.hidden = false; bubble.dataset.on = '1'; placeBubble(true); ui.pop(bubble, { from: .4 });
+    ui.shown(bubble); bubble.dataset.on = '1'; placeBubble(true); ui.pop(bubble, { from: .4 });
   }
-  function hideBubble() { bubble.hidden = true; delete bubble.dataset.on; }
+  function hideBubble() { ui.leave(bubble, { scale: .85, ms: 160 }); delete bubble.dataset.on; }
   // over the ball, or under it where the bar or the recent numbers would cover it (`measure`: the room is taken again)
   let bubbleRoom = 0;
   function placeBubble(measure = false) {
@@ -862,14 +862,14 @@ export async function createRoulette(ctx) {
   function openSheet(which, { focus = false } = {}) {
     const el = which === 'race' ? raceSheet : statsSheet, other = which === 'race' ? statsSheet : raceSheet;
     if (sheetOpen === which) { closeSheets(); return; }
-    other.hidden = true; if (which === 'race') buildRace(); else buildStats();
-    el.hidden = false; sheetOpen = which; uiSound('open'); ui.enter([el], { y: 16 });
+    ui.leave(other, { ms: 150 }); if (which === 'race') buildRace(); else buildStats();
+    ui.shown(el); sheetOpen = which; uiSound('open'); ui.enter([el], { y: 16 });
     $('#rRace').setAttribute('aria-expanded', which === 'race'); $('#rStats').setAttribute('aria-expanded', which === 'stats');
     if (focus) (el.querySelector('.rt-num[tabindex="0"]') ?? el.querySelector('.st-n') ?? el.querySelector('.r-close'))?.focus();   // onto the track (or the numbers), not the header
   }
   function closeSheets() {
     if (!sheetOpen) return; const back = raceSheet.contains(document.activeElement) ? $('#rRace') : statsSheet.contains(document.activeElement) ? $('#rStats') : null;
-    raceSheet.hidden = statsSheet.hidden = true; sheetOpen = null; uiSound('close'); restGlow(); $('#rRace').setAttribute('aria-expanded', false); $('#rStats').setAttribute('aria-expanded', false);
+    for (const s of [raceSheet, statsSheet]) ui.leave(s, { y: 12, ms: 300 }); sheetOpen = null;   // (down and out, a little quicker than it came) uiSound('close'); restGlow(); $('#rRace').setAttribute('aria-expanded', false); $('#rStats').setAttribute('aria-expanded', false);
     back?.focus();
   }
   $('#rRace').onclick = e => openSheet('race', { focus: e.detail === 0 }); $('#rStats').onclick = e => openSheet('stats', { focus: e.detail === 0 });   // (a click from the keyboard has no pointer count)
