@@ -12,7 +12,7 @@
   --spring-pop: linear(0, 0.0074 1%, 0.0307 2.2%, 0.1126 4.6%, 0.5961 14.2%, 0.7958 19%, 0.8719 21.4%, 0.9364 24%, 0.9839 26.6%, 1.0166 29.2%, 1.0334 31.2%, 1.0441 33.2%, 1.0503 35.4%, 1.052 37.8%, 1.0457 42.4%, 1.0121 55.8%, 1.0012 63.8%, 0.9973 74.2%, 1);
   --spring-sheet: linear(0, 0.0054 1.2%, 0.0219 2.6%, 0.0886 5.8%, 0.4747 18.6%, 0.5661 22%, 0.6463 25.4%, 0.715 28.8%, 0.7727 32.2%, 0.823 35.8%, 0.8635 39.4%, 0.9019 43.8%, 0.9338 48.8%, 0.9575 54.2%, 0.9747 60.2%, 0.9864 67%, 0.9939 75%, 1);
   --spring-settle: linear(0, 0.0056 1%, 0.0196 2%, 0.0803 4.5%, 0.4637 15.3%, 0.5619 18.5%, 0.6423 21.5%, 0.7139 24.7%, 0.7757 28%, 0.8277 31.5%, 0.8718 35.3%, 0.909 39.7%, 0.9383 44.5%, 0.9602 49.8%, 0.9765 56.2%, 0.987 63.2%, 0.9938 71.8%, 1);
-  --duration-fast: 250ms; --ease-smooth-out: cubic-bezier(.22, 1, .36, 1);   /* transitions.dev's hover timing */
+  --duration-quick: 150ms; --duration-fast: 250ms; --duration-medium: 350ms; --ease-smooth-out: cubic-bezier(.22, 1, .36, 1);   /* transitions.dev's motion scale, for the UI's chrome */
 }
 @supports not (transition-timing-function: linear(0, 1)) {   /* older browsers: the nearest cubic curves */
   :root { --spring-press: cubic-bezier(.25, .9, .3, 1.02); --spring-pop: cubic-bezier(.2, .9, .25, 1.15); --spring-sheet: cubic-bezier(.2, .8, .2, 1); --spring-settle: cubic-bezier(.25, .8, .25, 1); }
@@ -88,7 +88,7 @@ body.reduced .splash .keylight { animation: none; }
 .gauge circle.gm { fill: #f2c417; stroke: #0c0c0d; stroke-width: 2; }
 .tools { display: flex; gap: 6px; }
 .icon { position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); border: 1px solid transparent;
-  transition: color var(--duration-fast) var(--ease-smooth-out), background var(--duration-fast) var(--ease-smooth-out), border-color var(--duration-fast) var(--ease-smooth-out); }
+  transition: color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), background var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
 /* small round buttons keep their look but take a 44px finger (an invisible apron round them) */
 .icon::after, .tray-toggle::after, .rt-nb .pill::after { content: ''; position: absolute; inset: min(0px, (100% - 44px) / 2); }
 .tray-toggle::after { inset: -7px -2px; }
@@ -204,7 +204,7 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity .2s;
 .tray.open .tray-toggle svg { transform: none; }
 /* (i): the side bets' paytables and what their words mean, in the settings (a tile's tooltip is no use to a finger) */
 .tray-info { position: relative; flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--panel); color: var(--muted);
-  transition: color var(--duration-fast) var(--ease-smooth-out), border-color var(--duration-fast) var(--ease-smooth-out); }
+  transition: color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
 .tray-info svg { width: 17px; height: 17px; }
 .tray-info::after { content: ''; position: absolute; inset: -7px; }
 @media (hover: hover) { .tray-info:hover { color: var(--ivory); border-color: #55555c; } }
@@ -234,7 +234,7 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 
 .bet-actions { display: flex; gap: 8px; align-items: center; }
 @media (min-width: 761px) and (min-height: 521px) { .bet-actions .pill:not(.deal) { min-width: 100px; justify-content: center; } }   /* Undo, Clear and Rebet (or ×2) one width, so the row doesn't shuffle as they change (a phone shows them as icons) */
-.pill { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line-2); font: 700 14px/1 Inter, system-ui, sans-serif; letter-spacing: .03em; transition: background .2s, border-color .2s, opacity .2s; }
+.pill { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line-2); font: 700 14px/1 Inter, system-ui, sans-serif; letter-spacing: .03em; transition: background var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), opacity var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
 .pill svg { width: 17px; height: 17px; }
 .pill .glyph { font: 800 16px/1 "Barlow Condensed", sans-serif; }
 @media (hover: hover) { .pill:hover:not(:disabled) { background: #232327; border-color: #4a4a50; } }
@@ -276,8 +276,8 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .sheet::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
 .sheet[open] { animation: sheet-in .5s var(--spring-sheet); }
 .sheet[open]::backdrop { animation: fade-in .25s ease-out; }
-.sheet.closing { animation: sheet-out .2s cubic-bezier(.4, 0, 1, 1) forwards; }
-.sheet.closing::backdrop { animation: fade-out .2s ease-in forwards; }
+.sheet.closing { animation: sheet-out var(--duration-medium, 350ms) var(--ease-smooth-out, cubic-bezier(.22, 1, .36, 1)) forwards; }   /* (app.mjs closes it when this ends) */
+.sheet.closing::backdrop { animation: fade-out var(--duration-medium, 350ms) var(--ease-smooth-out, cubic-bezier(.22, 1, .36, 1)) forwards; }
 @keyframes sheet-in { from { opacity: 0; transform: translateY(18px) scale(.97); } }
 @keyframes sheet-out { to { opacity: 0; transform: translateY(12px) scale(.98); } }
 @keyframes fade-in { from { opacity: 0; } }
@@ -553,7 +553,7 @@ body.reduced .ins-ace { animation: none; }
 .lobby-shade { position: fixed; inset: 0; pointer-events: none;
   background: radial-gradient(120% 70% at 50% 46%, transparent 38%, rgba(4, 4, 5, .5) 78%),
     linear-gradient(180deg, rgba(4, 4, 5, .88) 0%, rgba(4, 4, 5, .35) 24%, rgba(4, 4, 5, 0) 42%, rgba(4, 4, 5, .1) 55%, rgba(4, 4, 5, .8) 74%, rgba(4, 4, 5, .97) 100%);
-  transition: opacity .7s; }
+  transition: opacity .7s; }   /* (with the camera's flight into the seat) */
 .lobby-inner { position: relative; min-height: 100%; width: min(1180px, 100%); margin: 0 auto; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
 /* the menu parts as you take a seat: title up, rail down, shade away - while the camera flies in */
 .lobby.leaving { pointer-events: none; }
@@ -589,7 +589,7 @@ body.reduced .ins-ace { animation: none; }
   min-height: 132px; padding: 16px 16px 14px; border-radius: 18px; color: var(--ivory);
   background: linear-gradient(180deg, rgba(24, 22, 20, .78), rgba(10, 10, 11, .86)); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   border: 1px solid rgba(201, 164, 92, .22); box-shadow: 0 18px 40px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 236, 200, .05);
-  transition: transform .6s var(--spring-settle), border-color .3s, box-shadow .3s, background .3s; cursor: pointer; overflow: hidden; }
+  transition: transform .6s var(--spring-settle), border-color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), box-shadow var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), background var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); cursor: pointer; overflow: hidden; }
 .tcard::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--acc), transparent); opacity: .5; transition: opacity .3s; }
 .tcard[data-mode="freebet"] { --acc: #52c496; } .tcard[data-mode="lightning"] { --acc: #8ea9ff; }
 .tcard:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--acc) 45%, transparent); }

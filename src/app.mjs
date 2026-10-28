@@ -107,7 +107,7 @@ function closeSheet() {
   if (!dlg.open || dlg.classList.contains('closing')) return;
   uiSound('close');
   if (settings.reduced) { dlg.close(); return; }
-  dlg.classList.add('closing'); setTimeout(() => { dlg.classList.remove('closing'); dlg.close(); }, 200);
+  dlg.classList.add('closing'); setTimeout(() => { dlg.classList.remove('closing'); dlg.close(); }, 350);   // (.sheet.closing in app.css)
 }
 $('#settings').onclick = () => { uiSound('open'); dlg.showModal(); };
 $('#closeSettings').onclick = closeSheet;
