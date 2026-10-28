@@ -14,7 +14,7 @@ import { MODES, strike, multipliers } from './lightning.mjs';
 import { createLightning } from './rlightning.mjs';
 import { createPortal } from '../scene/portal.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
-import { plan, at, GEO, TUNE } from './physics.mjs';
+import { plan, at, GEO } from './physics.mjs';
 import { replayShot } from './replay.mjs';
 import { createRoller, prepareRoller } from './roller.mjs';
 import { Motion, ease, chipToss } from '../scene/pieces.mjs';
@@ -348,18 +348,13 @@ export async function createRoulette(ctx) {
   }
   function clearRivals() { for (const r of RIVALS) { r.bets = []; for (const k of [...stacks.keys()]) if (k.startsWith(r.name + '|')) dropStack(k); } rivalJobs = []; for (const id of cols.keys()) settleCol(id); }   // (your chips that stood on theirs come down)
 
-  // ---- the wheel at rest: the wheelhead keeps turning slowly, the last ball riding in its pocket -------------------------
-  // The drift is drawn every frame the screen shows (a wheel turning at 30 frames a second judders on a 60 or 120 Hz
-  // screen); it moves nothing that casts a shadow, so no shadow is drawn again for it. On the battery saver the
-  // wheelhead coasts to a stop and then nothing is drawn; with reduced motion it stands at once. Either way the ball
-  // rests in its pocket. It drifts only while someone is at the table: with the window out of focus, or no touch, click
-  // or key for a minute, it coasts to a stop as on the battery saver (a laptop left on the table stays cool), and the
-  // next touch has it pick up its drift again. In the lobby the orbit's own frames draw it.
-  let idleOn = false, idleWant = false, seen = performance.now(), driftSign = 1;
-  const AWAY = 60000, away = () => !document.hasFocus() || performance.now() - seen > AWAY;
-  const back = () => { seen = performance.now(); if (idleWant && !idleOn) setIdle(true); };
-  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'focus']) addEventListener(ev, back, { passive: true });
-  const DRIFT = .63;   // rad/s: the wheelhead's slowest drift between spins
+  // ---- the wheel at rest: the wheelhead coasts to a stop, the last ball riding in its pocket ------------------------------
+  // After a spin the wheelhead runs on from the spin's speed and comes to rest over some seconds, the ball easing into the
+  // middle of its pocket; then it stands until the croupier spins it again, and nothing is drawn while you bet (a wheel
+  // drifting between spins redrew the whole table every frame, and a laptop ran hot on it). The coast is drawn every
+  // frame the screen shows; it moves nothing that casts a shadow, so no shadow is drawn again for it. With reduced
+  // motion it stands at once. In the lobby the orbit's own frames draw it.
+  let idleOn = false, idleWant = false;
   const settle = { a: 0, r: 0, y: 0 };   // how far the ball still sits off the middle of its pocket after a spin: eased away
   function restBall(dt = 0) {
     if (restIdx == null) return;
@@ -367,21 +362,15 @@ export async function createRoulette(ctx) {
     S.wheel.setBall(phi - restIdx * PITCH + settle.a, GEO.restR + settle.r, GEO.pocketY + GEO.ball + settle.y);
   }
   const idle = now => {
-    const dt = Math.min(.05, (now - (idle.last ?? now)) / 1000); idle.last = now;
-    const stand = S.quality.name === 'saver' || away(); idle.lazy = S.showcase.on;
-    if (rotorW) driftSign = Math.sign(rotorW);
-    // the wheelhead coasts on from the spin, slowing as it does in the spin (about 2% a second) down to a slow drift of
-    // about 6 rpm, until the croupier spins it again; on the battery saver it runs down over some ten seconds and stands
-    if (stand) rotorW -= rotorW * .6 * dt;
-    else if (Math.abs(rotorW) > DRIFT) rotorW -= rotorW * TUNE.rotorDecay * dt;
-    else rotorW += (driftSign * DRIFT - rotorW) * .06 * dt;
+    const dt = Math.min(.05, (now - (idle.last ?? now)) / 1000); idle.last = now; idle.lazy = S.showcase.on;
+    rotorW -= rotorW * .6 * dt;   // (from a spin's speed, about ten seconds to rest)
     phi += rotorW * dt; S.wheel.setRotor(phi); restBall(dt);
-    if (stand && Math.abs(rotorW) < .004 && Math.abs(settle.r) < .004) { rotorW = 0; idleOn = false; S.tickers.delete(idle); S.requestRender(false); return; }   // at rest: the last frame
+    if (Math.abs(rotorW) < .004 && Math.abs(settle.r) < .004) { rotorW = 0; idleOn = false; S.tickers.delete(idle); S.requestRender(false); return; }   // at rest: the last frame
     if (bubble.dataset.on) placeBubble();
   };
   idle.still = true;
   function setIdle(on) {
-    idleWant = on; const run = on && !reduced() && ((S.quality.name !== 'saver' && !away()) || Math.abs(rotorW) >= .004);   // a saver wheel (or one left alone) already at rest stays at rest
+    idleWant = on; const run = on && !reduced() && (Math.abs(rotorW) >= .004 || Math.abs(settle.r) >= .004);   // a wheel already at rest stays at rest
     if (run !== idleOn) { idleOn = run; idle.last = null; if (run) S.tickers.add(idle); else S.tickers.delete(idle); }
     if (!run) { settle.a = settle.r = settle.y = 0; S.wheel.setRotor(phi); restBall(); }   // standing: wheelhead and ball where they belong
     S.requestRender();
@@ -1051,9 +1040,9 @@ export async function createRoulette(ctx) {
     players: () => rivalsHere().map(r => r.name),
     setPlayers: () => markRivals(),   // (the others join at the next round; their markers show at once)
     callBets: () => say('place-bets', { prio: 3 }),   // hear the voice level you set
-    setReduced(on) { motion.reduced = on; setIdle(idleWant); },   // the drift stops or resumes only where it belongs (never mid-spin)
+    setReduced(on) { motion.reduced = on; setIdle(idleWant); },   // the coast stops where it belongs (never mid-spin)
     setFast(on) { motion.slow = on ? .62 : 1; },
-    setQuality(q) { S.setQuality(q); setIdle(idleWant); },   // the battery saver stands the wheel still
+    setQuality(q) { S.setQuality(q); setIdle(idleWant); },
     refresh, reframe: () => { framed = ''; reframe(); },
     // for the browser checks, only in a testing session (?test or salonnoir.dev): rig() fixes the next number
     test: ctx.dev ? { plan, at, get history() { return history; }, place: (id, units = 1) => placeOn([[id, units]]), rig: n => { rigged = n; }, rigStrikes: s => { riggedStrikes = s; }, bolts, set turbo(v) { turbo = v; }, stacks, get skipLevel() { return skipLevel; }, get stageAt() { return stageAt; }, motion, showWin, showBubble } : undefined,

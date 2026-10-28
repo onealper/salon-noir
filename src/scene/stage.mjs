@@ -51,6 +51,17 @@ export function detectQuality() {
 }
 
 const shadowType = q => q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+// How long since the last touch, click, key or scroll anywhere on the page: the lobby's orbit comes to rest when nobody
+// has touched anything for a while (`REST`), and nothing is drawn until someone does.
+let lastInput = performance.now();
+for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) globalThis.addEventListener?.(ev, () => { lastInput = performance.now(); }, { passive: true, capture: true });
+export const quietFor = () => performance.now() - lastInput, REST = 20000;
+// The orbit's pace (1 turning, 0 at rest): it slows to a stop over a few seconds once the page is left alone or out of
+// focus, and picks up as gently. `step(dt)` → how much of `dt` the orbit should not advance (added to its lag).
+export function orbitPace() {
+  let pace = 1;
+  return { step(dt) { const want = document.hasFocus() && quietFor() < REST ? 1 : 0; pace += (want - pace) * Math.min(1, dt / 700); if (!want && pace < .003) pace = 0; return dt * (1 - pace); }, get still() { return pace === 0; } };
+}
 // The salon's two finishes, the same at every table: the padded leather of the armrests and the brass trim.
 export const leatherMaterial = () => new THREE.MeshPhysicalMaterial({ color: '#141312', roughness: .58, clearcoat: .35, clearcoatRoughness: .45, sheen: .4, sheenColor: new THREE.Color('#3a3530') });
 export const brassMaterial = () => new THREE.MeshStandardMaterial({ color: '#b98f45', metalness: 1, roughness: .28 });

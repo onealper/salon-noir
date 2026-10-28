@@ -3,7 +3,7 @@
 //   chip rack · dealer's cards · wordmark · printed arcs · your cards ·
 //   side-bet crown · your main circle · padded armrest (radius 100).
 import * as THREE from '../vendor/three.module.min.js';
-import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor } from './stage.mjs';
+import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor, orbitPace } from './stage.mjs';
 import { acrylic, frosted, sheet, sheetBox, reflectionProbe, groundDecal } from './glass.mjs';
 import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, stackEdgeTexture, STACK_TILE, backTexture, setFaceDetail, onArtLanded, CARD_W, CARD_H, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
 
@@ -269,7 +269,9 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     camera.position.copy(orbitEye); camera.up.set(0, 1, 0); camera.lookAt(orbitAt); camera.updateMatrixWorld();
   }
   // The orbit is a slow drift: drawn at the stage's 60 frames a second (`lazy`, it asks for its own frames) and,
-  // moving only the camera, never redraws the shadows (`still`). The fly-in takes every frame.
+  // moving only the camera, never redraws the shadows (`still`). Left alone for a while, or out of focus, it glides to
+  // rest and nothing is drawn (orbitPace in stage.mjs). The fly-in takes every frame.
+  const pace = orbitPace(); let ticked = 0;
   function showTick(now) {
     if (show.fly) {
       const f = show.fly, k = Math.min(1, (now - f.t0) / f.ms), e = k < .5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
@@ -278,7 +280,8 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       if (k >= 1) { tickers.delete(showTick); show.on = false; show.fly = null; applyPan(); f.done(); }
       return;
     }
-    if (show.frozen || !document.hasFocus()) return;   // (none while the window is out of focus: the lobby left open behind another app)
+    const dt = ticked ? Math.min(100, now - ticked) : 0; ticked = now; if (show.frozen) return;
+    show.lag += pace.step(dt); if (pace.still) return;   // (left alone, or out of focus, the orbit comes to rest: nothing is drawn)
     placeShowcase(now); requestRender(false);
   }
   showTick.still = true;

@@ -6,7 +6,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { artImage, CHIP_H, CHIP_R, chipBumpTexture } from '../scene/textures.mjs';
 import { chipGeometry, chipMaterials, setChipDetail, swapChipGeometry } from '../scene/world.mjs';
-import { createStage, QUALITY, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor } from '../scene/stage.mjs';
+import { createStage, QUALITY, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor, orbitPace } from '../scene/stage.mjs';
 import { SPOTS, colorOf, rowOf, colOf, REDS, WHEEL as WHEEL_ORDER, LIMITS, KINDS } from './rules.mjs';
 import { createWheel } from './wheel3d.mjs';
 import { GEO } from './physics.mjs';
@@ -847,9 +847,14 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     camera.position.copy(orbitEye); camera.lookAt(orbitAt); camera.fov = fov;
     camera.up.set(0, 1, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   }
-  // a slow drift, at the stage's 60 frames a second, asked for by the orbit itself, and the camera alone moves; none
-  // while the window is out of focus (the lobby left open behind another app)
-  const showTick = now => { if (show.frozen || !document.hasFocus()) return; placeShowcase(now); requestRender(false); };
+  // a slow drift, at the stage's 60 frames a second, asked for by the orbit itself, and the camera alone moves; left
+  // alone for a while, or out of focus (the lobby open behind another app), it glides to rest and nothing is drawn
+  const pace = orbitPace(); let ticked = 0;
+  const showTick = now => {
+    const dt = ticked ? Math.min(100, now - ticked) : 0; ticked = now; if (show.frozen) return;
+    show.lag += pace.step(dt); if (pace.still) return;   // (left alone, or out of focus, the orbit comes to rest: nothing is drawn)
+    placeShowcase(now); requestRender(false);
+  };
   showTick.lazy = showTick.still = true;
   const showcase = {
     get on() { return show.on; },
