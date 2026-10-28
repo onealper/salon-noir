@@ -118,16 +118,17 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a', st
   // inside one, a bright frame for a straight up (the emissive map carries them, so they glow a little in the dark bowl)
   const numC = canvas(4096, 192, () => {});
   const numTex = tex(numC);
-  let marks = null;
+  let marks = null, struck = null;   // (struck: the Lightning tables' numbers, number → multiplier, gold on the ring)
   const paintNumbers = () => {
     const g = numC.getContext('2d'), w = numC.width / POCKETS, H = numC.height;
     WHEEL.forEach((n, i) => {
       g.fillStyle = INK[colorOf(n)]; g.fillRect(i * w, 0, w + 1, H);
       const k = marks?.get(n) ?? 0; if (k) { g.fillStyle = `rgba(255,214,128,${[0, .16, .22, .3][k]})`; g.fillRect(i * w, 0, w + 1, H); }
+      if (struck?.has(n)) { const gd = g.createLinearGradient(0, 0, 0, H); gd.addColorStop(0, '#fff3cc'); gd.addColorStop(.5, '#e7c47c'); gd.addColorStop(1, '#9a722e'); g.fillStyle = gd; g.fillRect(i * w, 0, w + 1, H); }
       // a soft shade toward the pockets, where the ring dips
       const sh = g.createLinearGradient(0, 0, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(.7, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.35)'); g.fillStyle = sh; g.fillRect(i * w, 0, w + 1, H);
       g.save(); g.translate(i * w + w / 2, H * .5);
-      g.fillStyle = INK.ivory; g.font = `700 ${n > 9 ? 122 : 130}px "Barlow Condensed", Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = struck?.has(n) ? '#1d1407' : INK.ivory; g.font = `700 ${n > 9 ? 122 : 130}px "Barlow Condensed", Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.scale(n > 9 ? .78 : .95, 1); g.fillText(String(n), 0, 3); g.restore();
     });
     g.fillStyle = 'rgba(232,206,150,.85)'; for (let i = 0; i <= POCKETS; i++) g.fillRect(i * w - 2, 0, 4, H);   // fine brass lines between
@@ -210,6 +211,7 @@ export function createWheel(THREE, { aniso = 8, env = null, glow = '#ffb85a', st
     glow: { set(c, gain = 1) { glowC.set(c); for (const [m, k] of glowing) m.color.copy(glowC).multiplyScalar(k * gain); }, base: glow },
     // light the numbers your bets cover (number → 1 outside, 2 inside, 3 straight up), or clear them (null): one repaint
     mark(m) { if (!m && !marks) return; marks = m?.size ? m : null; paintNumbers(); },
+    strike(m) { if (!m && !struck) return; struck = m?.size ? m : null; paintNumbers(); },   // the struck numbers in gold on the ring (null: none)
     setRotor(phi) { rotor.rotation.y = phi; },
     setBall(theta, r, y) { ball.position.set(...polar(r, theta, y)); placeBlob(theta, r, y); },
     // the streak behind a fast ball: the arc it covered in the last frame, shown only while it runs fast

@@ -11,7 +11,7 @@
 //   the dolly comes up  ·  "Place your bets".
 import { createRouletteScene, preloadRouletteArt, preloadStudioArt, RAKE_W } from './rscene.mjs';
 import { MODES, strike, multipliers } from './lightning.mjs';
-import { createStrikes } from './rstrikes.mjs';
+import { createLightning } from './rlightning.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
 import { plan, at, GEO, TUNE } from './physics.mjs';
 import { replayShot } from './replay.mjs';
@@ -88,9 +88,9 @@ export async function createRoulette(ctx) {
 
   const hint = hintLine(hintEl);   // (the words morph in the line's own span: see .hint in app.css)
   const S = createRouletteScene(canvas, { quality: ctx.quality(), dressing: kind }), motion = new Motion(S);
-  const bolts = createStrikes(S, { audio, settings }); bolts.setTable(lit()); document.body.dataset.rtable = kind;
-  // the Lightning tables' sounds (the blackjack table's own), fetched once a Lightning table is sat at
-  const litSounds = () => { if (lit()) audio.preload(['charge', 'zap-1', 'zap-2', 'spark-1', 'spark-2', 'spark-3', 'spark-4', 'strike', 'thunder-1', 'thunder-2', 'thunder-mega', 'voice/james-bj-lightning']); };
+  const bolts = createLightning(S, { audio, settings, stage, canvas, pan: p => panX(p) }); bolts.setTable(lit()); document.body.dataset.rtable = kind;
+  // the Lightning tables' own sounds (rlightning.mjs), fetched once a Lightning table is sat at
+  const litSounds = () => { if (lit()) audio.preload(['lr-charge', 'lr-strike-1', 'lr-strike-2', 'lr-strike-3', 'lr-chain', 'lr-double', 'lr-fizzle', 'lr-payoff', 'voice/james-bj-lightning']); };
   litSounds();
   for (const r of RIVALS) S.chipLook(r.color, { inserts: r.inserts });
   // A spin is paid into the wallet the moment bets close (the number is drawn then); the balance on
@@ -434,14 +434,14 @@ export async function createRoulette(ctx) {
     document.body.dataset.rmode = 'spin'; refresh();
     if (struck) strikeShow(p, struck);
   }
-  // The Lightning tables' strikes (rstrikes.mjs), from the call while the ball makes its last rounds, in the time there is
+  // The Lightning tables' strikes (rlightning.mjs), from the call while the ball makes its last rounds, in the time there is
   // before the camera goes to the wheel: the board by the wheel fills as they land (a double strike first shows the
   // multiplier it lifts). A tap hurries them, as it hurries the ball.
   function strikeShow(p, struck) {
     const f = fast(), budget = Math.max(800, (p.dropAt - p.callAt - (f ? 1.5 : 2) - .3) * 1000 / (f ? 1.25 : 1));
     const upTo = i => i >= struck.length ? struck : struck.slice(0, i + 1).map(s => s.double ? { ...s, x: s.was, double: false } : s);
     S.setBoard(history, []);
-    bolts.show(struck, { budget, hurried: () => hurry > 1 || skipLevel > 0, onStrike: i => S.setBoard(history, upTo(i)) }).catch(err => console.error('strikes', err));
+    bolts.show(struck, { budget, hurried: () => hurry > 1 || skipLevel > 0, onStrike: i => { const now = upTo(i); S.setBoard(history, now); S.wheel.strike(new Map(now.map(s => [s.n, s.x]))); } }).catch(err => console.error('strikes', err));
   }
   // Moving to another of the room's tables (the lobby, between spins): the room is re-dressed and the prices change. Chips
   // on the layout come off first (nothing is staked before the spin), the other players' too.
@@ -450,7 +450,7 @@ export async function createRoulette(ctx) {
     if (TABLES[k].lead && !await preloadStudioArt().then(() => true, () => false)) return false;
     if (mode !== 'betting') return false;
     if (table.total) { table.clear(); serial(syncYours); }
-    clearRivals(); kind = k; store.set('rouletteTable', k); table.setRules(rulesOf(k)); bolts.clear(); bolts.setTable(lit()); document.body.dataset.rtable = k; litSounds();
+    clearRivals(); kind = k; store.set('rouletteTable', k); table.setRules(rulesOf(k)); bolts.clear({ quietly: true }); S.wheel.strike(null); bolts.setTable(lit()); document.body.dataset.rtable = k; litSounds();
     S.setStudio(k); framed = ''; reframe(); renderHistory(); if (!stage.hidden) ctx.title(TABLES[k].title, 'Roulette'); refresh();
     return true;
   }
@@ -475,7 +475,7 @@ export async function createRoulette(ctx) {
     // then release the ball on his side of the bowl, the far side from the camera's wheel shot
     const speed = 1.6 + Math.random() * .5, pre = preroll(rotorW, Math.sign(-dir) * speed);
     const p = plan(null, { dir, phiNow: phi + pre.angle, fast: f, rotorSpeed: speed, theta0: camAz(S.shots.wheel?.pos) + Math.PI + (Math.random() - .5) * .6, lead: TABLES[kind].lead?.[f ? 1 : 0] ?? null });
-    bolts.clear();   // last spin's stamps lift off the cloth
+    bolts.clear({ quietly: true }); S.wheel.strike(null);   // (cleared as the last round ended: this is in case it was cut short)
     S.highlight([]); liftDolly(); setIdle(false);
     lateBets((pre.T + p.callAt) * 1000 / (f ? 1.25 : 1));
     handOnWheel(pre, f ? 1.25 : 1);
@@ -508,8 +508,7 @@ export async function createRoulette(ctx) {
   async function lightningPays(r) {
     const x = r.x, big = x >= 200, slam = $('.r-slam'), num = slam.querySelector('b'), amt = slam.querySelector('em'), win = r.wins.find(w => w.x)?.pay ?? 0;
     say('bj-lightning', { prio: 3 }); feel.tap(big ? 'strike-big' : 'strike');   // "Lightning strikes!"
-    audio.cue(big ? 'thunder-mega' : 'thunder-1', { gain: .6, delay: .2 });
-    await bolts.payoff(r.n);
+    await bolts.payoff(r.n);   // (its own peal: lr-payoff)
     // the multiplier, figure by figure (app.css, .r-slam): each lands with a knock, the × last
     const figs = [...String(x)], span = (cls, t, i) => { const e = document.createElement('span'); e.className = cls; e.textContent = t; e.style.setProperty('--i', i); return e; };
     num.replaceChildren(...figs.map((c, i) => span('d', c, i)), span('x', 'x', figs.length)); amt.textContent = '';
@@ -716,6 +715,8 @@ export async function createRoulette(ctx) {
     // comes up with them: the payout is done, and the table opens for bets
     const keys = [...stacks.keys()]; if (keys.length) audio.play('collect', { x: panX(seatAt('you')) });
     stageAt = 'home'; liftDolly(); S.wheel.mark(null);
+    // the round is over at a Lightning table: the struck numbers' charge dies away, on the cloth, the wheel and the board
+    if (bolts.struck.length) { bolts.clear(); S.wheel.strike(null); S.setBoard(history, []); }
     await Promise.all(keys.map((k, i) => sleep(i * 25).then(() => dropStack(k, { to: seatAt(k.split('|')[0]), ms: 420 }))));
     for (const r2 of RIVALS) r2.bets = [];
     lastLit = n; restGlow();

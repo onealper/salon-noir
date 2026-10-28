@@ -37,6 +37,7 @@ File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CRED
 - **Dealer voices (James and Sofia), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs (the dealers in the library voices "Jerry B." and "Claire", Eleven v4)
 - **The roulette croupier's sounds** (his hand on the wheelhead, the ball's launch, the rake, the dolly): generated for Salon Noir with ElevenLabs Sound Effects v3
 - **The rain in the Lightning table's storm** (`rain-window.mp3`): generated for Salon Noir with ElevenLabs Sound Effects v2
+- **The Lightning roulette tables' lightning** (`lr-*.mp3`: the charge, the strikes, chain lightning, the double strike, the fizzle, the payoff): generated for Salon Noir with ElevenLabs Sound Effects v2
 
 ## Images
 

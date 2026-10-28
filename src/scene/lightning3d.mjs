@@ -401,15 +401,14 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
   }
 
   // One strike on the felt: the bolt, and where it grounds the burn, the crawling arcs, sparks and the lamp, all on the
-  // bolt's strokes. `near`: close enough to brown the lamps out; `lamp`: the lamp's peak, for a room lit otherwise. Resolves
-  // with the strokes (strokeLight) as it lands.
-  function hit(at, { hot = false, fromX, from, width, life = 520, n, size, near = false, lamp } = {}) {
+  // bolt's strokes. `near`: close enough to brown the lamps out. Resolves with the strokes (strokeLight) as it lands.
+  function hit(at, { hot = false, fromX, from, width, life = 520, n, size, near = false } = {}) {
     const light = strokeLight(soft(), life * .63), landed = bolt(at, { hot, fromX, from, width: width ?? (hot ? 1.3 : 1), life, light });
     landed.then(() => {
       burn(at, { hot, size: size ?? (hot ? 36 : 26) }); crawl(at, { hot, n: hot ? 7 : 5, reach: hot ? 18 : 12 });
       flare(at, { color: hot ? '#ffd98a' : '#bcd0ff', size: hot ? 16 : 10 });
       sparks(at, { color: hot ? '#ffe2a0' : '#cfdcff', n: n ?? (hot ? 60 : 30), speed: hot ? 45 : 32 });
-      lampFlash(lamp ?? (hot ? 3000 : 1400), at, hot, light); if (near) brownout(light.ms + 300);
+      lampFlash(hot ? 3000 : 1400, at, hot, light); if (near) brownout(light.ms + 300);
     });
     return landed;
   }

@@ -830,6 +830,15 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-vignette { position: absolute; inset: 0 0 calc(-1 * var(--under, 0px)); pointer-events: none; background: radial-gradient(120% 95% at 50% 58%, transparent 52%, rgba(5, 4, 3, .38) 82%, rgba(5, 4, 3, .62) 100%); }
 .r-fade { position: absolute; inset: 0; background: #050505; opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) ease; z-index: 2; }
 .r-fade.on { opacity: 1; }
+/* the Lightning tables' strikes (rlightning.mjs): the studio darkening round the layout as the air charges (deeper for
+   the double strike), and each return stroke's flash on the screen, centred where it grounds */
+.r-dark { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; transition: opacity 600ms ease;
+  background: radial-gradient(ellipse 70% 60% at 50% 58%, transparent 30%, rgba(2, 3, 8, .55) 75%, rgba(2, 3, 8, .82)); }
+.r-dark.on { opacity: .8; transition-duration: 450ms; }
+.r-dark.deep { opacity: 1; background: radial-gradient(ellipse 55% 48% at 50% 58%, transparent 22%, rgba(1, 1, 4, .7) 70%, rgba(1, 1, 4, .92)); }
+.r-flash { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(circle at var(--fx, 50%) var(--fy, 50%), #f4f6ff, rgba(170, 186, 255, .55) 18%, rgba(110, 120, 220, .16) 45%, transparent 75%); }
+.r-flash.hot { background: radial-gradient(circle at var(--fx, 50%) var(--fy, 50%), #fff6e8, rgba(255, 170, 100, .55) 18%, rgba(220, 90, 50, .16) 45%, transparent 75%); }
 .r-hint, body[data-table] .r-hint { top: auto; bottom: 12px; }   /* beat the blackjack tables' hint placement, which may still be on the body */
 /* An upright phone: the layout runs down to the foot of the picture (the column bets are its last row), so the line
    hangs over the wheel instead, under the recent numbers, and is hidden while a result is up (a result keeps its place

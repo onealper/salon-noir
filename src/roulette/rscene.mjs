@@ -912,7 +912,7 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },
     wheelToWorld(p) { return new THREE.Vector3(p[0], p[1], p[2]).add(wheel.group.position); },
-    pause: st.pause,
+    pause: st.pause, hold: st.hold,   // (hold: a hit-stop, the picture held for a breath)
     get debug() { return st.debug; },
     GEO,
   };
