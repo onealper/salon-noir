@@ -835,7 +835,7 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-dark { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; transition: opacity 600ms ease;
   background: radial-gradient(ellipse 62% 52% at 58% 52%, rgba(2, 3, 8, .12) 20%, rgba(2, 3, 8, .66) 68%, rgba(2, 3, 8, .9)); }
 .r-dark.on { opacity: 1; transition-duration: 450ms; }
-.r-dark.deep { background: radial-gradient(ellipse 50% 42% at 58% 52%, rgba(1, 1, 4, .3) 15%, rgba(1, 1, 4, .8) 62%, rgba(1, 1, 4, .96)); }
+.r-dark.deep { background: radial-gradient(ellipse 50% 42% at 58% 52%, rgba(1, 1, 4, .16) 15%, rgba(1, 1, 4, .78) 62%, rgba(1, 1, 4, .96)); }
 .r-flash { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; mix-blend-mode: screen;
   background: radial-gradient(circle at var(--fx, 50%) var(--fy, 50%), #f4f6ff, rgba(170, 186, 255, .55) 18%, rgba(110, 120, 220, .16) 45%, transparent 75%); }
 .r-flash.hot { background: radial-gradient(circle at var(--fx, 50%) var(--fy, 50%), #fff6e8, rgba(255, 170, 100, .55) 18%, rgba(220, 90, 50, .16) 45%, transparent 75%); }
