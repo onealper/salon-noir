@@ -41,9 +41,9 @@ varying float vSide; varying float vAlong; varying float vMain;
 void main() {
   if (vAlong > uLead) discard;
   float d = abs(vSide);
-  float core = exp(-d * d * 70.0), sheath = exp(-d * d * 9.0) * 0.55, air = exp(-d * d * 1.6) * 0.16;
+  float core = exp(-d * d * 26.0), sheath = exp(-d * d * 5.0) * 0.6, air = exp(-d * d * 1.3) * 0.22;
   float tip = exp(-pow((uLead - vAlong) * 34.0, 2.0)) * uTip;
-  vec3 col = uCore * core * 1.5 + uHalo * (sheath + air);
+  vec3 col = uCore * core * 1.8 + uHalo * (sheath + air);
   gl_FragColor = vec4(col * (uI + tip * 1.6) * mix(uBranch, 1.0, vMain), 1.0);
 }`;
 const DECAL_VS = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
@@ -58,16 +58,21 @@ const BURN_FS = `
 uniform sampler2D uMap; uniform float uGrow; uniform float uHeat; uniform float uFade; uniform vec3 uHot; uniform vec3 uEmber; varying vec2 vUv;
 void main() { vec2 p = vUv * 2.0 - 1.0; float f = texture2D(uMap, vUv).r * smoothstep(uGrow, uGrow - 0.2, length(p));
   gl_FragColor = vec4(mix(uEmber, uHot, uHeat) * f * (0.35 + 0.65 * uHeat) * uFade, 1.0); }`;
-// static on the number grid while the air charges: sparkles flickering cell by cell, and current running along the lines
+// static on the number grid while the air charges: glints flickering over the cloth, the lines faintly charged, and
+// current crawling round some of the squares, a bright head running along their edges
 const STATIC_FS = `
 uniform float uT; uniform float uI; uniform vec2 uCells; varying vec2 vUv;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main() {
   float tick = floor(uT * 24.0);
-  float spark = step(0.972, h(floor(vUv * uCells * 5.0) + tick * vec2(1.7, 9.2)));
-  vec2 g = fract(vUv * uCells); float line = smoothstep(0.05, 0.0, min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y)));
-  float run = step(0.86, h(floor(vUv * uCells) + floor(uT * 14.0) * 3.1)) * line;
-  gl_FragColor = vec4(vec3(0.55, 0.7, 1.0) * (spark * 0.9 + run * 1.3 + line * 0.06) * uI, 1.0);
+  vec2 c = vUv * uCells, g = fract(c), id = floor(c);
+  vec2 sc = c * 4.0, sid = floor(sc), sf = fract(sc) - 0.5, off = vec2(h(sid + 3.1), h(sid + 7.7)) - 0.5;
+  float spark = step(0.94, h(sid + tick * vec2(1.7, 9.2))) * exp(-dot(sf - off * 0.6, sf - off * 0.6) * 140.0);
+  float e = min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y)), line = exp(-e * e * 1600.0);
+  float a = atan(g.y - 0.5, g.x - 0.5) / 6.2832 + 0.5, head = fract(uT * 2.6 + h(id));
+  float run = step(0.72, h(id + floor(uT * 5.0) * 3.1)) * line * exp(-fract(head - a) * 9.0);
+  float flick = 0.75 + 0.25 * h(vec2(tick, 1.0));
+  gl_FragColor = vec4(vec3(0.6, 0.75, 1.0) * (spark * 1.8 + run * 2.2 + line * 0.14) * uI * flick, 1.0);
 }`;
 // live current round a plaque's edge: a wavering line and sparks running round it
 const EDGE_FS = `
@@ -140,15 +145,15 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
   }
   // The bolt's ribbons: the main channel and its forks, each fork thinning and dimming as it goes, a few forking again.
   function boltGeometry(top, end, { forks = 4, rough = .34, width = 1, flat = false } = {}) {
-    const main = jag(top, end, rough, flat ? 6 : 7, flat), L = top.distanceTo(end), strokes = [{ pts: main, a0: 0, a1: 1, w0: 1.5 * width, w1: 1.1 * width, main: 1 }];
+    const main = jag(top, end, rough, flat ? 6 : 7, flat), L = top.distanceTo(end), strokes = [{ pts: main, a0: 0, a1: 1, w0: 2.6 * width, w1: 1.9 * width, main: 1 }];
     for (let k = 0; k < forks; k++) {
       const i = Math.floor(rnd(.12, .72) * (main.length - 1)), p = main[i], dir = main[Math.min(main.length - 1, i + 2)].clone().sub(p).normalize();
       dir.add(V(rnd(-.9, .9), flat ? 0 : rnd(-.5, .1), rnd(-.9, .9))).normalize();
       const len = L * rnd(.1, .28), e = p.clone().addScaledVector(dir, len), a0 = i / (main.length - 1);
       if (!flat) e.y = Math.max(e.y, end.y + 2);
-      strokes.push({ pts: jag(p, e, .5, 5, flat), a0, a1: a0 + len / L, w0: .75 * width, w1: .12 * width, main: 0 });
+      strokes.push({ pts: jag(p, e, .5, 5, flat), a0, a1: a0 + len / L, w0: 1.3 * width, w1: .2 * width, main: 0 });
       if (Math.random() < .35) { const sub = strokes.at(-1).pts, j = Math.floor(sub.length * rnd(.3, .7)), e2 = sub[j].clone().addScaledVector(dir.clone().add(V(rnd(-1, 1), -.2, rnd(-1, 1))).normalize(), len * .45), b0 = a0 + (j / (sub.length - 1)) * len / L;
-        strokes.push({ pts: jag(sub[j], e2, .55, 4, flat), a0: b0, a1: b0 + len * .45 / L, w0: .4 * width, w1: .08 * width, main: 0 }); }
+        strokes.push({ pts: jag(sub[j], e2, .55, 4, flat), a0: b0, a1: b0 + len * .45 / L, w0: .7 * width, w1: .12 * width, main: 0 }); }
     }
     let n = 0; for (const s of strokes) n += s.pts.length;
     const pos = new Float32Array(n * 6), tang = new Float32Array(n * 6), side = new Float32Array(n * 2), along = new Float32Array(n * 2), wid = new Float32Array(n * 2), mainA = new Float32Array(n * 2), idx = [];
@@ -167,7 +172,7 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
     for (const [k, a] of Object.entries({ side, along, wid, trunk: mainA })) g.setAttribute(k, new THREE.BufferAttribute(a, 1));
     g.setIndex(idx); return { geo: g, main };
   }
-  const COLORS = { cold: ['#ffffff', '#7f96ff'], hot: ['#fff6e2', '#ff8a3d'], gold: ['#fffaf0', '#ffc35a'] };
+  const COLORS = { cold: ['#ffffff', '#93a8ff'], hot: ['#fff6e2', '#ff8a3d'], gold: ['#fffaf0', '#ffc35a'] };
   const boltMat = tone => new THREE.ShaderMaterial({ vertexShader: BOLT_VS, fragmentShader: BOLT_FS, ...additive, side: THREE.DoubleSide,
     uniforms: { uCore: { value: new THREE.Color(COLORS[tone][0]) }, uHalo: { value: new THREE.Color(COLORS[tone][1]) }, uI: { value: 0 }, uLead: { value: 0 }, uTip: { value: 0 }, uBranch: { value: 1 }, uWide: { value: 1 } } });
   // Where a bolt falls from: just past the top of the picture over its target, at the target's depth, so the whole
