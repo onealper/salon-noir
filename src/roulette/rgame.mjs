@@ -12,6 +12,7 @@
 import { createRouletteScene, preloadRouletteArt, preloadStudioArt, RAKE_W } from './rscene.mjs';
 import { MODES, strike, multipliers } from './lightning.mjs';
 import { createLightning } from './rlightning.mjs';
+import { createPortal } from '../scene/portal.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
 import { plan, at, GEO, TUNE } from './physics.mjs';
 import { replayShot } from './replay.mjs';
@@ -88,6 +89,7 @@ export async function createRoulette(ctx) {
 
   const hint = hintLine(hintEl);   // (the words morph in the line's own span: see .hint in app.css)
   const S = createRouletteScene(canvas, { quality: ctx.quality(), dressing: kind }), motion = new Motion(S);
+  const portal = createPortal(S, { body: S.table, floorY: S.floorY(), showcase: S.showcase, audio, reduced: () => settings.reduced });   // (the lobby's change of game: scene/portal.mjs)
   const bolts = createLightning(S, { audio, settings, stage, canvas, pan: p => panX(p) }); bolts.setTable(lit()); document.body.dataset.rtable = kind;
   // the Lightning tables' own sounds (rlightning.mjs), fetched once a Lightning table is sat at
   const litSounds = () => { if (lit()) audio.preload(['lr-charge', 'lr-strike-1', 'lr-strike-2', 'lr-strike-3', 'lr-chain', 'lr-double', 'lr-fizzle', 'lr-payoff', 'voice/james-bj-lightning']); };
@@ -451,13 +453,17 @@ export async function createRoulette(ctx) {
   }
   // Moving to another of the room's tables (the lobby, between spins): the room is re-dressed and the prices change. Chips
   // on the layout come off first (nothing is staked before the spin), the other players' too.
-  async function setKind(k) {
+  // `sweep`: picked in the lobby with the room in sight, the new table is swept in by a band of light (stage.swap).
+  async function setKind(k, { sweep = false } = {}) {
     if (!TABLES[k] || k === kind) return true; if (mode !== 'betting') return false;
     if (TABLES[k].lead && !await preloadStudioArt().then(() => true, () => false)) return false;
     if (mode !== 'betting') return false;
-    if (table.total) { table.clear(); serial(syncYours); }
-    clearRivals(); kind = k; store.set('rouletteTable', k); table.setRules(rulesOf(k)); bolts.clear({ quietly: true }); S.wheel.strike(null); bolts.setTable(lit()); document.body.dataset.rtable = k; litSounds();
-    S.setStudio(k); framed = ''; reframe(); renderHistory(); if (!stage.hidden) ctx.title(TABLES[k].title, 'Roulette'); refresh();
+    const dress = () => {
+      if (table.total) { table.clear(); serial(syncYours); }
+      clearRivals(); kind = k; store.set('rouletteTable', k); table.setRules(rulesOf(k)); bolts.clear({ quietly: true }); S.wheel.strike(null); bolts.setTable(lit()); document.body.dataset.rtable = k; litSounds();
+      S.setStudio(k); framed = ''; reframe(); renderHistory(); if (!stage.hidden) ctx.title(TABLES[k].title, 'Roulette'); refresh();
+    };
+    if (sweep && !stage.hidden && S.showcase.on) await S.swap(dress, { tone: TABLES[k].lead ? 'lightning' : 'gold', calm: reduced() }); else dress();
     return true;
   }
   // the croupier has called the number: it goes into the history (the strip shows it)
@@ -1035,13 +1041,13 @@ export async function createRoulette(ctx) {
       ctx.showInPlay(table.total); markRivals(); refresh();
     },
     hide() { stage.hidden = dock.hidden = true; setIdle(false); S.pause(true); active = false; closeSheets(); hover(null); for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
-    showcase: { start(still) { S.showcase.start(still); framed = ''; reframe(); S.requestRender(); }, stop: ms => S.showcase.stop(ms) },
+    showcase: { start(still) { S.showcase.start(still); framed = ''; reframe(); S.requestRender(); }, stop: ms => S.showcase.stop(ms) }, portal,
     // you sit down: the camera flies into your chair
     async enter(ms, { tableMode } = {}) { if (tableMode) await setKind(tableMode); active = true; framed = ''; reframe(); await S.showcase.stop(ms); if (!S.current) S.setPose(S.shots.seat); refresh(); if (welcome) { hint(welcome); welcome = null; } if (mode === 'betting') { say('place-bets', { prio: 2, fresh: 3000 }); othersWake(); } },
     leave() { active = false; for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
     toLobby() { api.leave(); api.showcase.start(settings.reduced); },   // the lobby opens over the wheel: it turns slowly behind the menu
     round: 'spin',
-    get kind() { return kind; }, setKind, preview: k => setKind(k),   // European, Lightning or Mega Lightning (TABLES)
+    get kind() { return kind; }, setKind, preview: (k, { sweep = true } = {}) => setKind(k, { sweep }),   // European, Lightning or Mega Lightning (TABLES)
     players: () => rivalsHere().map(r => r.name),
     setPlayers: () => markRivals(),   // (the others join at the next round; their markers show at once)
     callBets: () => say('place-bets', { prio: 3 }),   // hear the voice level you set

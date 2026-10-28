@@ -108,7 +108,7 @@ src/                       All code, styles, fonts, sounds and libraries
     feel.mjs               Haptics, synthesised UI cues, confetti
   scene/
     stage.mjs              What both 3D rooms share: renderer, render loop, frame-time watcher, quality presets,
-                           lost-context handling, leather and brass
+                           lost-context handling, leather and brass, the lobby's light sweep from table to table (swap)
     glass.mjs              Clear acrylic: a reflection probe of the real table, one shader for faces (Fresnel at both
                            surfaces, Beer-Lambert) and cut edges (the probe refracted, dispersed; piped light), polished
                            sheets, and what glass does to the cloth (shade, caustics)
@@ -121,6 +121,7 @@ src/                       All code, styles, fonts, sounds and libraries
     pieces.mjs             Card and chip objects (a card bends as paper does: bendCard) plus a small motion engine
     textures.mjs           Canvas-drawn card faces, felt layout, chips
     lightning3d.mjs        Lightning-table bolts and their afterimages, felt burns, sparks, the static before a strike
+    portal.mjs             The lobby's portal between the rooms: the ring in the floor, the table drawn down; the ring above, the table dropped
   roulette/
     rgame.mjs              The roulette room, createRoulette(ctx): its three tables (TABLES, setKind), betting, spin, payout
     rules.mjs              European roulette rules, bets, payouts (a Lightning table's prices: setRules). No DOM.
@@ -167,6 +168,8 @@ Everything lives in the browser that plays; nothing leaves it.
 
 **The dock** (both rooms): where it runs along the foot of the screen, the table goes on under it behind a progressive blur (`.dock-blur` in `app.css`), and each room frames its seat clear of the blur (`dockCover` and `BLUR_RISE` in `app.mjs`, the `bottom` of `frame` in `scene/world.mjs` and `roulette/rscene.mjs`). A phone on its side keeps its controls in a plain column, and the battery saver keeps a plain bar (`body[data-gfx]`). Over the blur the buttons are dark glass; a disabled Deal or Spin stays a dim gold outline.
 
+**The lobby** (`core/lobby.mjs`; `showTable` and `crossRooms` in `app.mjs`): the table behind the menu is the room's own, the camera circling it. Picking another table of the same game sweeps it in: the frame as it stood is kept on a picture over the canvas, the room is re-dressed under it, and a band of light runs across the picture and takes it away (gold; electric, flickering, for a Lightning table; `swap` in `scene/stage.mjs`, the orbit standing still meanwhile). Picking the other game goes through the portal (`scene/portal.mjs`): a ring of gold light opens in the floor round the table, a vortex turning in it; the table hops as it feels the pull and is drawn down into it, turning with the swirl, and the ring snaps shut in a flash of its light. Under the flash the rooms change places (the one coming in was laid out unseen behind, `body[data-coming]`, and its materials built meanwhile); there the camera is down by the floor looking up as a ring opens in the dark above, the table drops out of it (cut off at the ring by a clipping plane on its materials), lands with a squash, a thud and a ring of dust, and the camera cranes up into the orbit, which goes on from where it stood. Picks wait their turn, and only the latest waiting counts. Taking a seat, the menu leaves piece by piece (the title's pieces lift and blur away, the cards sink one after another, the button last), and once the camera has landed the bar comes down, the dock rises and the frosted bands grow in from the screen's edges, the strongest layer first. With reduced motion a change of table is a short crossfade and the rooms simply change.
+
 Settings worth knowing: **Flashing effects** (Full / Soft / Off; Soft by default when the device asks for reduced motion) tames the Lightning table, **Last hands** lists every round with its cards, side bets and net, and **Reduce motion**, **Fast play** and the graphics presets apply in both rooms.
 
 ## Look and feel (don't drift from this)
@@ -184,6 +187,7 @@ Most AI models can't view the images and audio directly:
 - **Dealer voices:** James and Sofia (made with ElevenLabs: the library voices "Jerry B. - British RP" and "Claire - British Classy Mature", Eleven v4), e.g. `james-n17.mp3` = "Seventeen, black." at roulette, `james-last-bets.mp3` = "Last bets, please." before the call, `sofia-bj-even-money.mp3` = the offer on your blackjack against an ace, `james-bj-lightning.mp3` = "Lightning strikes!" as a multiplier pays. Marco deals with James's voice and Elena with Sofia's. A new line must be made in the same voice (the exact wording of every line is in `src/sounds/CREDITS.txt`)
 - **Music:** `music-lobby.mp3`, `music-bossa.mp3` (Kevin MacLeod, CC BY 4.0) and `music-roulette.mp3` (made with ElevenLabs Music: late-night lounge jazz); every sound's source is in `src/sounds/CREDITS.txt`
 - **Lightning:** `thunder-*`, `spark-*`, `zap-*`, `strike.mp3`, `charge.mp3`, and the storm's `rain-window.mp3` (a seamless loop), at blackjack; Lightning roulette has its own, `lr-*` (ElevenLabs Sound Effects: the charge, three strikes, chain, double, fizzle, payoff)
+- **The portal** (ElevenLabs Sound Effects v2): `portal-open`, `portal-drop` (the table drawn down), `portal-land` (its thud lands 12 ms in)
 - **The roulette croupier** (ElevenLabs Sound Effects v3): `wheelhead-*` (his palm on the wheelhead, then the push: `PUSH` in `rgame.mjs` says where), `ball-launch-*`, `rake-*` (one per stroke), `dolly-*`
 
 ## Next up

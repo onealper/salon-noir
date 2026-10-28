@@ -79,7 +79,7 @@ const uiSound = kind => kind === 'thock' ? audio.cue(take('chip-thock', TAKES.th
 const sting = (kind, gain = .8) => audio.cue(take(`win-${kind}`, 2), { gain });
 // Fetched at the first touch: the salon's own sounds, and the lines a room adds as it is built (warm()).
 const warmList = [...['small', 'blackjack', 'big', 'side'].flatMap(k => [`win-${k}-1`, `win-${k}-2`]),
-  'ui-click-1', 'ui-click-2', ...[1, 2, 3, 4].flatMap(i => [`ui-open-${i}`, `ui-toggle-${i}`, `ui-select-${i}`, `chip-thock-${i}`]), 'chip-thock-5', 'crowd-cheer-1', 'crowd-cheer-2', 'whoosh', 'room-casino-1'];
+  'ui-click-1', 'ui-click-2', ...[1, 2, 3, 4].flatMap(i => [`ui-open-${i}`, `ui-toggle-${i}`, `ui-select-${i}`, `chip-thock-${i}`]), 'chip-thock-5', 'crowd-cheer-1', 'crowd-cheer-2', 'whoosh', 'room-casino-1', 'portal-open', 'portal-drop', 'portal-land'];
 let warmed = false;
 const warm = list => { if (warmed) audio.preload(list); else warmList.unshift(...list); };
 // The room: the table's murmur under everything, lounge music at the table, a lighter tune in the lobby.
@@ -249,26 +249,53 @@ document.body.classList.add('ready');
 if (welcome && params.has('table')) rooms[room].hint(welcome);
 // The lobby: the casino's front room, over the table at every visit; the brand in the bar returns to it.
 $('#brandMark').innerHTML = mark();
-let previewTurn = 0;
+let previewTurn = 0, previewing = Promise.resolve();
 // the lobby's roulette tables, and the roulette room's own names for them (rgame.mjs, TABLES)
 const WHEELS = { roulette: 'european', 'roulette-lightning': 'lightning', 'roulette-mega': 'mega' }, wheelMode = k => Object.keys(WHEELS).find(m => WHEELS[m] === k) ?? 'roulette';
 const couldNotLoad = game => lobby.note(`The ${game} table could not be loaded. Check the connection, then reload the page.`);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// The portal's light, filling the picture as the ring snaps shut: the rooms change under it (scene/portal.mjs).
+const portalFlash = Object.assign(document.createElement('div'), { className: 'portal-flash' }); portalFlash.setAttribute('aria-hidden', 'true'); $('#lobby').before(portalFlash);   // (under the menu, which stays as it was)
+// From one game to the other in the lobby: the table you are looking at goes down through the floor, a flash, and the
+// other drops out of the air (each room's portal). The room coming in is shown at once, out of sight behind this one
+// (body[data-coming]), dressed for the table picked and its materials built, while this table goes down; under the flash
+// the rooms change places. With reduced motion (or a room without a portal) the rooms simply change.
+async function crossRooms(game, tableMode) {
+  const from = rooms[room], to = rooms[game];
+  if (game === 'roulette') await to.preview(WHEELS[tableMode], { sweep: false });
+  if (settings.reduced || !from?.portal || !to.portal) {
+    setRoom(game); to.showcase.start(settings.reduced); if (game === 'blackjack') to.preview(tableMode, { sweep: false });
+    return;
+  }
+  document.body.dataset.coming = game; to.show(); to.showcase.start(false); if (game === 'blackjack') to.preview(tableMode, { sweep: false });
+  const ready = to.portal.prime();
+  const shut = sleep(1000).then(() => portalFlash.classList.add('on'));
+  await from.portal.out(); await shut; await Promise.race([ready, sleep(2500)]);
+  from.portal.settle(); from.hide(); room = game; store.set('room', game); document.body.dataset.room = game; delete document.body.dataset.coming;
+  portalFlash.classList.remove('on');
+  await to.portal.into();
+}
+// picking a table in the lobby re-dresses the room behind the menu: the blackjack table, or the wheel. The picks are
+// shown one after another, and only the latest waiting counts: a pick made while a table is changing, or a room still
+// loading, is passed over if another has come since (or you have sat down).
+async function showTable(tableMode, turn) {
+  const game = WHEELS[tableMode] ? 'roulette' : 'blackjack', live = () => turn === previewTurn && lobby.isOpen;
+  if (!rooms[game]) {
+    try { await load(game); } catch (err) { console.error(`${game} failed to load`, err); if (turn === previewTurn) couldNotLoad(game); return; }
+    if (!live()) return;
+  }
+  if (game !== room) await crossRooms(game, tableMode);
+  else if (game === 'roulette') await rooms.roulette.preview(WHEELS[tableMode]);
+  else await rooms.blackjack.preview(tableMode);
+}
 lobby.init({
   mode: () => room === 'roulette' ? wheelMode(rooms.roulette?.kind) : settings.mode,
-  // picking a table in the lobby re-dresses the room behind the menu: the blackjack table, or the wheel. Only the
-  // latest pick counts: a room still loading when you have moved on (or sat down) stays out of the room.
-  preview: async tableMode => {
-    const turn = ++previewTurn, game = WHEELS[tableMode] ? 'roulette' : 'blackjack'; uiSound('select');
-    if (!rooms[game]) {
-      try { await load(game); } catch (err) { console.error(`${game} failed to load`, err); if (turn === previewTurn) couldNotLoad(game); return; }
-      if (turn !== previewTurn || !lobby.isOpen) return;
-    }
-    if (game === 'roulette') { setRoom('roulette'); await rooms.roulette.preview(WHEELS[tableMode]); if (turn !== previewTurn || !lobby.isOpen) return; rooms.roulette.showcase.start(settings.reduced); if (audio.unlocked) roomFor(true); return; }
-    if (room !== 'blackjack') { setRoom('blackjack'); rooms.blackjack.showcase.start(settings.reduced); }
-    rooms.blackjack.preview(tableMode);
+  preview: tableMode => {
+    const turn = ++previewTurn; uiSound('select');
+    previewing = previewing.then(() => turn === previewTurn && lobby.isOpen ? showTable(tableMode, turn) : null).catch(err => console.error('could not show the table', err));
   },
   play: async (game, tableMode) => {
-    previewTurn++; audio.unlock(); audio.cue('whoosh', { bus: 'ui', gain: .6 });
+    previewTurn++; audio.unlock(); await previewing; audio.cue('whoosh', { bus: 'ui', gain: .6 });   // (a table on its way through the portal arrives first)
     try {
       await load(game); const r = rooms[game];
       if (game === 'roulette') { if (room !== 'roulette') setRoom('roulette'); roomFor(false); }

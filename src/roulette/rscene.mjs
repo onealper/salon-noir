@@ -832,23 +832,36 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
   }
 
   // ---- the lobby's slow orbit round the wheel ----------------------------------------------------------------------------
-  const show = { on: false };
-  function placeShowcase(now) {
-    if (!L) return;
+  // `lag`: how long the orbit has stood still (a change of table, the portal), so it goes on from where it stopped; `frozen`:
+  // since when it stands; `driven`: the portal has the camera.
+  const show = { on: false, lag: 0, frozen: 0, driven: false }, orbitEye = new THREE.Vector3(), orbitAt = new THREE.Vector3();
+  function orbitPose(now) {
+    if (!L) return null;
     // a slow sway round the table from the players' side, looking toward the salon behind it
-    const t = now / 1000, portrait = camera.aspect < .9, wc = wheelCentre(), cx = (L.wheelX - WELL + L.xEnd) / 2, a = Math.sin(t * .07) * .32 + Math.sin(t * .029) * .08;
-    if (portrait) { const r = 370; camera.position.set(cx + Math.cos(a) * r, 300 + Math.sin(t * .11) * 5, wc.z + Math.sin(a) * r); camera.lookAt(cx - 22, -46, wc.z); camera.fov = 40; }
-    else { const r = 300; camera.position.set(cx + Math.sin(a) * r, 185 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); camera.lookAt(cx + Math.sin(a) * 36, -30, wc.z - 14); camera.fov = 36; }
+    const t = ((show.frozen || now) - show.lag) / 1000, portrait = camera.aspect < .9, wc = wheelCentre(), cx = (L.wheelX - WELL + L.xEnd) / 2, a = Math.sin(t * .07) * .32 + Math.sin(t * .029) * .08;
+    if (portrait) { const r = 370; orbitEye.set(cx + Math.cos(a) * r, 300 + Math.sin(t * .11) * 5, wc.z + Math.sin(a) * r); orbitAt.set(cx - 22, -46, wc.z); return 40; }
+    const r = 300; orbitEye.set(cx + Math.sin(a) * r, 185 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); orbitAt.set(cx + Math.sin(a) * 36, -30, wc.z - 14); return 36;
+  }
+  function placeShowcase(now) {
+    if (show.driven) return; const fov = orbitPose(now); if (fov == null) return;
+    camera.position.copy(orbitEye); camera.lookAt(orbitAt); camera.fov = fov;
     camera.up.set(0, 1, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   }
   // a slow drift, at the stage's 60 frames a second, asked for by the orbit itself, and the camera alone moves; none
   // while the window is out of focus (the lobby left open behind another app)
-  const showTick = now => { if (!document.hasFocus()) return; placeShowcase(now); requestRender(false); };
+  const showTick = now => { if (show.frozen || !document.hasFocus()) return; placeShowcase(now); requestRender(false); };
   showTick.lazy = showTick.still = true;
   const showcase = {
     get on() { return show.on; },
     start(still = false) { show.on = true; moveJob++; if (still) placeShowcase(9000); else tickers.add(showTick); requestRender(false); },
     async stop(ms = 1300) { if (!show.on) return; tickers.delete(showTick); show.on = false; const s = { ...shots.seat, name: 'seat' }; await move(s, ms); setPose(s); },
+    // the orbit stands still (true) or goes on from where it stood (false); `drive`: the camera is someone else's meanwhile
+    freeze(on, drive = false) {
+      const now = performance.now();
+      if (on) { show.frozen ||= now; show.driven = drive; } else { if (show.frozen) show.lag += now - show.frozen; show.frozen = 0; show.driven = false; if (show.on) placeShowcase(now); requestRender(false); }
+    },
+    // where the orbit has the camera now (standing still: where it stopped)
+    pose() { const fov = orbitPose(performance.now()); return fov == null ? null : { eye: orbitEye.clone(), at: orbitAt.clone(), fov }; },
   };
 
   // (drawn only when something changes, as at the blackjack table: see scene/stage.mjs for `still`, `lazy` and requestRender(false))
@@ -913,6 +926,9 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     get view() { return view; }, get current() { return current; },
     wheelToWorld(p) { return new THREE.Vector3(p[0], p[1], p[2]).add(wheel.group.position); },
     pause: st.pause, hold: st.hold,   // (hold: a hit-stop, the picture held for a breath)
+    // a change of table in the lobby, swept in by a band of light (stage.swap), the orbit standing still meanwhile
+    swap(apply, o) { showcase.freeze(true); return st.swap(apply, o).finally(() => showcase.freeze(false)); },
+    compile: () => renderer.compileAsync(scene, camera), floorY: () => FLOOR_Y,
     get debug() { return st.debug; },
     GEO,
   };

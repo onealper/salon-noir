@@ -182,6 +182,35 @@ export function createStage(canvas, { quality = detectQuality(), background, env
     },
     // A hit-stop: no frame drawn for `ms`, the last one held on the screen, then on again from where time has got to.
     hold(ms) { heldUntil = performance.now() + ms; requestRender(false); },
+    // A change of table in the lobby: the frame as it stands is kept on a picture over the canvas, the table is
+    // re-dressed under it (`apply`), and a band of light runs across the picture and sweeps it away, the new table behind
+    // it (`tone`: 'gold'; 'lightning' crackles, a blue-white band that flickers). `calm`: a plain crossfade (reduced
+    // motion). Resolves when the picture is gone.
+    swap(apply, { tone = 'gold', calm = false, ms = calm ? 400 : 1000 } = {}) {
+      if (paused || gl.isContextLost() || !canvas.width || !canvas.parentElement) { apply(); return Promise.resolve(); }
+      const pic = document.createElement('canvas'), band = document.createElement('div');
+      pic.width = canvas.width; pic.height = canvas.height; pic.className = 'stage-swap'; band.className = `stage-sweep ${tone}`;
+      renderer.render(scene, camera); pic.getContext('2d').drawImage(canvas, 0, 0);   // (read in the task that drew it: the buffer is still there)
+      const r = canvas.getBoundingClientRect(), o = canvas.parentElement.getBoundingClientRect();
+      for (const el of [pic, band]) { el.setAttribute('aria-hidden', 'true'); Object.assign(el.style, { left: `${r.left - o.left}px`, top: `${r.top - o.top}px`, width: `${r.width}px`, height: `${r.height}px` }); }
+      canvas.after(pic, ...(calm ? [] : [band]));
+      apply(); requestRender();
+      return new Promise(done => {
+        let t0 = 0, n = 0; const crackle = tone === 'lightning';
+        const step = now => {
+          if (++n < 3) { requestAnimationFrame(step); return; }   // (the first frames of a new dressing may be slow to draw: the sweep starts after them)
+          t0 ||= now; const k = Math.min(1, (now - t0) / ms), e = k < .5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
+          if (calm) pic.style.opacity = (1 - e).toFixed(3);
+          else {
+            const p = -15 + 130 * e + (crackle ? (Math.random() - .5) * 1.6 : 0), m = `linear-gradient(105deg, transparent ${(p - 7).toFixed(2)}%, #000 ${(p + 7).toFixed(2)}%)`;
+            pic.style.webkitMaskImage = pic.style.maskImage = m; band.style.setProperty('--p', `${p.toFixed(2)}%`);
+            band.style.opacity = (Math.sin(Math.PI * Math.min(1, k * 1.15)) * (crackle ? .55 + Math.random() * .45 : 1)).toFixed(3);
+          }
+          if (k < 1) requestAnimationFrame(step); else { pic.remove(); band.remove(); done(); }
+        };
+        requestAnimationFrame(step);
+      });
+    },
     // Out of sight (the other room): no frames, the smallest drawing buffer and no shadow maps held.
     pause(on) {
       if (on === paused) return; paused = on;

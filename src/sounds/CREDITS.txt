@@ -33,7 +33,7 @@ for Spader, the game's earlier name). The game adds a small generated room rever
 random pitch and level variation, and stereo placement by table position at play time.
 
 
-The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (137 files)
+The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (150 files)
 ===================================================================
 
 Changes, every kit file: cut to length, levels matched and encoded as MP3 with ffmpeg
@@ -139,3 +139,11 @@ under ElevenLabs' terms; not openly licensed
                       Noir with ElevenLabs Sound Effects v2 on 2026-10-28 (three takes each,
                       picked from their envelopes and spectrograms); mono, tails faded,
                       peaks at -0.5 to -3 dBFS (the fizzle at -12).
+  portal-open, portal-drop, portal-land
+                      The lobby's portal between the rooms (scene/portal.mjs): the ring
+                      opening with a shimmering swell, the table drawn down into it (a
+                      deep descending whoomp), and the table landing (a thud and chips
+                      settling; cut to 12 ms before the thud, a low 52 Hz thump added under
+                      it). Generated for Salon Noir with ElevenLabs Sound Effects v2 on
+                      2026-10-28 (three takes each, picked from their envelopes); mono,
+                      70 Hz (the landing 40 Hz) high-pass, tails faded, peaks at -1 to -3 dBFS.

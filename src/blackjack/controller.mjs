@@ -6,6 +6,7 @@ import { Table, record, total, natural, isTen, LIMITS, CUT_AT, SHOE_CARDS, SPOTS
 import { SIDE_BETS, PUSH22 } from '../sidebets.mjs';
 import { MODES } from '../core/modes.mjs';
 import { createWorld, LAYOUT, toSeat } from '../scene/world.mjs';
+import { createPortal } from '../scene/portal.mjs';
 import { Seating, SEAT_COUNT, YOU } from '../players.mjs';
 import { loadCourtArt, CARD_W, CARD_H } from '../scene/textures.mjs';
 import { wallet, inFlight } from '../core/wallet.mjs';
@@ -33,6 +34,7 @@ export function createBlackjack(ctx) {
   const { settings, store, audio, feel, uiSound, sting, take } = ctx;
   const canvas = $('#table'), stage = $('#stage'), overlay = $('#overlay');
   const world = createWorld(canvas, { specs: SIDE_BETS, quality: ctx.quality(), mode: MODES[settings.mode] });
+  const portal = createPortal(world, { body: world.table, floorY: world.floorY(), showcase: world.showcase, audio, reduced: () => settings.reduced });   // (the lobby's change of game: scene/portal.mjs)
   const motion = new Motion(world), view = new TableView(world, motion, audio);
   const table = new Table({ random: ctx.random, balance: wallet.balance, mode: settings.mode });
   { const p = store.get('lightningPending', null); if (p?.m > 0 && p.fee > 0) table.pending = p; }   // a multiplier you earned waits for you across visits
@@ -781,12 +783,17 @@ export function createBlackjack(ctx) {
       lightning.badge();   // the Lightning show sees the room is in sight (applyMode stands aside mid-hand): its storm starts
     },
     hide() { visible = false; world.showcase.stop(0); lightning.preview(false); lightning.badge(); world.pause(true); },   // the hidden table draws nothing while you are at the wheel
-    showcase: world.showcase,
+    showcase: world.showcase, portal,
     // the lobby opens over the table, or closes for the seat (at Lightning the board then takes the head of the table)
     toLobby() { world.showcase.start(settings.reduced); lightning.preview(table.mode === 'lightning'); lightning.badge(); },
     fromLobby() { framed = ''; reframeNow(); },
-    // picking a blackjack table in the lobby dresses this one for it
-    preview(tableMode) { if (tableMode !== table.mode) applyMode(tableMode, { announce: false }); lightning.preview(tableMode === 'lightning'); },
+    // picking a blackjack table in the lobby dresses this one for it, swept in by a band of light (`sweep`: false when the
+    // table has just come through the portal, dressed before it is seen)
+    preview(tableMode, { sweep = true } = {}) {
+      const dress = () => { if (tableMode !== table.mode) applyMode(tableMode, { announce: false }); lightning.preview(tableMode === 'lightning'); };
+      if (!sweep || !visible || tableMode === table.mode || busy || table.phase !== 'betting') { dress(); return Promise.resolve(); }
+      return world.swap(dress, { tone: tableMode === 'lightning' ? 'lightning' : 'gold', calm: settings.reduced });
+    },
     // you sit down: the camera flies down into your seat (`direct`: the page opened at the table, ?table)
     async enter(ms, { tableMode, direct = false } = {}) {
       if (direct) { seatedNow(); return; }

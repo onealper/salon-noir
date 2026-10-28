@@ -583,12 +583,21 @@ body.reduced .ins-ace { animation: none; }
     linear-gradient(180deg, rgba(4, 4, 5, .88) 0%, rgba(4, 4, 5, .35) 24%, rgba(4, 4, 5, 0) 42%, rgba(4, 4, 5, .1) 55%, rgba(4, 4, 5, .8) 74%, rgba(4, 4, 5, .97) 100%);
   transition: opacity 700ms; }   /* (with the camera's flight into the seat) */
 .lobby-inner { position: relative; min-height: 100%; width: min(1180px, 100%); margin: 0 auto; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
-/* the menu parts as you take a seat: title up, rail down, shade away - while the camera flies in */
+/* the menu parts as you take a seat, piece by piece, while the camera flies in: the title's pieces lift away one after
+   another, the wordmark swelling a little as it goes out of focus; the rail's title, the switch and the cards (one after
+   another) sink and blur away, the button you pressed last; the shade lifts off the table. Exits speed up as they go. */
 .lobby.leaving { pointer-events: none; }
 .lobby.leaving .lobby-shade { opacity: 0; }
-.lobby.leaving .lobby-head { opacity: 0; transform: translateY(-40px); }
-.lobby.leaving .rail { opacity: 0; transform: translateY(60px); }
-.lobby-head, .rail { transition: opacity .55s cubic-bezier(.4, 0, .2, 1), transform .7s cubic-bezier(.5, 0, .2, 1); }
+.lobby-head > *, .rail > *, .tcards > .tcard { --out: 0ms; transition: opacity .42s var(--out) cubic-bezier(.55, 0, .8, .3), translate .5s var(--out) cubic-bezier(.55, 0, .8, .3), scale .5s var(--out) cubic-bezier(.55, 0, .8, .3), filter .5s var(--out) cubic-bezier(.55, 0, .8, .3); }
+.lobby.leaving .lobby-head > * { opacity: 0; translate: 0 -18px; filter: blur(6px); }
+.lobby.leaving .lobby-word { scale: 1.05; }
+.lobby-head > .lobby-word { --out: 40ms; } .lobby-head > .lobby-tag { --out: 90ms; } .lobby-head > .lobby-balance { --out: 60ms; }
+.lobby.leaving .rail > *, .lobby.leaving .tcards > .tcard { opacity: 0; translate: 0 26px; filter: blur(6px); }
+.lobby.leaving .tcards { opacity: 1; translate: none; filter: none; }   /* (the row stays; its cards go one by one) */
+.lobby.leaving .tcard.arrive { animation: none; }   /* (an arrival held at its end would take the exit's values without a tween) */
+.lobby.leaving .lobby-mark { filter: drop-shadow(0 6px 16px rgba(201, 164, 92, .3)) blur(6px); }
+.rail > .games { --out: 30ms; } .tcards > .tcard:nth-child(3n + 1) { --out: 70ms; } .tcards > .tcard:nth-child(3n + 2) { --out: 115ms; } .tcards > .tcard:nth-child(3n) { --out: 160ms; }
+.rail > .lobby-note { --out: 120ms; } .rail > .seat { --out: 200ms; } .lobby.leaving .rail > .seat { scale: .96; }
 .lobby:not(.leaving) .lobby-head { animation: head-in 1s cubic-bezier(.2, .9, .25, 1) both; }
 .lobby:not(.leaving) .rail { animation: rail-in 1s .15s cubic-bezier(.2, .9, .25, 1) both; }
 @keyframes head-in { from { opacity: 0; transform: translateY(-24px); } }
@@ -664,7 +673,23 @@ body.reduced .tcard.arrive { animation: none; } body.reduced .games-pill { trans
 /* while the menu is up (and while the camera flies in) the table's own chrome stays out of the shot */
 body.in-lobby .top, body.in-lobby .dock, body.in-lobby #overlay, body.in-lobby .hint, body.in-lobby .feed, body.in-lobby .banner, body.in-lobby .zap, body.in-lobby .lightning,
 body.flying .top, body.flying .dock, body.flying #overlay, body.flying .hint, body.flying .feed, body.flying .lightning { opacity: 0; pointer-events: none; }
-.top, .dock, #overlay { transition: opacity .6s .1s; }
+/* and back at the table once the camera has landed: the bar comes down into place and the dock up, and the frosted band
+   under each grows in from its edge of the screen layer by layer, the strongest blur first */
+.top, .dock, #overlay { transition: opacity .6s .1s, translate .8s .1s cubic-bezier(.2, .8, .25, 1); }
+body:is(.in-lobby, .flying) .top { translate: 0 -14px; }
+body:is(.in-lobby, .flying) .dock { translate: 0 18px; }
+.top-blur i, .dock-blur i { transition: opacity .55s var(--in, 0ms) ease-out, translate .9s var(--in, 0ms) cubic-bezier(.2, .8, .25, 1); }
+body:is(.in-lobby, .flying) .top-blur i { opacity: 0; translate: 0 -16px; }
+body:is(.in-lobby, .flying) .dock-blur i { opacity: 0; translate: 0 26px; }
+.top-blur i:nth-child(3) { --in: 120ms; } .top-blur i:nth-child(2) { --in: 220ms; } .top-blur i:nth-child(1) { --in: 320ms; }
+.dock-blur i:nth-child(5) { --in: 120ms; } .dock-blur i:nth-child(4) { --in: 200ms; } .dock-blur i:nth-child(3) { --in: 280ms; } .dock-blur i:nth-child(2) { --in: 360ms; } .dock-blur i:nth-child(1) { --in: 440ms; }
+body:is(.in-lobby, .flying) :is(.top-blur, .dock-blur) i { transition-duration: .3s; transition-delay: 0s; }   /* (going, all at once) */
+/* a change of table in the lobby (swap in scene/stage.mjs): the last frame over the canvas, swept away by a band of light
+   running across it; a Lightning table's band is electric (it flickers as it goes) */
+.stage-swap, .stage-sweep { position: absolute; pointer-events: none; }
+.stage-sweep { --p: -20%; opacity: 0; mix-blend-mode: screen;
+  background: linear-gradient(105deg, transparent calc(var(--p) - 10%), rgba(201, 164, 92, .16) calc(var(--p) - 3.5%), rgba(255, 240, 205, .95) var(--p), rgba(201, 164, 92, .16) calc(var(--p) + 3.5%), transparent calc(var(--p) + 10%)); }
+.stage-sweep.lightning { background: linear-gradient(105deg, transparent calc(var(--p) - 9%), rgba(110, 132, 255, .24) calc(var(--p) - 2.5%), #eef3ff var(--p), rgba(110, 132, 255, .24) calc(var(--p) + 2.5%), transparent calc(var(--p) + 9%)); }
 
 /* phones: the title tightens to the top, the tables become a swipeable rail, the seat button spans the foot */
 @media (max-width: 760px) {
@@ -824,6 +849,13 @@ body:not([data-room="roulette"]) .rstage, body:not([data-room="roulette"]) .rdoc
 body[data-room="roulette"] .shoe-meter { display: none; }
 body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flying .rdock, body.flying .r-overlay, body.flying .r-hint { opacity: 0; pointer-events: none; }
 .rdock, .r-overlay, .r-hint { transition: opacity .5s var(--ease); }
+/* the portal between the rooms (scene/portal.mjs, crossRooms in app.mjs): the room coming in is laid out and drawn in the
+   same place as the one going, out of sight, until the flash; the flash is the portal's light filling the picture as its
+   ring snaps shut (under the lobby's menu, which stays as it was) */
+body[data-coming="roulette"] .rstage, body[data-coming="blackjack"] #stage { display: block !important; visibility: hidden; }
+.portal-flash { position: absolute; inset: 0; z-index: 19; pointer-events: none; opacity: 0; transition: opacity .55s cubic-bezier(.2, .7, .3, 1);
+  background: radial-gradient(circle at 50% 55%, #fffaf0 0%, #ffe6ad 16%, #dcae5c 38%, #3a260c 74%, #0b0805 100%); }
+.portal-flash.on { opacity: 1; transition: opacity .17s cubic-bezier(.5, 0, .9, .4); }
 .rcanvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; touch-action: none; }
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* the room falls away into the dark round the table, as under its pendants */

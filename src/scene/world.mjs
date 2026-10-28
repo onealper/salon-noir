@@ -253,14 +253,19 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   let extraSee = [];   // points a table asks the seat's view to include (the Lightning marquee)
   // ---- the showcase: in the lobby the camera circles the table slowly, like a film opening on the
   // room; taking a seat flies it down into your chair. ---------------------------------------------
-  const show = { on: false, fly: null }, orbitEye = new THREE.Vector3(), orbitAt = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpM = new THREE.Matrix4();
-  function placeShowcase(now) {
-    const portrait = camera.aspect < .9, t = now / 1000;
+  // `lag`: how long the orbit has stood still (a change of table, the portal), so it goes on from where it stopped; `frozen`:
+  // since when it stands; `driven`: the portal has the camera.
+  const show = { on: false, fly: null, lag: 0, frozen: 0, driven: false }, orbitEye = new THREE.Vector3(), orbitAt = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpM = new THREE.Matrix4();
+  function orbitPose(now) {
+    const portrait = camera.aspect < .9, t = ((show.frozen || now) - show.lag) / 1000;
     const a = Math.sin(t * .075) * .62 + Math.sin(t * .031) * .12;          // a slow sweep around the table
     // framed for the lobby's layout: the table floats in the band between the title and the rail
     const r = portrait ? 300 : 200, y = (portrait ? 190 : 118) + Math.sin(t * .11) * 6;
     orbitEye.set(Math.sin(a) * r, y, 10 + Math.cos(a) * r);
     orbitAt.set(Math.sin(a) * 8, portrait ? -120 : -44, portrait ? -8 : 0);
+  }
+  function placeShowcase(now) {
+    if (show.driven) return; orbitPose(now);
     camera.position.copy(orbitEye); camera.up.set(0, 1, 0); camera.lookAt(orbitAt); camera.updateMatrixWorld();
   }
   // The orbit is a slow drift: drawn at the stage's 60 frames a second (`lazy`, it asks for its own frames) and,
@@ -273,7 +278,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       if (k >= 1) { tickers.delete(showTick); show.on = false; show.fly = null; applyPan(); f.done(); }
       return;
     }
-    if (!document.hasFocus()) return;   // (none while the window is out of focus: the lobby left open behind another app)
+    if (show.frozen || !document.hasFocus()) return;   // (none while the window is out of focus: the lobby left open behind another app)
     placeShowcase(now); requestRender(false);
   }
   showTick.still = true;
@@ -287,6 +292,13 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       showTick.lazy = false; tickers.add(showTick);
       return new Promise(done => { show.fly = { t0: performance.now(), ms, fromPos: camera.position.clone(), fromQuat: camera.quaternion.clone(), done }; requestRender(); });
     },
+    // the orbit stands still (true) or goes on from where it stood (false); `drive`: the camera is someone else's meanwhile
+    freeze(on, drive = false) {
+      const now = performance.now();
+      if (on) { show.frozen ||= now; show.driven = drive; } else { if (show.frozen) show.lag += now - show.frozen; show.frozen = 0; show.driven = false; if (show.on) placeShowcase(now); requestRender(false); }
+    },
+    // where the orbit has the camera now (standing still: where it stopped)
+    pose() { orbitPose(performance.now()); return { eye: orbitEye.clone(), at: orbitAt.clone(), fov: camera.fov }; },
   };
   // The director's pan: from your seat the head turns toward whoever is playing, then back.
   // `pan` is a turn about the vertical (radians, positive looks left) on top of the framed view.
@@ -333,6 +345,9 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     THREE, renderer, scene, camera, table, spots, shoe, frame, requestRender, tickers, project, setQuality, setPan, panFor, get pan() { return pan; },
     lights: { key, hemi, glow, get backdrop() { return backdrop; }, get room() { return roomLight; } }, showcase, afterFrame, radialTexture, setExtraSee(pts) { extraSee = pts; },
     setMode, pause: st.pause, hold: st.hold, get paused() { return st.paused; },
+    // a change of table in the lobby, swept in by a band of light (stage.swap), the orbit standing still meanwhile
+    swap(apply, o) { showcase.freeze(true); return st.swap(apply, o).finally(() => showcase.freeze(false)); },
+    compile: () => renderer.compileAsync(scene, camera), floorY: () => FLOOR_Y,
     get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     discard: { group: discard, get count() { return discarded; }, set: setDiscards, topY: () => .6 + discarded * CARD_T },
     edgeTex,

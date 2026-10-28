@@ -17,14 +17,14 @@ const n = (name, ...takes) => takes.map(t => `${name}-${t}`), to = k => Array.fr
 const CODE = ['./', 'manifest.webmanifest', 'src/app.css', 'src/fonts.css',
   ...['app', 'engine', 'sidebets', 'players', 'sound', 'ui-kit', 'ui-motion'].map(f => `src/${f}.mjs`),
   ...['bet-controls', 'brand', 'chips', 'feel', 'format', 'ledger', 'lobby', 'modes', 'rng', 'wallet'].map(f => `src/core/${f}.mjs`),
-  ...['stage', 'world', 'view', 'pieces', 'textures', 'glass', 'lightning3d'].map(f => `src/scene/${f}.mjs`),
+  ...['stage', 'world', 'view', 'pieces', 'textures', 'glass', 'lightning3d', 'portal'].map(f => `src/scene/${f}.mjs`),
   ...['controller', 'book', 'lightning-ui', 'storm', 'tray-icons'].map(f => `src/blackjack/${f}.mjs`),
   ...['rgame', 'rules', 'lightning', 'physics', 'replay', 'rscene', 'rlightning', 'wheel3d', 'roller'].map(f => `src/roulette/${f}.mjs`),
   ...['three.module.min.js', 'RoomEnvironment.js', 'anime.mjs', 'confetti.mjs', 'torph.mjs', 'web-haptics.mjs', 'cuelume/index.js', 'cuelume/audio/engine.js',
     'cuelume/interactions/bind.js', ...['bubble', 'context', 'mech', 'press', 'recipes', 'themes'].map(f => `cuelume/sounds/${f}.js`)].map(f => `src/vendor/${f}`)];
 const BJ = ['place-bets', 'insurance', 'even-money', 'lightning', 'dealer-ace', 'blackjack', 'dealer-blackjack', ...n('dealer', 17, 18, 19, 20, 21), 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
 const KIT = [...n('ball-click', ...to(6)), ...n('ball-launch', 1, 2), ...n('wheelhead', 1, 2), ...n('rake', ...to(3)), ...n('dolly', 1, 2), ...n('chip-thock', ...to(5)), ...n('crowd-cheer', 1, 2), ...n('spark', ...to(4)), ...n('zap', 1, 2), ...n('thunder', 1, 2, 'mega', 'rumble'),
-  'charge', 'strike', 'rain-window', ...n('lr-strike', 1, 2, 3), 'lr-charge', 'lr-chain', 'lr-double', 'lr-fizzle', 'lr-payoff', 'whoosh', 'reveal-sting', 'win-bling', 'room-casino-1', ...['big', 'blackjack', 'side', 'small'].flatMap(k => n(`win-${k}`, 1, 2)),
+  'charge', 'strike', 'rain-window', ...n('lr-strike', 1, 2, 3), 'lr-charge', 'lr-chain', 'lr-double', 'lr-fizzle', 'lr-payoff', 'portal-open', 'portal-drop', 'portal-land', 'whoosh', 'reveal-sting', 'win-bling', 'room-casino-1', ...['big', 'blackjack', 'side', 'small'].flatMap(k => n(`win-${k}`, 1, 2)),
   ...n('ui-click', 1, 2), ...['open', 'select', 'toggle'].flatMap(k => n(`ui-${k}`, ...to(4))),
   ...['james', 'sofia'].flatMap(v => BJ.map(l => `voice/${v}-bj-${l}`)), ...['place-bets', 'last-bets', 'no-more-bets', 'good-luck', 'winning-number', 'congrats', ...to(37).map(i => `n${i - 1}`)].map(l => `voice/james-${l}`)];
 const WAV = [...n('card-slide', 3, 4, 7, 8), ...n('card-place', ...to(4)), ...n('card-shove', ...to(4)), 'card-fan-1', 'card-shuffle', ...n('chip-lay', ...to(3)), ...n('chips-collide', ...to(4)),

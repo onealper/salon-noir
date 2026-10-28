@@ -106,7 +106,7 @@ export const lobby = {
   },
   close() {
     if (!isOpen) return; isOpen = false; unsub?.(); document.body.classList.remove('in-lobby'); setInert(false); noteText = '';
-    root.classList.add('leaving'); setTimeout(() => { if (!isOpen) { root.hidden = true; root.classList.remove('leaving'); showNote(); } }, 700); onChange(false);
+    root.classList.add('leaving'); setTimeout(() => { if (!isOpen) { root.hidden = true; root.classList.remove('leaving'); showNote(); } }, 760);   // (the last piece out: app.css, .lobby.leaving) onChange(false);
   },
   // a line over the rail: what happened while you were away, or why a tap did nothing
   note(text) { noteText = text ?? ''; showNote(); },
