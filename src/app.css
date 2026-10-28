@@ -38,7 +38,7 @@ body:not(.ready) .app { visibility: hidden; }
 /* ---- the splash: drawn by index.html before any script runs; it becomes a message if the salon can't open ---- */
 .splash { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; background: var(--bg); color: var(--ivory); text-align: center; font: 500 15px/1.45 Inter, system-ui, sans-serif; transition: opacity var(--duration-fast) var(--ease-smooth-out), visibility 0s var(--duration-fast); }
 .splash svg { width: 54px; height: 54px; filter: drop-shadow(0 6px 18px rgba(201, 164, 92, .3)); }
-.splash .keylight { animation: keylight 2.4s ease-in-out infinite; }
+body:not(.ready) .splash .keylight { animation: keylight 2.4s ease-in-out infinite; }   /* (only while it waits: a splash faded out keeps its animations running, so it is also removed: app.mjs) */
 .splash p { margin: 0; max-width: 34em; color: #cfc8ba; }
 .splash .splash-word { font: 500 26px/1 "Bodoni Moda", Georgia, serif; letter-spacing: .01em; }
 .splash .splash-word i { font-style: italic; font-weight: 600; color: var(--gold-hi); }
@@ -65,6 +65,7 @@ body.reduced .splash .keylight { animation: none; }
 .top-blur i:nth-child(1) { -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); --m1: 0%; --m2: 14%; --m3: 30%; --m4: 46%; }
 .top-blur i:nth-child(2) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); --m1: 30%; --m2: 46%; --m3: 58%; --m4: 72%; }
 .top-blur i:nth-child(3) { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); --m1: 58%; --m2: 72%; --m3: 100%; --m4: 100%; }
+@supports (-moz-appearance: none) { .top-blur i:nth-child(1) { display: none; } .top-blur i:nth-child(2) { --m1: 0%; --m2: 20%; } }   /* (Firefox: see the dock's band) */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .top-blur { background: linear-gradient(#111113, rgba(12, 12, 13, .9) 70%, rgba(12, 12, 13, 0)); } }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left; }
 .brand .mark { display: block; width: 32px; height: 32px; flex: none; }
@@ -201,6 +202,9 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity var(
   .dock-blur i:nth-child(3) { --b: 5px; --a: 18%; --c: 42%; }
   .dock-blur i:nth-child(4) { --b: 10px; --a: 30%; --c: 58%; }
   .dock-blur i:nth-child(5) { --b: 18px; --a: 44%; --c: 76%; }
+  /* Firefox (and Zen, built on it) blurs each layer again whenever anything moves behind it, the table's every frame:
+     there the band keeps its three strongest layers, the top bar's its two (below) */
+  @supports (-moz-appearance: none) { .dock-blur i:nth-child(1), .dock-blur i:nth-child(3) { display: none; } .dock-blur i:nth-child(2) { --a: 0%; } }
   /* over the blur the controls are glass: a dark translucent fill and a fine light edge on top */
   .dock .pill:not(.gold), .dock .tray-toggle, .dock .tile { background: rgba(22, 22, 25, .62); border-color: rgba(255, 255, 255, .1); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 4px 14px rgba(0, 0, 0, .25); }
 }
@@ -457,9 +461,11 @@ body.reduced :is(.r-win, .r-win.show, .r-history, .rstage .r-history) { transiti
 /* ---- Magic UI: Shimmer Button (on Deal) ---------------------------------------------------------------- */
 .shimmer { position: relative; z-index: 0; overflow: hidden; isolation: isolate; background: #7d6230 !important; --spread: 90deg; }
 .shimmer .shimmer-spark-wrap { position: absolute; inset: 0; z-index: -30; filter: blur(2px); container-type: size; overflow: visible; }
-.shimmer .shimmer-spark { position: absolute; inset: 0; height: 100cqh; aspect-ratio: 1; animation: shimmer-slide var(--speed) ease-in-out infinite alternate; }
-.shimmer .shimmer-cone { position: absolute; inset: -100%; width: auto; rotate: 0deg; background: conic-gradient(from calc(270deg - (var(--spread) * .5)), transparent 0, var(--shimmer-color) var(--spread), transparent var(--spread)); animation: spin-around calc(var(--speed) * 2) infinite linear; }
-/* The spark only runs while the Deal button can be pressed; otherwise it costs repaints for nothing. */
+.shimmer .shimmer-spark { position: absolute; inset: 0; height: 100cqh; aspect-ratio: 1; animation: shimmer-slide var(--speed) ease-in-out 4 alternate; }
+.shimmer .shimmer-cone { position: absolute; inset: -100%; width: auto; rotate: 0deg; background: conic-gradient(from calc(270deg - (var(--spread) * .5)), transparent 0, var(--shimmer-color) var(--spread), transparent var(--spread)); animation: spin-around calc(var(--speed) * 2) 2 linear; }
+/* The spark runs while the Deal button can be pressed, a few passes each time it becomes pressable (its wrap comes back
+   from display: none, which starts the animations over) and then rests: a spark that never stopped redrew the page every
+   frame for as long as you thought about your bet. */
 body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .shimmer:disabled :is(.shimmer-spark, .shimmer-cone) { animation-play-state: paused; }
 .shimmer:disabled .shimmer-spark-wrap { opacity: 0; }
 .shimmer .shimmer-backdrop { position: absolute; inset: var(--cut); z-index: -20; border-radius: inherit; background: linear-gradient(#d5b36d, #b08a45); }
@@ -606,13 +612,15 @@ body.reduced .ins-ace { animation: none; }
 .lobby-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 12px; }
 .lobby-mark { grid-column: 1; justify-self: start; width: 46px; height: 46px; filter: drop-shadow(0 6px 16px rgba(201, 164, 92, .3)); }
 .lobby-mark svg { width: 100%; height: 100%; overflow: visible; }
-.lobby-mark .keylight { animation: keylight 5s ease-in-out infinite; }
+/* The lobby's own decoration plays as it opens and then rests: an animation that never ends has the page redrawn every
+   frame for as long as it is open, and a laptop warms to it (Firefox repaints an SVG's animation on the main thread). */
+.lobby-mark .keylight { animation: keylight 5s ease-in-out 2; }
 @keyframes keylight { 0%, 100% { opacity: 1; } 42% { opacity: .75; } 47% { opacity: .95; } 70% { opacity: .85; } }
 .lobby-word { grid-column: 2; margin: 0; display: grid; justify-items: center; line-height: 1; text-shadow: 0 10px 40px rgba(0, 0, 0, .6); }
 .lobby-word small { font: 700 13px/1 Inter, system-ui, sans-serif; letter-spacing: .8em; margin-right: -.8em; text-transform: uppercase; color: var(--gold); }
 .lobby-word span { position: relative; font: italic 400 124px/.9 "Bodoni Moda", Georgia, serif; letter-spacing: -.015em; padding: 0 .08em;
   background: linear-gradient(100deg, #b8914b 0%, #f1dfae 30%, #fffaf0 42%, #e2c483 52%, #a67c38 80%, #e2c483 100%); background-size: 240% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: gilt 7s ease-in-out infinite; }
+  animation: gilt 7s ease-in-out 1; }
 @keyframes gilt { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0 0; } }
 .lobby-tag { grid-column: 2; margin: -6px 0 0; justify-self: center; font: 600 11px/1 Inter, system-ui, sans-serif; letter-spacing: .34em; text-transform: uppercase; color: rgba(236, 228, 210, .66); }
 .lobby-head .lobby-balance { grid-column: 3; grid-row: 1; justify-self: end; }
@@ -813,12 +821,12 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 /* your multiplier, waiting beside your bet */
 .l-badge { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 4px; padding: 4px 9px 4px 6px; translate: -50% -50%; border-radius: 99px; pointer-events: auto;
   background: linear-gradient(180deg, #2b2416, #0d0c0a); border: 1px solid var(--gold-hi); color: var(--gold-hi);
-  box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 18px rgba(255, 205, 110, .45), 0 6px 14px rgba(0, 0, 0, .5); white-space: nowrap; animation: badge-hum 2.4s ease-in-out infinite; }
+  box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 18px rgba(255, 205, 110, .45), 0 6px 14px rgba(0, 0, 0, .5); white-space: nowrap; animation: badge-hum 2.4s ease-in-out 3; }   /* (a few hums as it arrives, then a steady glow: see the lobby's note on endless animations) */
 .l-badge svg { width: 15px; height: 15px; fill: #ffe28f; filter: drop-shadow(0 0 4px rgba(255, 210, 110, .9)); }
 .l-badge b { font: 800 19px/1 "Barlow Condensed", sans-serif; color: #fff2c4; }
 .l-badge small { font: 700 11px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 @keyframes badge-hum { 50% { box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 28px rgba(255, 205, 110, .7), 0 6px 14px rgba(0, 0, 0, .5); } }
-.l-badge.arrive { animation: badge-in .7s cubic-bezier(.2, 1.5, .4, 1), badge-hum 2.4s .7s ease-in-out infinite; }
+.l-badge.arrive { animation: badge-in .7s cubic-bezier(.2, 1.5, .4, 1), badge-hum 2.4s .7s ease-in-out 3; }
 @keyframes badge-in { 0% { scale: 0; opacity: 0; } 50% { scale: 1.35; opacity: 1; } 100% { scale: 1; } }
 /* the payoff gathering on it: the badge crackles, swelling, before the bolt drives in */
 .l-badge.gather { animation: badge-gather .11s steps(2) infinite; scale: 1.18; transition: scale var(--duration-fast); }

@@ -246,6 +246,7 @@ function setRoom(r) {
   if (first === 'blackjack') await load('blackjack');
   setRoom(first); }
 document.body.classList.add('ready');
+setTimeout(() => { const s = document.getElementById('splash'); if (s && !s.classList.contains('failed')) s.remove(); }, 1500);   // once faded: a hidden splash would keep its animations running
 if (welcome && params.has('table')) rooms[room].hint(welcome);
 // The lobby: the casino's front room, over the table at every visit; the brand in the bar returns to it.
 $('#brandMark').innerHTML = mark();

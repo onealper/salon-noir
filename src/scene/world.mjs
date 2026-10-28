@@ -281,7 +281,8 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       return;
     }
     const dt = ticked ? Math.min(100, now - ticked) : 0; ticked = now; if (show.frozen) return;
-    show.lag += pace.step(dt); if (pace.still) return;   // (left alone, or out of focus, the orbit comes to rest: nothing is drawn)
+    show.lag += pace.step(dt);
+    if (pace.still) { tickers.delete(showTick); pace.wake(() => { if (show.on && !show.frozen) { ticked = 0; tickers.add(showTick); requestRender(false); } }); return; }   // (left alone, or out of focus, the orbit comes to rest: nothing is drawn, nothing asked for)
     placeShowcase(now); requestRender(false);
   }
   showTick.still = true;
