@@ -274,7 +274,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       if (k >= 1) { tickers.delete(showTick); show.on = false; show.fly = null; applyPan(); f.done(); }
       return;
     }
-    if (now - shown < 31) return;
+    if (now - shown < 31 || !document.hasFocus()) return;   // (none while the window is out of focus: the lobby left open behind another app)
     shown = now; placeShowcase(now); requestRender(false);
   }
   showTick.still = true;

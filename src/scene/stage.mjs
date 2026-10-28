@@ -25,7 +25,9 @@ export const pixelRatio = (q, w, h, cap = q.ratio) => Math.min(devicePixelRatio 
 // otherwise crawl as the wheel turns. Phones' tiled GPUs (Apple's above all) keep the extra samples on the chip and
 // resolve them there, so it costs them little; only the battery saver goes without (on a high-density screen). It is
 // chosen with the context, at load: a preset changed in Settings keeps the multisampling the page started with.
-export const glOptions = q => ({ antialias: q.name !== 'saver' || (devicePixelRatio || 1) < 2, powerPreference: q.name === 'high' ? 'high-performance' : 'default' });
+// The GPU is the browser's own choice ('default'): asking for 'high-performance' wakes the discrete GPU of a MacBook that
+// has two, which runs hot for a table that is still most of the time.
+export const glOptions = q => ({ antialias: q.name !== 'saver' || (devicePixelRatio || 1) < 2, powerPreference: 'default' });
 // A room environment for reflections, made once; the generator and the room it was rendered from are freed.
 export function roomEnvironment(renderer, blur = .04) {
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment(), rt = pmrem.fromScene(room, blur);
@@ -126,7 +128,9 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // Drawn only when something changes. A ticker draws every frame while it runs, unless it is `lazy` (it
   // asks for its own frames); it redraws the shadows too, unless it is `still` (it moves no shadow caster:
   // the camera, a glow, a light's level). `requestRender(false)` asks for a frame that keeps the shadows.
-  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0; const tickers = new Set();
+  // At most 60 frames a second: a 120 Hz screen (a ProMotion Mac's) is drawn for on every other refresh, which halves
+  // the GPU's work while anything moves and looks the same (on a 90 or 144 Hz screen it is 45 or 72).
+  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0, drawnAt = 0; const tickers = new Set();
   function requestRender(shadows = true) { dirty = true; if (shadows) shadowsDirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
   // Frame-time watch: while things move, compare each frame with the display's refresh (the shortest recent interval,
   // held between 60 and 48 a second: a 120 Hz screen is asked for 60, and a GPU that only manages 30 is never mistaken
@@ -149,6 +153,8 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   function loop(t) {
     loops++; running = false; if (paused || gl.isContextLost()) return;   // out of sight, or the context is gone (its restore asks for a frame)
     if (t < heldUntil) { running = true; last = 0; requestAnimationFrame(loop); return; }   // a hit-stop: the picture holds (time runs on; the gap isn't a slow frame)
+    if (t - drawnAt < 12) { running = true; requestAnimationFrame(loop); return; }   // (the 60 a second: see above)
+    drawnAt = t;
     watch(t); if (!tickers.size) last = 0;
     let busy = false, moving = false;
     for (const f of tickers) { try { f(t); busy ||= !f.lazy; moving ||= !f.still; } catch (e) { tickers.delete(f); console.error('ticker', e); } }   // one bad ticker must not stop the table (a finishing tween may request another frame here)

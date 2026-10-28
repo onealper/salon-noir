@@ -350,8 +350,13 @@ export async function createRoulette(ctx) {
   // The drift is drawn every frame the screen shows (a wheel turning at 30 frames a second judders on a 60 or 120 Hz
   // screen); it moves nothing that casts a shadow, so no shadow is drawn again for it. On the battery saver the
   // wheelhead coasts to a stop and then nothing is drawn; with reduced motion it stands at once. Either way the ball
-  // rests in its pocket.
-  let idleOn = false, idleWant = false;
+  // rests in its pocket. It drifts only while someone is at the table: with the window out of focus, or no touch, click
+  // or key for a minute, it coasts to a stop as on the battery saver (a laptop left on the table stays cool), and the
+  // next touch has it pick up its drift again. In the lobby the orbit's own 30 frames a second draw it.
+  let idleOn = false, idleWant = false, seen = performance.now(), driftSign = 1;
+  const AWAY = 60000, away = () => !document.hasFocus() || performance.now() - seen > AWAY;
+  const back = () => { seen = performance.now(); if (idleWant && !idleOn) setIdle(true); };
+  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'focus']) addEventListener(ev, back, { passive: true });
   const DRIFT = .63;   // rad/s: the wheelhead's slowest drift between spins
   const settle = { a: 0, r: 0, y: 0 };   // how far the ball still sits off the middle of its pocket after a spin: eased away
   function restBall(dt = 0) {
@@ -361,19 +366,20 @@ export async function createRoulette(ctx) {
   }
   const idle = now => {
     const dt = Math.min(.05, (now - (idle.last ?? now)) / 1000); idle.last = now;
-    const stand = S.quality.name === 'saver';
+    const stand = S.quality.name === 'saver' || away(); idle.lazy = S.showcase.on;
+    if (rotorW) driftSign = Math.sign(rotorW);
     // the wheelhead coasts on from the spin, slowing as it does in the spin (about 2% a second) down to a slow drift of
     // about 6 rpm, until the croupier spins it again; on the battery saver it runs down over some ten seconds and stands
     if (stand) rotorW -= rotorW * .6 * dt;
     else if (Math.abs(rotorW) > DRIFT) rotorW -= rotorW * TUNE.rotorDecay * dt;
-    else rotorW += (Math.sign(rotorW || 1) * DRIFT - rotorW) * .06 * dt;
+    else rotorW += (driftSign * DRIFT - rotorW) * .06 * dt;
     phi += rotorW * dt; S.wheel.setRotor(phi); restBall(dt);
     if (stand && Math.abs(rotorW) < .004 && Math.abs(settle.r) < .004) { rotorW = 0; idleOn = false; S.tickers.delete(idle); S.requestRender(false); return; }   // at rest: the last frame
     if (bubble.dataset.on) placeBubble();
   };
   idle.still = true;
   function setIdle(on) {
-    idleWant = on; const run = on && !reduced() && (S.quality.name !== 'saver' || Math.abs(rotorW) >= .004);   // a saver wheel already at rest stays at rest
+    idleWant = on; const run = on && !reduced() && ((S.quality.name !== 'saver' && !away()) || Math.abs(rotorW) >= .004);   // a saver wheel (or one left alone) already at rest stays at rest
     if (run !== idleOn) { idleOn = run; idle.last = null; if (run) S.tickers.add(idle); else S.tickers.delete(idle); }
     if (!run) { settle.a = settle.r = settle.y = 0; S.wheel.setRotor(phi); restBall(); }   // standing: wheelhead and ball where they belong
     S.requestRender();

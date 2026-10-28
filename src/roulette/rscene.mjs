@@ -841,9 +841,10 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     else { const r = 300; camera.position.set(cx + Math.sin(a) * r, 185 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); camera.lookAt(cx + Math.sin(a) * 36, -30, wc.z - 14); camera.fov = 36; }
     camera.up.set(0, 1, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   }
-  // a slow drift: 30 frames a second, asked for by the orbit itself, and the camera alone moves
+  // a slow drift: 30 frames a second, asked for by the orbit itself, and the camera alone moves; none while the window
+  // is out of focus (the lobby left open behind another app)
   let shown = 0;
-  const showTick = now => { if (now - shown < 31) return; shown = now; placeShowcase(now); requestRender(false); };
+  const showTick = now => { if (now - shown < 31 || !document.hasFocus()) return; shown = now; placeShowcase(now); requestRender(false); };
   showTick.lazy = showTick.still = true;
   const showcase = {
     get on() { return show.on; },
