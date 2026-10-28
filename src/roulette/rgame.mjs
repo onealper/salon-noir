@@ -352,7 +352,7 @@ export async function createRoulette(ctx) {
   // wheelhead coasts to a stop and then nothing is drawn; with reduced motion it stands at once. Either way the ball
   // rests in its pocket. It drifts only while someone is at the table: with the window out of focus, or no touch, click
   // or key for a minute, it coasts to a stop as on the battery saver (a laptop left on the table stays cool), and the
-  // next touch has it pick up its drift again. In the lobby the orbit's own 30 frames a second draw it.
+  // next touch has it pick up its drift again. In the lobby the orbit's own frames draw it.
   let idleOn = false, idleWant = false, seen = performance.now(), driftSign = 1;
   const AWAY = 60000, away = () => !document.hasFocus() || performance.now() - seen > AWAY;
   const back = () => { seen = performance.now(); if (idleWant && !idleOn) setIdle(true); };

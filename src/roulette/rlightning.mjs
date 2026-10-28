@@ -286,7 +286,7 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
     // over the numbers 1 to 36 (twelve rows of three: the zero has a cell of its own size), wherever the layout lies
     const xs = [L.X(0), L.X(12)], zs = [L.Z(0), L.Z(3)], u = grid.material.uniforms;
     grid.position.set((xs[0] + xs[1]) / 2, .12, (zs[0] + zs[1]) / 2); grid.scale.set(Math.abs(xs[1] - xs[0]), 1, Math.abs(zs[1] - zs[0]));
-    if (!gridTick && level > 0 && !quiet()) { const t0 = performance.now(); let drawn = 0; gridTick = now => { if (now - drawn < 33) return; drawn = now; u.uT.value = (now - t0) / 1000; requestRender(false); }; gridTick.still = gridTick.lazy = true; tickers.add(gridTick); }
+    if (!gridTick && level > 0 && !quiet()) { const t0 = performance.now(); gridTick = now => { u.uT.value = (now - t0) / 1000; requestRender(false); }; gridTick.still = gridTick.lazy = true; tickers.add(gridTick); }
     const from = u.uI.value, to = quiet() ? 0 : level;
     run(ms, k => { u.uI.value = from + (to - from) * k; }, () => { if (to === 0 && gridTick) { tickers.delete(gridTick); gridTick = null; } });
   }
@@ -310,8 +310,8 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
   const plaques = new Map();   // number → { group, text, glow, edge, canvas, tex, at, hot, w, h }
   let edgeTick = null;
   const edgesLive = () => {
-    if (edgeTick || quiet()) return; const t0 = performance.now(); let drawn = 0;
-    edgeTick = now => { if (!plaques.size) { tickers.delete(edgeTick); edgeTick = null; return; } if (now - drawn < 33) return; drawn = now; for (const p of plaques.values()) p.edge.material.uniforms.uT.value = (now - t0) / 1000; requestRender(false); };
+    if (edgeTick || quiet()) return; const t0 = performance.now();
+    edgeTick = now => { if (!plaques.size) { tickers.delete(edgeTick); edgeTick = null; return; } for (const p of plaques.values()) p.edge.material.uniforms.uT.value = (now - t0) / 1000; requestRender(false); };
     edgeTick.still = edgeTick.lazy = true; tickers.add(edgeTick);
   };
   // the square, turned to read from your seat (its head away from you, square to the grid)

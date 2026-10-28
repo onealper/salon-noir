@@ -290,7 +290,7 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
   const chargeMat = new THREE.ShaderMaterial({ vertexShader: DECAL_VS, fragmentShader: CHARGE_FS, ...additive,
     uniforms: { uTime: { value: 0 }, uI: { value: 0 }, uR: { value: m0.r + .6 }, uS: { value: CS } } });
   const charge = new THREE.Mesh(decalGeo, chargeMat); charge.scale.setScalar(CS); charge.position.set(m0.x, .14, m0.z); charge.visible = false; charge.renderOrder = 4; scene.add(charge);
-  // The current flickers at 30 frames a second (it is noise; more is no livelier) and leaves the shadows be.
+  // The current flickers at the stage's 60 frames a second and leaves the shadows be.
   // With reduced motion it holds still: one frame, no ticker.
   let chargeTick = null, chargeJob = 0;
   const stopTick = () => { if (chargeTick) { tickers.delete(chargeTick); chargeTick = null; } };
@@ -300,10 +300,10 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
       charge.visible = true;
       if (reduced()) { stopTick(); u.uTime.value = 0; u.uI.value = 1; requestRender(false); return; }
       if (!chargeTick) {
-        const t0 = performance.now(); let drawn = 0;
+        const t0 = performance.now();
         chargeTick = now => {
           if (reduced()) { stopTick(); u.uTime.value = 0; requestRender(false); return; }   // reduced motion switched on meanwhile: it holds still
-          if (now - drawn < 31) return; drawn = now; u.uTime.value = (performance.now() - t0) / 1000; requestRender(false);
+          u.uTime.value = (performance.now() - t0) / 1000; requestRender(false);
         };
         chargeTick.lazy = chargeTick.still = true; tickers.add(chargeTick);
       }

@@ -128,9 +128,12 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // Drawn only when something changes. A ticker draws every frame while it runs, unless it is `lazy` (it
   // asks for its own frames); it redraws the shadows too, unless it is `still` (it moves no shadow caster:
   // the camera, a glow, a light's level). `requestRender(false)` asks for a frame that keeps the shadows.
-  // At most 60 frames a second: a 120 Hz screen (a ProMotion Mac's) is drawn for on every other refresh, which halves
-  // the GPU's work while anything moves and looks the same (on a 90 or 144 Hz screen it is 45 or 72).
-  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0, drawnAt = 0; const tickers = new Set();
+  // 60 frames a second on every screen: each frame is due a sixtieth of a second after the last, and drawn on the first
+  // refresh to reach it, so a 120 Hz screen (a ProMotion Mac's) is drawn for on every other refresh, which halves the
+  // GPU's work while anything moves, and a 90 or 144 Hz one on the refreshes nearest each sixtieth. Fallen behind (a
+  // slow frame, or nothing to draw for a while), the next is drawn at once and the count starts again from it.
+  const STEP = 1000 / 60;
+  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0, due = 0; const tickers = new Set();
   function requestRender(shadows = true) { dirty = true; if (shadows) shadowsDirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
   // Frame-time watch: while things move, compare each frame with the display's refresh (the shortest recent interval,
   // held between 60 and 48 a second: a 120 Hz screen is asked for 60, and a GPU that only manages 30 is never mistaken
@@ -153,8 +156,8 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   function loop(t) {
     loops++; running = false; if (paused || gl.isContextLost()) return;   // out of sight, or the context is gone (its restore asks for a frame)
     if (t < heldUntil) { running = true; last = 0; requestAnimationFrame(loop); return; }   // a hit-stop: the picture holds (time runs on; the gap isn't a slow frame)
-    if (t - drawnAt < 12) { running = true; requestAnimationFrame(loop); return; }   // (the 60 a second: see above)
-    drawnAt = t;
+    if (t < due - 2) { running = true; requestAnimationFrame(loop); return; }   // (the 60 a second: see above)
+    due = t - due > STEP ? t + STEP : due + STEP;
     watch(t); if (!tickers.size) last = 0;
     let busy = false, moving = false;
     for (const f of tickers) { try { f(t); busy ||= !f.lazy; moving ||= !f.still; } catch (e) { tickers.delete(f); console.error('ticker', e); } }   // one bad ticker must not stop the table (a finishing tween may request another frame here)

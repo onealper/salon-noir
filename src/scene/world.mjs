@@ -263,9 +263,8 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     orbitAt.set(Math.sin(a) * 8, portrait ? -120 : -44, portrait ? -8 : 0);
     camera.position.copy(orbitEye); camera.up.set(0, 1, 0); camera.lookAt(orbitAt); camera.updateMatrixWorld();
   }
-  // The orbit is a slow drift: drawn at 30 frames a second (`lazy`, it asks for its own frames) and,
+  // The orbit is a slow drift: drawn at the stage's 60 frames a second (`lazy`, it asks for its own frames) and,
   // moving only the camera, never redraws the shadows (`still`). The fly-in takes every frame.
-  let shown = 0;
   function showTick(now) {
     if (show.fly) {
       const f = show.fly, k = Math.min(1, (now - f.t0) / f.ms), e = k < .5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
@@ -274,8 +273,8 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       if (k >= 1) { tickers.delete(showTick); show.on = false; show.fly = null; applyPan(); f.done(); }
       return;
     }
-    if (now - shown < 31 || !document.hasFocus()) return;   // (none while the window is out of focus: the lobby left open behind another app)
-    shown = now; placeShowcase(now); requestRender(false);
+    if (!document.hasFocus()) return;   // (none while the window is out of focus: the lobby left open behind another app)
+    placeShowcase(now); requestRender(false);
   }
   showTick.still = true;
   const showcase = {
