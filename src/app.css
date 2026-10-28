@@ -65,7 +65,12 @@ body.reduced .splash .keylight { animation: none; }
 .top-blur i:nth-child(1) { -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); --m1: 0%; --m2: 14%; --m3: 30%; --m4: 46%; }
 .top-blur i:nth-child(2) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); --m1: 30%; --m2: 46%; --m3: 58%; --m4: 72%; }
 .top-blur i:nth-child(3) { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); --m1: 58%; --m2: 72%; --m3: 100%; --m4: 100%; }
-@supports (-moz-appearance: none) { .top-blur i:nth-child(1) { display: none; } .top-blur i:nth-child(2) { --m1: 0%; --m2: 20%; } }   /* (Firefox: see the dock's band) */
+/* Firefox (and Zen, built on it) has no blur here: its renderer gives each backdrop-filter large buffers of its own and
+   stops reusing its cached tiles, so while the table moves under a blur (every frame of a spin or a strike) it redraws
+   the whole window, where Chrome and Safari hand the canvas to macOS as a layer of its own: a MacBook Air ran hot in Zen
+   and cool in Chrome on the same table. There the bands are tinted gradients alone, a little deeper so the controls
+   keep their contrast; and the lobby's glass panes are a little more opaque (below). */
+@supports (-moz-appearance: none) { .top-blur i { display: none; } .top-blur { background: linear-gradient(rgba(10, 10, 11, .9), rgba(10, 10, 11, .68) 62%, rgba(10, 10, 11, 0)); } }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .top-blur { background: linear-gradient(#111113, rgba(12, 12, 13, .9) 70%, rgba(12, 12, 13, 0)); } }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left; }
 .brand .mark { display: block; width: 32px; height: 32px; flex: none; }
@@ -202,9 +207,8 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity var(
   .dock-blur i:nth-child(3) { --b: 5px; --a: 18%; --c: 42%; }
   .dock-blur i:nth-child(4) { --b: 10px; --a: 30%; --c: 58%; }
   .dock-blur i:nth-child(5) { --b: 18px; --a: 44%; --c: 76%; }
-  /* Firefox (and Zen, built on it) blurs each layer again whenever anything moves behind it, the table's every frame:
-     there the band keeps its three strongest layers, the top bar's its two (below) */
-  @supports (-moz-appearance: none) { .dock-blur i:nth-child(1), .dock-blur i:nth-child(3) { display: none; } .dock-blur i:nth-child(2) { --a: 0%; } }
+  /* (Firefox and Zen: the tint alone, see the top bar's band) */
+  @supports (-moz-appearance: none) { body:not([data-gfx="saver"]) .dock-blur { background: linear-gradient(rgba(11, 11, 12, 0), rgba(11, 11, 12, .55) 30%, rgba(11, 11, 12, .82) 62%, rgba(11, 11, 12, .93)); } .dock-blur i { display: none; } }
   /* over the blur the controls are glass: a dark translucent fill and a fine light edge on top */
   .dock .pill:not(.gold), .dock .tray-toggle, .dock .tile { background: rgba(22, 22, 25, .62); border-color: rgba(255, 255, 255, .1); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 4px 14px rgba(0, 0, 0, .25); }
 }
@@ -629,6 +633,7 @@ body.reduced .ins-ace { animation: none; }
 .rail-title { margin: 0; display: flex; align-items: center; gap: 14px; font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .32em; text-transform: uppercase; color: var(--gold); }
 .rail-title::before, .rail-title::after { content: ''; width: 60px; height: 1px; background: linear-gradient(90deg, transparent, rgba(201, 164, 92, .8)); }
 .rail-title::after { transform: scaleX(-1); }
+@supports (-moz-appearance: none) { .games, .tcard { -webkit-backdrop-filter: none; backdrop-filter: none; } .games { background: rgba(12, 12, 13, .84); } .tcard:not([aria-checked="true"]) { background: linear-gradient(180deg, rgba(24, 22, 20, .9), rgba(10, 10, 11, .95)); } .sheet::backdrop { backdrop-filter: none; background: rgba(0, 0, 0, .68); } }   /* (Firefox: no blur, see the top bar's band) */
 /* the Blackjack | Roulette switch over the rail: a dark glass bar, its gold pill sliding to the game shown */
 .games { position: relative; display: inline-flex; gap: 3px; padding: 4px; border-radius: 99px; background: rgba(12, 12, 13, .62); border: 1px solid rgba(201, 164, 92, .26);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
