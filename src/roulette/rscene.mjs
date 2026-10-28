@@ -907,7 +907,7 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
 
   setStudio(dressing);   // the room asked for (a salon table changes nothing)
   return {
-    THREE, renderer, scene, camera, wheel, table, tickers, requestRender, frame, project, pick, highlight, anchor, chipMesh, chipLook, chips, setMarkers, dolly, rake, chipsG, mood, setBoard,
+    THREE, renderer, scene, camera, wheel, table, tickers, requestRender, lights: { key: keyW, hemi, glow }, frame, project, pick, highlight, anchor, chipMesh, chipLook, chips, setMarkers, dolly, rake, chipsG, mood, setBoard,
     shots, move, setPose, showcase, relayout, setQuality, setStudio, get studio() { return Object.keys(DRESS).find(k => DRESS[k] === dress); }, fit: fitNow,
     get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },

@@ -9,7 +9,9 @@
 //   for a straight up win  ·  back to the layout: the dolly on the number, losing chips swept, winners
 //   paid, outside bets first and straights last (your balance moves only now)  ·  the chips go home and
 //   the dolly comes up  ·  "Place your bets".
-import { createRouletteScene, preloadRouletteArt, RAKE_W } from './rscene.mjs';
+import { createRouletteScene, preloadRouletteArt, preloadStudioArt, RAKE_W } from './rscene.mjs';
+import { MODES, strike, multipliers } from './lightning.mjs';
+import { createStrikes } from './rstrikes.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
 import { plan, at, GEO, TUNE } from './physics.mjs';
 import { replayShot } from './replay.mjs';
@@ -32,11 +34,23 @@ const RIVALS = [
 const OUT_ORDER = ['column', 'dozen', 'even'];   // paid first, then inside bets toward the wheel, straights last
 const H = CHIP_H;   // true size, as the scene draws them
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// The tables this room deals: the European, and the two Lightning tables (lightning.mjs) in their own studio. A Lightning
+// table cuts the straight-up's price and has no la partage, and its croupier calls "No more bets" earlier (`lead`, laps
+// before the drop, normal and fast play) to leave the lightning its time.
+const TABLES = {
+  european: { title: 'EUROPEAN ROULETTE', name: 'European' },
+  lightning: { title: 'LIGHTNING ROULETTE', name: 'Lightning', lead: [3.4, 2.2] },
+  mega: { title: 'MEGA LIGHTNING ROULETTE', name: 'Mega Lightning', lead: [3.4, 2.2] },
+};
+const rulesOf = k => TABLES[k].lead ? { straight: MODES[k].straight, partage: false } : {};
 
 export async function createRoulette(ctx) {
   const { app, audio, settings, store, ui, kit, uiSound, sting } = ctx;
   const feel = ctx.feel ?? { tap() {}, cue() {}, confetti() {} };   // haptics and confetti, shared with blackjack
   await preloadRouletteArt();
+  let kind = TABLES[store.get('rouletteTable')] ? store.get('rouletteTable') : 'european';
+  if (kind !== 'european') await preloadStudioArt().catch(() => { kind = 'european'; });
+  const lit = () => !!TABLES[kind].lead;
   // ---- the stage and the dock ----------------------------------------------------------------------------------------
   const stage = document.createElement('section'); stage.className = 'stage rstage'; stage.id = 'rstage'; stage.setAttribute('aria-label', 'Roulette table');
   stage.innerHTML = `<canvas class="rcanvas" aria-hidden="true"></canvas>
@@ -46,6 +60,7 @@ export async function createRoulette(ctx) {
       <div class="r-loupe" hidden><b></b><span></span></div>
       <div class="r-bubble" hidden><b></b><small></small></div>
       <div class="r-replay" hidden>Replay</div>
+      <div class="r-slam" aria-hidden="true" hidden><b></b><small>Lightning strikes</small></div>
       <div class="r-win" role="status" hidden><small></small><b></b><em></em><span class="r-gross"></span></div>
       <div class="r-tags"></div>
       <div class="r-sheet" id="rRaceSheet" role="region" hidden aria-label="Racetrack"></div>
@@ -72,13 +87,17 @@ export async function createRoulette(ctx) {
   const canvas = $('.rcanvas'), hintEl = $('.r-hint'), loupe = $('.r-loupe'), bubble = $('.r-bubble'), winEl = $('.r-win'), histEl = $('.r-history'), fadeEl = $('.r-fade'), tagsEl = $('.r-tags');
 
   const hint = hintLine(hintEl);   // (the words morph in the line's own span: see .hint in app.css)
-  const S = createRouletteScene(canvas, { quality: ctx.quality() }), motion = new Motion(S);
+  const S = createRouletteScene(canvas, { quality: ctx.quality(), dressing: kind }), motion = new Motion(S);
+  const bolts = createStrikes(S, { audio, settings }); bolts.setTable(lit()); document.body.dataset.rtable = kind;
+  // the Lightning tables' sounds (the blackjack table's own), fetched once a Lightning table is sat at
+  const litSounds = () => { if (lit()) audio.preload(['charge', 'zap-1', 'zap-2', 'spark-1', 'spark-2', 'spark-3', 'spark-4', 'strike', 'thunder-1', 'thunder-2', 'thunder-mega', 'voice/james-bj-lightning']); };
+  litSounds();
   for (const r of RIVALS) S.chipLook(r.color, { inserts: r.inserts });
   // A spin is paid into the wallet the moment bets close (the number is drawn then); the balance on
   // screen (and which chips you can afford) holds back until the ball lands, so the result isn't given away.
   let held = null;   // the balance as shown while a spin is under way
   const bank = { get: () => wallet.balance, set: v => { wallet.set(v); if (held == null) ctx.showBalance(); } };
-  const table = new RouletteTable({ bank });
+  const table = new RouletteTable({ bank, ...rulesOf(kind) });
   let history = store.get('rouletteHistory', []).filter(n => Number.isInteger(n) && n >= 0 && n <= 36).slice(0, 500);
   const colorName = n => colorOf(n) === 'green' ? 'Zero' : colorOf(n) === 'red' ? 'Red' : 'Black';
   // a spin a closed or reloaded page left mid-flight was paid when its bets closed: its number joins the
@@ -361,7 +380,7 @@ export async function createRoulette(ctx) {
   }
 
   // ---- the round -------------------------------------------------------------------------------------------------------------
-  let skipLevel = 0, rigged = null, turbo = false, stageAt = '', spinTick = null, rollLoop = null;   // turbo (slow software-GL browsers) and rigged (a fixed number): for the browser checks, testing sessions only (api.test)
+  let skipLevel = 0, rigged = null, riggedStrikes = null, turbo = false, stageAt = '', spinTick = null, rollLoop = null;   // turbo (slow software-GL browsers) and rigged (a fixed number): for the browser checks, testing sessions only (api.test)
   let running = false, skipWake = null;   // running: the ball is still moving (a tap hurries it)
   function skip() { if (mode === 'spinning' || mode === 'running') { hurry = hurry === 1 ? 3.5 : 12; } else if (mode === 'paying') motion.finishAll(); skipLevel++; skipWake?.(); }
   // a wait that a tap (or Space) cuts short
@@ -402,16 +421,38 @@ export async function createRoulette(ctx) {
   function closeBets(p, ctl) {
     mode = 'spinning'; hover(null); closeSheets(); for (const j of rivalJobs) j.hurry(); rivalJobs = [];
     const n = rigged ?? draw(); rigged = null;
+    const struck = ctl.struck = lit() ? riggedStrikes ?? strike(kind) : null; riggedStrikes = null;   // at a Lightning table, drawn with the number (the two don't know each other)
     if (table.close()) {
       S.wheel.mark(coverage());   // what you have riding, lit on the wheel's numbers for the last rounds and the drop
       held = wallet.balance;
-      const r = ctl.r = table.settle(n); r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage }; inFlight.set('spin', r.rec);
+      const r = ctl.r = table.settle(n, struck && multipliers(struck)); r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage, ...(struck ? { table: kind, x: r.x } : {}) }; inFlight.set('spin', r.rec);
     } else {
       ctl.r = { n, staked: 0, back: 0, net: 0, partage: 0, wins: [], losses: [], void: true };
       table.clear(); serial(syncYours);
     }
     p.aim(n); audio.preload([numberClip(n)]);   // its call decoded while the ball makes its last rounds
     document.body.dataset.rmode = 'spin'; refresh();
+    if (struck) strikeShow(p, struck);
+  }
+  // The Lightning tables' strikes (rstrikes.mjs), from the call while the ball makes its last rounds, in the time there is
+  // before the camera goes to the wheel: the board by the wheel fills as they land (a double strike first shows the
+  // multiplier it lifts). A tap hurries them, as it hurries the ball.
+  function strikeShow(p, struck) {
+    const f = fast(), budget = Math.max(800, (p.dropAt - p.callAt - (f ? 1.5 : 2) - .3) * 1000 / (f ? 1.25 : 1));
+    const upTo = i => i >= struck.length ? struck : struck.slice(0, i + 1).map(s => s.double ? { ...s, x: s.was, double: false } : s);
+    S.setBoard(history, []);
+    bolts.show(struck, { budget, hurried: () => hurry > 1 || skipLevel > 0, onStrike: i => S.setBoard(history, upTo(i)) }).catch(err => console.error('strikes', err));
+  }
+  // Moving to another of the room's tables (the lobby, between spins): the room is re-dressed and the prices change. Chips
+  // on the layout come off first (nothing is staked before the spin), the other players' too.
+  async function setKind(k) {
+    if (!TABLES[k] || k === kind) return true; if (mode !== 'betting') return false;
+    if (TABLES[k].lead && !await preloadStudioArt().then(() => true, () => false)) return false;
+    if (mode !== 'betting') return false;
+    if (table.total) { table.clear(); serial(syncYours); }
+    clearRivals(); kind = k; store.set('rouletteTable', k); table.setRules(rulesOf(k)); bolts.clear(); bolts.setTable(lit()); document.body.dataset.rtable = k; litSounds();
+    S.setStudio(k); framed = ''; reframe(); renderHistory(); if (!stage.hidden) ctx.title(TABLES[k].title, 'Roulette'); refresh();
+    return true;
   }
   // the croupier has called the number: it goes into the history (the strip shows it)
   function landed(r) {
@@ -433,7 +474,8 @@ export async function createRoulette(ctx) {
     // from your seat you see the croupier stop the wheelhead and spin it the other way (it changes direction every spin),
     // then release the ball on his side of the bowl, the far side from the camera's wheel shot
     const speed = 1.6 + Math.random() * .5, pre = preroll(rotorW, Math.sign(-dir) * speed);
-    const p = plan(null, { dir, phiNow: phi + pre.angle, fast: f, rotorSpeed: speed, theta0: camAz(S.shots.wheel?.pos) + Math.PI + (Math.random() - .5) * .6 });
+    const p = plan(null, { dir, phiNow: phi + pre.angle, fast: f, rotorSpeed: speed, theta0: camAz(S.shots.wheel?.pos) + Math.PI + (Math.random() - .5) * .6, lead: TABLES[kind].lead?.[f ? 1 : 0] ?? null });
+    bolts.clear();   // last spin's stamps lift off the cloth
     S.highlight([]); liftDolly(); setIdle(false);
     lateBets((pre.T + p.callAt) * 1000 / (f ? 1.25 : 1));
     handOnWheel(pre, f ? 1.25 : 1);
@@ -456,9 +498,21 @@ export async function createRoulette(ctx) {
     hideBubble(); audio.forget(numberClip(n));
     mode = 'paying'; refresh();
     S.mood(false, 1300); await cameraTo('seat', 1300);
+    if (r.x && !r.void) await lightningPays(r);
     await payout(r, n);
     mode = 'betting'; document.body.dataset.rmode = 'bet'; rivalJobs = []; refresh();
     say('place-bets', { prio: 2, fresh: 3000 }); othersWake();
+  }
+  // Your straight up on a struck number, the biggest moment at the Lightning tables: the dealer calls it, a gold bolt
+  // drives into its plaque on the cloth, the multiplier slams onto the screen; then the croupier pays it as he pays any win.
+  async function lightningPays(r) {
+    const x = r.x, big = x >= 200, slam = $('.r-slam');
+    say('bj-lightning', { prio: 3 }); feel.tap(big ? 'strike-big' : 'strike');   // "Lightning strikes!"
+    audio.cue(big ? 'thunder-mega' : 'thunder-1', { gain: .6, delay: .2 });
+    await bolts.payoff(r.n);
+    slam.querySelector('b').textContent = `${x}×`; slam.classList.toggle('big', big); ui.shown(slam); slam.classList.remove('go'); void slam.offsetWidth; slam.classList.add('go');
+    await untilSkip(sleep(skipLevel ? 150 : 1500));
+    ui.leave(slam, { scale: .9, ms: 260 });
   }
   // The ring light answers the number as the croupier calls it: a flash in its colour (red, a cold white for black, green
   // for zero) fading back to the gold over a second and a bit. With Flashing effects on Soft, only a gentle tint; Off, none.
@@ -492,7 +546,7 @@ export async function createRoulette(ctx) {
   function playSpin(p, f, pre, onCall) {
     return new Promise(done => {
       let roll = { update() {}, stop() {} }; const phi0 = phi;   // (p.settledAt and p.events are read as they stand: the aim replaces them)
-      let t = -pre.T, last = performance.now(), ev = 0, launched = false, warned = false, called = false, pushed = false;
+      let t = -pre.T, last = performance.now(), ev = 0, launched = false, warned = false, called = false, pushed = false, glided = false;
       const pace = f ? 1.25 : 1;   // fast play: the softer throw, run a little quicker
       const tick = now => {
         const dur = p.settledAt + .12, evs = p.events;
@@ -525,8 +579,10 @@ export async function createRoulette(ctx) {
         if (!warned && t >= p.callAt - (f ? 2.6 : 3.5)) { warned = true; say('last-bets', { prio: 1, fresh: 400 }); }   // "Last bets, please": a few seconds' warning
         if (!called && t >= p.callAt) {   // as it is about to make its last two rounds
           called = true; hush(true); S.mood(true); say('no-more-bets', { prio: 2 }); onCall();   // the room and the music stay down until the number is called: the rattle is heard
-          cameraTo(hurry === 1 ? 'wheel' : 'push', hurry === 1 ? 1500 : 700);
+          if (!lit()) { glided = true; cameraTo(hurry === 1 ? 'wheel' : 'push', hurry === 1 ? 1500 : 700); }
         }
+        // at a Lightning table the camera holds on the layout while the lightning strikes, and goes to the wheel for the last round
+        if (called && !glided && t >= p.dropAt - (f ? 1.5 : 2)) { glided = true; cameraTo(hurry === 1 ? 'wheel' : 'push', hurry === 1 ? 1300 : 700); }
         if (!pushed && p.dropAt && t >= p.dropAt) { pushed = true; wheelOnly(true); if (hurry === 1 && S.current !== S.shots.push) cameraTo('push', 1100); }
         if (t >= dur) { S.tickers.delete(tick); S.wheel.setTrail(0, 0, 0, 0); roll.stop(.2); done(); }
       };
@@ -766,7 +822,7 @@ export async function createRoulette(ctx) {
   function showWin(r, n) {
     const c = colorOf(n), net = r.net; winEl.className = `r-win ${net > 0 ? 'up' : net < 0 ? 'down' : 'even'} ${c}${net > 0 && bigWin(r) ? ' gild' : ''}`;
     winEl.querySelector('small').textContent = `${n} ${colorName(n)}`;
-    winEl.querySelector('b').textContent = net > 0 ? (bigWin(r) ? 'Big win' : 'You win') : !r.back ? 'No win' : !net ? 'Stakes back' : r.partage === r.back ? 'La partage' : 'Some bets won';
+    winEl.querySelector('b').textContent = net > 0 ? (r.x ? `Lightning ${r.x}×` : bigWin(r) ? 'Big win' : 'You win') : !r.back ? 'No win' : !net ? 'Stakes back' : r.partage === r.back ? 'La partage' : 'Some bets won';
     winEl.querySelector('.r-gross').textContent = r.back ? `Staked ${fmt(r.staked)} · paid back ${fmt(r.back)}${r.partage && r.partage < r.back ? `, ${fmt(r.partage)} of it by la partage` : ''}` : '';
     const em = winEl.querySelector('em'), final = net ? signed(net) : 'Even'; em.textContent = net ? (net > 0 ? '+0' : '−0') : final;
     winEl.hidden = false; void winEl.offsetWidth; winEl.classList.add('show');   // a reflow, then the transition
@@ -943,7 +999,7 @@ export async function createRoulette(ctx) {
     // the room is shown (behind the lobby or at the table)
     show() {
       stage.hidden = dock.hidden = false; S.pause(false); framed = ''; reframe(); setIdle(true);
-      ctx.title('EUROPEAN ROULETTE', 'Roulette'); ctx.showBalance(wallet.balance, false);
+      ctx.title(TABLES[kind].title, 'Roulette'); ctx.showBalance(wallet.balance, false);
       // chips spent at another table since you left: the layout can't stay bigger than your balance
       if (mode === 'betting' && table.total > wallet.balance) { table.clear(); serial(syncYours); hint('Your bets were cleared: your balance changed at another table.'); }
       ctx.showInPlay(table.total); markRivals(); refresh();
@@ -951,10 +1007,11 @@ export async function createRoulette(ctx) {
     hide() { stage.hidden = dock.hidden = true; setIdle(false); S.pause(true); active = false; closeSheets(); hover(null); for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
     showcase: { start(still) { S.showcase.start(still); framed = ''; reframe(); S.requestRender(); }, stop: ms => S.showcase.stop(ms) },
     // you sit down: the camera flies into your chair
-    async enter(ms) { active = true; framed = ''; reframe(); await S.showcase.stop(ms); if (!S.current) S.setPose(S.shots.seat); refresh(); if (welcome) { hint(welcome); welcome = null; } if (mode === 'betting') { say('place-bets', { prio: 2, fresh: 3000 }); othersWake(); } },
+    async enter(ms, { tableMode } = {}) { if (tableMode) await setKind(tableMode); active = true; framed = ''; reframe(); await S.showcase.stop(ms); if (!S.current) S.setPose(S.shots.seat); refresh(); if (welcome) { hint(welcome); welcome = null; } if (mode === 'betting') { say('place-bets', { prio: 2, fresh: 3000 }); othersWake(); } },
     leave() { active = false; for (const j of rivalJobs) j.hurry(); rivalJobs = []; },
     toLobby() { api.leave(); api.showcase.start(settings.reduced); },   // the lobby opens over the wheel: it turns slowly behind the menu
     round: 'spin',
+    get kind() { return kind; }, setKind, preview: k => setKind(k),   // European, Lightning or Mega Lightning (TABLES)
     players: () => rivalsHere().map(r => r.name),
     setPlayers: () => markRivals(),   // (the others join at the next round; their markers show at once)
     callBets: () => say('place-bets', { prio: 3 }),   // hear the voice level you set
@@ -963,7 +1020,7 @@ export async function createRoulette(ctx) {
     setQuality(q) { S.setQuality(q); setIdle(idleWant); },   // the battery saver stands the wheel still
     refresh, reframe: () => { framed = ''; reframe(); },
     // for the browser checks, only in a testing session (?test or salonnoir.dev): rig() fixes the next number
-    test: ctx.dev ? { plan, at, get history() { return history; }, place: (id, units = 1) => placeOn([[id, units]]), rig: n => { rigged = n; }, set turbo(v) { turbo = v; }, stacks, get skipLevel() { return skipLevel; }, get stageAt() { return stageAt; }, motion, showWin, showBubble } : undefined,
+    test: ctx.dev ? { plan, at, get history() { return history; }, place: (id, units = 1) => placeOn([[id, units]]), rig: n => { rigged = n; }, rigStrikes: s => { riggedStrikes = s; }, bolts, set turbo(v) { turbo = v; }, stacks, get skipLevel() { return skipLevel; }, get stageAt() { return stageAt; }, motion, showWin, showBubble } : undefined,
   };
   return api;
 }

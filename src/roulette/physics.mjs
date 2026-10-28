@@ -200,11 +200,12 @@ const throwV = (fast, x) => { const [a, b] = THROW[fast ? 'fast' : 'normal']; re
 // controller has already spun it up.
 export const DRAGS = [0, -.015, .015, -.03, .03, -.045, .045];
 export const AIM = { tries: 96, most: 192 };   // tried ahead while the ball runs; at most this many to find one within a pocket
-export function plan(result = null, { dir = 1, phiNow = 0, fast = false, seed = (Math.random() * 2 ** 32) >>> 0, theta0 = null, rotorSpeed = null } = {}) {
+export function plan(result = null, { dir = 1, phiNow = 0, fast = false, seed = (Math.random() * 2 ** 32) >>> 0, theta0 = null, rotorSpeed = null, lead = null } = {}) {
   const rnd = mulberry(seed);
   const opts = { dir, theta0: theta0 ?? rnd() * Math.PI * 2, phi0: phiNow, rotorSpeed: rotorSpeed ?? 1.6 + rnd() * .5, v0: throwV(fast, rnd()) };
-  // "No more bets": as the ball is about to make its last two rounds (one in fast play), as the Monte-Carlo rules have it
-  const whole = runTrack(opts), lapsBefore = fast ? 1.1 : 1.8, end = whole.drop.th; let callAt = 0;
+  // "No more bets": as the ball is about to make its last two rounds (one in fast play), as the Monte-Carlo rules have it;
+  // `lead` (laps) calls it earlier, as the Lightning tables do, to leave the lightning its time before the drop
+  const whole = runTrack(opts), lapsBefore = lead ?? (fast ? 1.1 : 1.8), end = whole.drop.th; let callAt = 0;
   let callTh = 0; for (const s of whole.samples) if (Math.abs(end - s[1]) >= lapsBefore * Math.PI * 2) [callAt, callTh] = s;
   let head = null; const tails = new Map([[0, whole]]);   // the track to the call, run again only when a varied drag is first tried
   const track = drag => {

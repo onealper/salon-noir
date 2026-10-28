@@ -98,6 +98,8 @@ export class RouletteTable {
     this.last = null;          // the layout of the last spin, for Rebet
     this.phase = 'betting';
   }
+  // the table's prices (a Lightning table cuts the straight-up and has no la partage), between spins only
+  setRules({ straight = KINDS.straight.pays, partage = true } = {}) { if (this.phase !== 'betting') return false; this.straight = straight; this.partage = partage; return true; }
   get balance() { return this.bank.get(); }
   get total() { let s = 0; for (const v of this.bets.values()) for (const c of v) s += c; return s; }
   on(id) { return (this.bets.get(id) ?? []).reduce((a, b) => a + b, 0); }

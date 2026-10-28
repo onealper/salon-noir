@@ -89,3 +89,23 @@ test('the European table is as it was: straight-ups 35:1 and la partage on zero'
   const e = new RouletteTable({ bank: bankOf() }); e.place([['red', 10]]); e.close(); assert.equal(e.settle(0).partage, 5);
   assert.equal(SPOTS.get('n17').pays, 35);
 });
+
+test('a table switches to a Lightning table\'s prices between spins only, and back', () => {
+  const t = new RouletteTable({ bank: bankOf() });
+  assert.ok(t.setRules({ straight: MODES.mega.straight, partage: false })); assert.equal(t.straight, 19); assert.equal(t.partage, false);
+  t.place([['n5', 10]]); t.close(); assert.equal(t.setRules(), false, 'not while the bets are closed'); assert.equal(t.straight, 19);
+  t.settle(5); assert.ok(t.setRules()); assert.equal(t.straight, KINDS.straight.pays); assert.equal(t.partage, true);
+});
+
+test('a Lightning table calls "No more bets" earlier (lead), leaving the lightning its time, and the ball still lands on the number', async () => {
+  const { plan, at } = await import('../src/roulette/physics.mjs');
+  const { WHEEL_INDEX, PITCH, POCKETS } = await import('../src/roulette/rules.mjs');
+  for (let i = 0; i < 24; i++) {
+    const fast = i % 3 === 0, n = (i * 11) % 37, p = plan(null, { seed: (i * 7919 + 5) >>> 0, fast, lead: fast ? 2.2 : 3.4, dir: i % 2 ? 1 : -1 });
+    for (let k = 0; k < 24; k++) p.warm();
+    p.aim(n);
+    assert.ok(p.dropAt - p.callAt > (fast ? 3.2 : 4.6), `spin ${i}: ${(p.dropAt - p.callAt).toFixed(2)} s from the call to the drop`);
+    const st = at(p, p.settledAt + .12), pocket = ((Math.round((st.phi - st.theta) / PITCH) % POCKETS) + POCKETS) % POCKETS;
+    assert.equal(pocket, WHEEL_INDEX[n], `spin ${i}: ball under ${n}`);
+  }
+});
