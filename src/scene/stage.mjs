@@ -14,7 +14,12 @@ export const QUALITY = {
   // the 2.7x the 2.4 MP budget allows on a 6.1" phone it recovers most of that). Desktops stay at their own 2x.
   // felt: the largest painted cloth (px); face: card faces at this share of 512 px wide.
   // (Sharp keeps a desktop at its own 2x up to 7 MP: a 5K screen's full window would be 15, four samples each)
-  high: { name: 'high', ratio: 3, mpx: 7, shadow: 2048, soft: true, felt: 4096, chipSegments: 48, face: 1 },
+  // rich: the finer materials (the roulette cloth's sheen and nap)
+  high: { name: 'high', ratio: 3, mpx: 7, shadow: 2048, soft: true, felt: 4096, chipSegments: 48, face: 1, rich: true },
+  // A laptop's high-density screen (Auto, on a screen up to 16" with a trackpad or mouse): Sharp's detail at 1.5x. Its GPU
+  // is fanless or nearly, and Sharp's 2x picture (5 MP for a MacBook Air's full window, four samples each, every frame of
+  // a spin) is what warmed it; 1.5x draws 44% fewer pixels with the same multisampling. Picking Sharp still gets 2x.
+  laptop: { name: 'laptop', ratio: 1.5, mpx: 4, shadow: 2048, soft: true, felt: 4096, chipSegments: 48, face: 1, rich: true },
   phone: { name: 'phone', ratio: 3, mpx: 2.4, shadow: 1024, soft: true, felt: 2048, chipSegments: 40, face: .5 },
   saver: { name: 'saver', ratio: 1.5, mpx: 1.2, shadow: 1024, soft: false, felt: 1024, chipSegments: 28, face: .5 },
 };
@@ -47,7 +52,8 @@ export function detectQuality() {
   const coarse = matchMedia('(pointer: coarse)').matches, short = Math.min(screen.width, screen.height) < 820;
   // deviceMemory exists in Chromium only; Safari reports nothing, and slow devices are caught by the frame watcher.
   if ((navigator.deviceMemory ?? 8) <= 2) return QUALITY.saver;
-  return coarse && short ? QUALITY.phone : QUALITY.high;
+  if (coarse && short) return QUALITY.phone;
+  return !coarse && (devicePixelRatio || 1) >= 1.75 && Math.max(screen.width, screen.height) <= 1800 ? QUALITY.laptop : QUALITY.high;
 }
 
 const shadowType = q => q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;

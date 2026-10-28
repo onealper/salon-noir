@@ -116,11 +116,11 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
   };
   let studioEnv = studio();
   const wheel = createWheel(THREE, { aniso, env: studioEnv, glow: '#ffb85a', stone: ART.stone }); table.add(wheel.group);   // black lacquer, a warm gold ring light
-  // the cloth: matte wool, and on the high preset a fabric sheen at grazing angles and the nap as a fine bump (the other
+  // the cloth: matte wool, and on the rich presets a fabric sheen at grazing angles and the nap as a fine bump (the other
   // presets keep the plain material: the cloth is the largest surface in the picture, and a phone pays for every pixel)
   const feltMats = new Map(), nap = ART.cloth ?? artImage('table:felt');
   const feltMaterial = q => {
-    const rich = q.name === 'high'; if (feltMats.has(rich)) return feltMats.get(rich);
+    const rich = !!q.rich; if (feltMats.has(rich)) return feltMats.get(rich);
     const m = rich ? new THREE.MeshPhysicalMaterial({ roughness: .96, metalness: 0, sheen: .35, sheenRoughness: .8, sheenColor: new THREE.Color(dress.sheen) }) : new THREE.MeshStandardMaterial({ roughness: .96, metalness: 0 });
     if (rich && nap) { const t = new THREE.Texture(nap); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.needsUpdate = true; m.bumpMap = t; m.bumpScale = .15; }
     feltMats.set(rich, m); return m;

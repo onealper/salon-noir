@@ -124,7 +124,7 @@ const replaysSel = $('#optReplays'); replaysSel.value = settings.replays; replay
 const flashSel = $('#optFlash'); flashSel.value = settings.flash; document.body.dataset.flash = settings.flash;
 flashSel.onchange = () => { uiSound('toggle'); settings.flash = flashSel.value; store.set('flash', settings.flash); document.body.dataset.flash = settings.flash; };
 const gfxSel = $('#optGfx'); gfxSel.value = settings.gfx;
-const gfxNote = () => { const s = rooms[room]?.scene; if (s) $('#gfxNote').textContent = `${s.quality.name === 'high' ? 'Sharp' : s.quality.name === 'phone' ? 'Balanced' : 'Battery saver'} · ${s.pixelRatio}× pixels`; };   // the room you see (each fits its own pixel budget)
+const gfxNote = () => { const s = rooms[room]?.scene; if (s) $('#gfxNote').textContent = `${{ high: 'Sharp', laptop: 'Sharp, for a laptop', phone: 'Balanced', saver: 'Battery saver' }[s.quality.name]} · ${s.pixelRatio}× pixels`; };   // the room you see (each fits its own pixel budget)
 document.body.dataset.gfx = gfxProfile(settings.gfx).name;   // (the battery saver goes without the blur under the dock)
 gfxSel.onchange = () => { settings.gfx = gfxSel.value; store.set('gfx', settings.gfx); document.body.dataset.gfx = gfxProfile(settings.gfx).name; each(r => r.setQuality(gfxProfile(settings.gfx))); gfxNote(); };
 $('#settings').addEventListener('click', gfxNote);
