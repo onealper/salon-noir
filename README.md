@@ -5,7 +5,7 @@
 # Salon Noir
 
 **A private casino in the browser.**<br>
-First-person 3D blackjack and European roulette, dealt at real pace by croupiers with voices of their own.<br>
+First-person 3D blackjack and roulette (European, Lightning and Mega Lightning), dealt at real pace by croupiers with voices of their own.<br>
 Made for a few friends around one screen. Play chips only.
 
 ![three.js](https://img.shields.io/badge/3D-three.js-c9a45c?style=flat-square&labelColor=141416)
@@ -50,9 +50,14 @@ Pay a fee equal to your bet and lightning strikes a multiplier onto every final 
 Single zero with la partage, the full racetrack with neighbours and the call bets (Voisins, Tiers, Orphelins, Jeu zéro). Bets stay open while the ball runs, until the croupier calls "No more bets".
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top">
+<img src="docs/screenshots/lightning-roulette.jpg" alt="Mega Lightning roulette: multipliers stamped on the struck numbers as a bolt hits 31 at 1000×">
+<h3>⚡&nbsp; Lightning &amp; Mega Lightning Roulette</h3>
+In a black-and-gold studio of its own. After "No more bets", while the ball makes its last rounds, lightning strikes up to five numbers and stamps a multiplier on each, 50× to 500×: a straight up on a struck number is paid its multiplier. At Mega Lightning chain lightning leaps on to more numbers and a double strike can lift one to 2,000×.
+</td>
+</tr>
 </table>
-
-<p align="center"><sub>🔒&nbsp; <b>Lightning Roulette</b> and <b>Mega Lightning</b> are being built: in the lobby now as "Opening soon".</sub></p>
 
 ## Inside the salon
 
@@ -186,7 +191,7 @@ src/              All code, styles, fonts, sounds and vendored libraries
   blackjack/      The blackjack room: controller, the Lightning board and its storm, hand history
   core/           Lobby, wallet, hand history, table modes, brand, haptics, chips and bet controls
   scene/          The shared 3D stage, the blackjack table, the glass, the lightning
-  roulette/       The roulette room: rules, physics, replay camera, wheel and table
+  roulette/       The roulette room: rules, Lightning strikes, physics, replay camera, wheel and table
 test/             node --test suite over the rules and money code
 assets/           Card art, cloth, wood and leather, the salons round each table
 docs/             The logo and these screenshots

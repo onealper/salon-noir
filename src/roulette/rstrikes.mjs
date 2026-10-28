@@ -91,7 +91,7 @@ export function createStrikes(S, { audio, settings }) {
       const from = hot && prev ? prev.clone().add(new THREE.Vector3(0, 9, 0)) : undefined;   // chain lightning leaps from the last number struck
       if (!quiet() && !hurried()) {
         audio.cue(`zap-${1 + (i % 2)}`, { gain: hot ? .55 : .45, rate: .95 + Math.random() * .1 });
-        await L3.hit(at, { hot, from, width: hot ? .8 : .7, size: hot ? 20 : 16, n: 22 });
+        await L3.hit(at, { hot, from, width: hot ? .8 : .7, size: hot ? 20 : 16, n: 22, lamp: hot ? 420 : 320 });   // (the studio's black cloth shows a lamp the felt would swallow)
         audio.cue(`spark-${1 + (i % 4)}`, { gain: .35 });
       }
       if (id !== job) return;
@@ -101,7 +101,7 @@ export function createStrikes(S, { audio, settings }) {
       // the double strike: a held breath in the dark, then the same number again, harder
       if (!hurried()) await sleep(soft() ? 600 : 520); if (id !== job) return;
       const at = S.anchor(`n${dbl.n}`);
-      if (!quiet() && !hurried()) { audio.cue('strike', { gain: .6 }); await L3.hit(at, { hot: true, width: 1.3, size: 30, n: 60, near: true }); audio.cue('thunder-mega', { gain: .55, delay: .25 }); }
+      if (!quiet() && !hurried()) { audio.cue('strike', { gain: .6 }); await L3.hit(at, { hot: true, width: 1.3, size: 30, n: 60, near: true, lamp: 700 }); audio.cue('thunder-mega', { gain: .55, delay: .25 }); }
       if (id !== job) return;
       stamp(dbl.n, dbl.x, { hot: true, lift: true }); onStrike(first.length);
     } else if (first.length && !quiet() && !hurried()) audio.cue(`thunder-${1 + Math.floor(Math.random() * 2)}`, { gain: .4, delay: .35 });
@@ -112,7 +112,7 @@ export function createStrikes(S, { audio, settings }) {
     const st = stamps.get(n), at = st?.at ?? S.anchor(`n${n}`);
     const pulse = () => { if (!st || settings.reduced) return; const g = st.group; animate(900, k => { const p = Math.sin(Math.PI * Math.min(1, k * 1.5)); g.scale.setScalar(1 + .3 * p); st.mats[0].opacity = .55 + 1.8 * p; }); };
     if (quiet()) { pulse(); return Promise.resolve(); }
-    return L3.hit(at, { hot: true, width: 1.4, size: 34, n: 70, near: true }).then(pulse);
+    return L3.hit(at, { hot: true, width: 1.4, size: 34, n: 70, near: true, lamp: 800 }).then(pulse);
   }
   // the next spin: the stamps lift off the cloth
   function clear() { job++; for (const k of [...stamps.keys()]) drop(k); }

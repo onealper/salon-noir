@@ -19,7 +19,8 @@ const TABLES = [
   { game: 'blackjack', mode: 'freebet', kicker: 'Blackjack', name: 'Free Bet', line: 'Free doubles and splits. A dealer 22 pushes.', stat: 'Free doubles' },
   { game: 'blackjack', mode: 'lightning', kicker: 'Blackjack', name: 'Lightning', line: 'Multipliers up to 25× on your next win', stat: 'Up to 25×' },
   { game: 'roulette', mode: 'roulette', kicker: 'Roulette', name: 'European', line: 'Single zero, the racetrack and every call bet.', stat: 'Pays 35:1' },
-  { game: 'roulette', mode: 'soon', kicker: 'Roulette', name: 'Lightning', line: 'Lightning and Mega Lightning. Opening next.', stat: 'Opening soon', soon: true },
+  { game: 'roulette', mode: 'roulette-lightning', kicker: 'Roulette', name: 'Lightning', line: 'Lightning strikes up to five numbers at 50× to 500×.', stat: 'Up to 500×', icon: 'lightning' },
+  { game: 'roulette', mode: 'roulette-mega', kicker: 'Roulette', name: 'Mega Lightning', line: 'Chain lightning and a double strike up to 2,000×.', stat: 'Up to 2,000×', icon: 'lightning' },
 ];
 
 const gameOf = mode => TABLES.find(t => t.mode === mode)?.game ?? 'blackjack';
@@ -51,7 +52,7 @@ export const lobby = {
         <p class="rail-title">Choose your table</p>
         <div class="tcards" role="radiogroup" aria-label="Tables">${TABLES.map(t => t.soon
           ? `<div class="tcard soon" aria-disabled="true"><span class="t-ico">${ICON.lightning}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="rope" aria-hidden="true"></span></div>`
-          : `<button class="tcard" role="radio" data-mode="${t.mode}" aria-checked="false"><span class="t-ico">${ICON[t.game === 'roulette' ? 'roulette' : t.mode]}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>
+          : `<button class="tcard" role="radio" data-mode="${t.mode}" aria-checked="false"><span class="t-ico">${ICON[t.icon ?? (t.game === 'roulette' ? 'roulette' : t.mode)]}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>
         <p class="lobby-note" role="status" hidden></p>
         <button class="pill gold seat" data-play><span class="label">Take a seat</span><span class="which"></span></button>
       </section>

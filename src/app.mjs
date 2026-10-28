@@ -171,20 +171,20 @@ for (const d of $$('.sheet details')) kit.accordion(d);
 // ---- Last hands: the book of rounds (core/ledger.mjs), shown in the settings, with this visit's net ---------------------------
 // A blackjack hand is written down whole as it is paid (blackjack/book.mjs): the cards and totals, how each hand of
 // yours ended (up to four after resplits), every side bet with what it saw, the Lightning fee and bonus, and the net.
-const TABLE_NAME = { classic: 'Classic', freebet: 'Free Bet', lightning: 'Lightning' };
+const TABLE_NAME = { classic: 'Classic', freebet: 'Free Bet', lightning: 'Lightning' }, WHEEL_NAME = { lightning: 'Lightning roulette', mega: 'Mega Lightning roulette' };
 const ENDED = h => h.even ? 'Even money' : h.kind === 'blackjack' ? 'Blackjack' : h.kind === 'win' ? 'Win' : h.kind === 'push' ? 'Push' : h.total > 21 ? 'Bust' : 'Lose';
 function entryHTML(e) {
   const tone = e.net > 0 ? 'up' : e.net < 0 ? 'down' : 'even', when = new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), line = (a, b, cls = '') => `<li class="${cls}"><span>${esc(a)}</span>${b == null ? '' : `<em>${esc(b)}</em>`}</li>`;
   let rows = '';
   if (e.game === 'roulette') {
-    rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '');
+    rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '') + (e.x ? line(`Lightning ${e.x}× on your straight up`, null, 'side bolt') : '');
   } else {
     rows = line(`Dealer ${(e.dealer ?? []).join(' ')} · ${e.dealerBJ ? 'blackjack' : e.dealerTotal}`, null)
       + (e.hands ?? []).map((h, i) => line(`${e.hands.length > 1 ? `Hand ${i + 1}` : 'You'} ${h.cards.join(' ')} · ${h.total} · ${ENDED(h)}`, signed(h.net))).join('')
       + (e.sides ?? []).map(s => line(`${s.name}: ${s.line}`, signed(s.net), 'side')).join('')
       + (e.fee ? line('Lightning fee', signed(-e.fee), 'side') : '') + (e.bonus ? line(`Lightning ×${e.bonus.m} on your fee`, signed(e.bonus.amount), 'side bolt') : '') + (e.earned ? line(`Earned ×${e.earned} for your next win`, null, 'side bolt') : '');
   }
-  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b><time>${when}</time><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
+  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b><time>${when}</time><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
 }
 function renderBook() {
   const v = ledger.visit, net = v.rounds ? signed(v.net) : '±0', tone = v.net > 0 ? 'up' : v.net < 0 ? 'down' : '';
@@ -250,18 +250,20 @@ if (welcome && params.has('table')) rooms[room].hint(welcome);
 // The lobby: the casino's front room, over the table at every visit; the brand in the bar returns to it.
 $('#brandMark').innerHTML = mark();
 let previewTurn = 0;
+// the lobby's roulette tables, and the roulette room's own names for them (rgame.mjs, TABLES)
+const WHEELS = { roulette: 'european', 'roulette-lightning': 'lightning', 'roulette-mega': 'mega' }, wheelMode = k => Object.keys(WHEELS).find(m => WHEELS[m] === k) ?? 'roulette';
 const couldNotLoad = game => lobby.note(`The ${game} table could not be loaded. Check the connection, then reload the page.`);
 lobby.init({
-  mode: () => room === 'roulette' ? 'roulette' : settings.mode,
+  mode: () => room === 'roulette' ? wheelMode(rooms.roulette?.kind) : settings.mode,
   // picking a table in the lobby re-dresses the room behind the menu: the blackjack table, or the wheel. Only the
   // latest pick counts: a room still loading when you have moved on (or sat down) stays out of the room.
   preview: async tableMode => {
-    const turn = ++previewTurn, game = tableMode === 'roulette' ? 'roulette' : 'blackjack'; uiSound('select');
+    const turn = ++previewTurn, game = WHEELS[tableMode] ? 'roulette' : 'blackjack'; uiSound('select');
     if (!rooms[game]) {
       try { await load(game); } catch (err) { console.error(`${game} failed to load`, err); if (turn === previewTurn) couldNotLoad(game); return; }
       if (turn !== previewTurn || !lobby.isOpen) return;
     }
-    if (game === 'roulette') { setRoom('roulette'); rooms.roulette.showcase.start(settings.reduced); if (audio.unlocked) roomFor(true); return; }
+    if (game === 'roulette') { setRoom('roulette'); await rooms.roulette.preview(WHEELS[tableMode]); if (turn !== previewTurn || !lobby.isOpen) return; rooms.roulette.showcase.start(settings.reduced); if (audio.unlocked) roomFor(true); return; }
     if (room !== 'blackjack') { setRoom('blackjack'); rooms.blackjack.showcase.start(settings.reduced); }
     rooms.blackjack.preview(tableMode);
   },
@@ -271,7 +273,7 @@ lobby.init({
       await load(game); const r = rooms[game];
       if (game === 'roulette') { if (room !== 'roulette') setRoom('roulette'); roomFor(false); }
       else { if (room !== 'blackjack') { setRoom('blackjack'); r.showcase.start(true); } roomFor(false); }
-      await r.enter(settings.reduced ? 0 : 1400, { tableMode });   // the camera flies down into your chair
+      await r.enter(settings.reduced ? 0 : 1400, { tableMode: WHEELS[tableMode] ?? tableMode });   // the camera flies down into your chair
     } catch (err) {   // the table could not be reached (a module that failed to load on a poor connection): back to the lobby, with a word
       console.error('could not take the seat', err); lobby.open(); lobby.note('That table could not be opened. Check the connection, then reload the page.');
     } finally { document.body.classList.remove('flying'); }
