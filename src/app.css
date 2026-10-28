@@ -12,7 +12,7 @@
   --spring-pop: linear(0, 0.0074 1%, 0.0307 2.2%, 0.1126 4.6%, 0.5961 14.2%, 0.7958 19%, 0.8719 21.4%, 0.9364 24%, 0.9839 26.6%, 1.0166 29.2%, 1.0334 31.2%, 1.0441 33.2%, 1.0503 35.4%, 1.052 37.8%, 1.0457 42.4%, 1.0121 55.8%, 1.0012 63.8%, 0.9973 74.2%, 1);
   --spring-sheet: linear(0, 0.0054 1.2%, 0.0219 2.6%, 0.0886 5.8%, 0.4747 18.6%, 0.5661 22%, 0.6463 25.4%, 0.715 28.8%, 0.7727 32.2%, 0.823 35.8%, 0.8635 39.4%, 0.9019 43.8%, 0.9338 48.8%, 0.9575 54.2%, 0.9747 60.2%, 0.9864 67%, 0.9939 75%, 1);
   --spring-settle: linear(0, 0.0056 1%, 0.0196 2%, 0.0803 4.5%, 0.4637 15.3%, 0.5619 18.5%, 0.6423 21.5%, 0.7139 24.7%, 0.7757 28%, 0.8277 31.5%, 0.8718 35.3%, 0.909 39.7%, 0.9383 44.5%, 0.9602 49.8%, 0.9765 56.2%, 0.987 63.2%, 0.9938 71.8%, 1);
-  --duration-quick: 150ms; --duration-fast: 250ms; --duration-medium: 350ms; --ease-smooth-out: cubic-bezier(.22, 1, .36, 1);   /* transitions.dev's motion scale, for the UI's chrome */
+  --duration-micro: 80ms; --duration-quick: 150ms; --duration-fast: 250ms; --duration-medium: 350ms; --duration-slow: 400ms; --duration-very-slow: 500ms; --ease-smooth-out: cubic-bezier(.22, 1, .36, 1);   /* transitions.dev's motion scale, for the UI's chrome */
 }
 @supports not (transition-timing-function: linear(0, 1)) {   /* older browsers: the nearest cubic curves */
   :root { --spring-press: cubic-bezier(.25, .9, .3, 1.02); --spring-pop: cubic-bezier(.2, .9, .25, 1.15); --spring-sheet: cubic-bezier(.2, .8, .2, 1); --spring-settle: cubic-bezier(.25, .8, .25, 1); }
@@ -36,7 +36,7 @@ kbd { font: 700 10px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; co
 body:not(.ready) .app { visibility: hidden; }
 
 /* ---- the splash: drawn by index.html before any script runs; it becomes a message if the salon can't open ---- */
-.splash { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; background: var(--bg); color: var(--ivory); text-align: center; font: 500 15px/1.45 Inter, system-ui, sans-serif; transition: opacity .45s ease, visibility 0s .45s; }
+.splash { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; background: var(--bg); color: var(--ivory); text-align: center; font: 500 15px/1.45 Inter, system-ui, sans-serif; transition: opacity var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), visibility 0s var(--duration-fast, 250ms); }
 .splash svg { width: 54px; height: 54px; filter: drop-shadow(0 6px 18px rgba(201, 164, 92, .3)); }
 .splash .keylight { animation: keylight 2.4s ease-in-out infinite; }
 .splash p { margin: 0; max-width: 34em; color: #cfc8ba; }
@@ -110,16 +110,16 @@ body.reduced .splash .keylight { animation: none; }
 @keyframes refuse { 0%, 100% { box-shadow: none; } 30% { box-shadow: 0 0 0 3px rgba(214, 92, 80, .8), 0 0 24px rgba(214, 92, 80, .35); } }
 .spot .amount { position: absolute; left: 50%; bottom: 0; translate: -50% 55%; font: 800 13px/1 "Barlow Condensed", sans-serif; letter-spacing: .03em; padding: 4px 8px 3px; border-radius: 99px; background: rgba(12, 12, 13, .86); border: 1px solid var(--gold-lo); color: var(--gold-hi); font-variant-numeric: tabular-nums; }
 .spot.main .amount { font-size: 15px; }
-.hand-total { translate: -50% -50%; min-width: 34px; text-align: center; font: 800 17px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; padding: 6px 9px 5px; border-radius: 99px; background: rgba(12, 12, 13, .88); border: 1px solid var(--line-2); color: var(--ivory); box-shadow: 0 4px 14px rgba(0, 0, 0, .35); transition: border-color .2s, color .2s; }
+.hand-total { translate: -50% -50%; min-width: 34px; text-align: center; font: 800 17px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; padding: 6px 9px 5px; border-radius: 99px; background: rgba(12, 12, 13, .88); border: 1px solid var(--line-2); color: var(--ivory); box-shadow: 0 4px 14px rgba(0, 0, 0, .35); transition: border-color var(--duration-quick, 150ms), color var(--duration-quick, 150ms); }
 .hand-total.active { border-color: var(--gold); color: var(--gold-hi); box-shadow: 0 0 0 3px rgba(201, 164, 92, .18); }
 .hand-total.bust { color: #e7a197; border-color: #6a3a34; }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.96); } }
 
 .banner { position: absolute; left: var(--rb-x, 50%); top: var(--rb-y, 60%); display: flex; align-items: baseline; gap: 8px; padding: 6px 13px 5px 12px; border-radius: 99px; white-space: nowrap; pointer-events: none;
   background: rgba(12, 12, 13, .9); border: 1px solid var(--line-2); box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
-  translate: -50% -100%; transform: translateY(10px); opacity: 0; transition: transform .5s var(--spring-pop), opacity .25s ease-out; }
+  translate: -50% -100%; transform: translateY(10px); opacity: 0; transition: transform var(--duration-very-slow, 500ms) var(--spring-pop), opacity var(--duration-quick, 150ms) ease-out; }
 .banner.show { transform: none; opacity: 1; }
-.banner.leave { transform: translateY(-10px); opacity: 0; transition: transform .4s ease-in, opacity .4s ease-in; }
+.banner.leave { transform: translateY(-10px); opacity: 0; transition: transform var(--duration-slow, 400ms) ease-in, opacity var(--duration-slow, 400ms) ease-in; }
 .banner .rb-label { font: 700 10.5px/1 Inter, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .banner em { font: 800 22px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ivory); }
 .banner.up { border-color: rgba(201, 164, 92, .6); } .banner.up em { color: var(--gold-hi); } .banner.up .rb-label { color: var(--gold); }
@@ -142,12 +142,12 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity .2s;
 .hand-total.push { background: #2a2a2f; color: var(--ivory); border-color: #55555c; }
 .hand-total.loss { color: #e7a197; border-color: #6a3a34; }
 /* Other players: a quiet name plate by each seat, their bankroll, and what they just did. */
-.seat-tag { translate: -50% -50%; display: flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 99px; background: rgba(12, 12, 13, .72); border: 1px solid var(--line-2); color: var(--ivory); font: 600 11.5px/1 Inter, system-ui, sans-serif; white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, .3); transition: opacity .35s, border-color .25s; }
+.seat-tag { translate: -50% -50%; display: flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 99px; background: rgba(12, 12, 13, .72); border: 1px solid var(--line-2); color: var(--ivory); font: 600 11.5px/1 Inter, system-ui, sans-serif; white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, .3); transition: opacity var(--duration-medium, 350ms), border-color var(--duration-fast, 250ms); }
 .seat-tag .av { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #2a2620; color: var(--gold-hi); font: 700 11px/1 Cinzel, Georgia, serif; border: 1px solid rgba(201, 164, 92, .45); }
 .seat-tag .bank { color: var(--muted, #a8a39a); font-variant-numeric: tabular-nums; font-weight: 500; }
 .seat-tag.turn { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201, 164, 92, .16); }
 .seat-tag.away { opacity: 0; }
-.seat-tag .say { position: absolute; left: 50%; bottom: calc(100% + 6px); translate: -50% 4px; padding: 4px 8px 3px; border-radius: 6px; background: var(--ivory); color: #141416; font: 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; opacity: 0; transition: opacity .18s, translate .25s cubic-bezier(.2, .9, .3, 1.3); }
+.seat-tag .say { position: absolute; left: 50%; bottom: calc(100% + 6px); translate: -50% 4px; padding: 4px 8px 3px; border-radius: 6px; background: var(--ivory); color: #141416; font: 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; opacity: 0; transition: opacity var(--duration-quick, 150ms), translate var(--duration-fast, 250ms) cubic-bezier(.2, .9, .3, 1.3); }
 .seat-tag .say.show { opacity: 1; translate: -50% 0; }
 .hand-total.seat { font-size: 14px; padding: 4px 7px 3px; min-width: 28px; opacity: .92; }
 .offscreen { visibility: hidden; }
@@ -204,13 +204,13 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity .2s;
 .tray.open .tray-toggle svg { transform: none; }
 /* (i): the side bets' paytables and what their words mean, in the settings (a tile's tooltip is no use to a finger) */
 .tray-info { position: relative; flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--panel); color: var(--muted);
-  transition: color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
+  transition: color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
 .tray-info svg { width: 17px; height: 17px; }
 .tray-info::after { content: ''; position: absolute; inset: -7px; }
 @media (hover: hover) { .tray-info:hover { color: var(--ivory); border-color: #55555c; } }
 .tiles { display: none; gap: 6px; }
 .tray.open .tiles { display: flex; }
-.tile { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 7px; align-items: center; justify-items: start; gap: 2px; min-width: 104px; padding: 5px 10px 5px 5px; border-radius: 11px; background: linear-gradient(#18181b, #121214); border: 1px solid var(--line-2); text-align: left; transition: border-color .2s, background .2s, opacity .2s; }
+.tile { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 7px; align-items: center; justify-items: start; gap: 2px; min-width: 104px; padding: 5px 10px 5px 5px; border-radius: 11px; background: linear-gradient(#18181b, #121214); border: 1px solid var(--line-2); text-align: left; transition: border-color var(--duration-quick, 150ms), background var(--duration-quick, 150ms), opacity var(--duration-quick, 150ms); }
 .tile b { color: var(--ivory); }
 .tile small { font: 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; color: var(--gold); text-transform: uppercase; }
 .tile small i { font-style: normal; }
@@ -223,18 +223,18 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity .2s;
 .tile:disabled { opacity: .4; }
 .tile.refused { animation: refuse .5s var(--ease); }
 /* betting tools and decisions share the dock and cross-fade, so nothing jumps */
-.betting, .decisions { grid-area: dock; transition: opacity .22s var(--ease), transform .3s var(--spring-press), visibility 0s; }
-body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(6px); transition: opacity .18s, transform .18s, visibility 0s .18s; }
+.betting, .decisions { grid-area: dock; transition: opacity var(--duration-quick, 150ms) var(--ease), transform var(--duration-medium, 350ms) var(--spring-press), visibility 0s; }
+body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(6px); transition: opacity var(--duration-quick, 150ms), transform var(--duration-quick, 150ms), visibility 0s var(--duration-quick, 150ms); }
 
 .chips { display: flex; gap: 6px; padding: 4px 2px; }
-.chip { width: 54px; height: 54px; border-radius: 50%; position: relative; transition: filter .2s, opacity .2s; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55)); }
+.chip { width: 54px; height: 54px; border-radius: 50%; position: relative; transition: filter var(--duration-quick, 150ms), opacity var(--duration-quick, 150ms); filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55)); }
 .chip img { width: 100%; height: 100%; display: block; border-radius: 50%; }
 .chip.selected::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--gold-hi); box-shadow: 0 0 16px rgba(226, 196, 131, .45); }
 .chip:disabled { opacity: .3; filter: grayscale(.7); }
 
 .bet-actions { display: flex; gap: 8px; align-items: center; }
 @media (min-width: 761px) and (min-height: 521px) { .bet-actions .pill:not(.deal) { min-width: 100px; justify-content: center; } }   /* Undo, Clear and Rebet (or ×2) one width, so the row doesn't shuffle as they change (a phone shows them as icons) */
-.pill { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line-2); font: 700 14px/1 Inter, system-ui, sans-serif; letter-spacing: .03em; transition: background var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), opacity var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
+.pill { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line-2); font: 700 14px/1 Inter, system-ui, sans-serif; letter-spacing: .03em; transition: background var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), opacity var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); }
 .pill svg { width: 17px; height: 17px; }
 .pill .glyph { font: 800 16px/1 "Barlow Condensed", sans-serif; }
 @media (hover: hover) { .pill:hover:not(:disabled) { background: #232327; border-color: #4a4a50; } }
@@ -251,7 +251,7 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   width: 96px; height: 78px; border-radius: 16px; background: var(--bg); border: 1.5px solid var(--bd); color: var(--fg);
   box-shadow: 0 4px 0 var(--edge), 0 10px 20px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .08);
-  transition: transform .06s ease, box-shadow .06s ease, background .2s, border-color .2s, color .2s, opacity .2s, filter .2s; }
+  transition: transform 60ms ease, box-shadow 60ms ease, background var(--duration-quick, 150ms), border-color var(--duration-quick, 150ms), color var(--duration-quick, 150ms), opacity var(--duration-quick, 150ms), filter var(--duration-quick, 150ms); }
 .act.big { width: 120px; }
 .act.hit { --bg: linear-gradient(#46683d, #2f4a29); --bd: #7fa973; --fg: #effbe8; --edge: #1b2b18; }
 .act.stand { --bg: linear-gradient(#6e3d37, #4b2824); --bd: #b87a70; --fg: #fbe9e5; --edge: #2c1714; }
@@ -269,13 +269,13 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 .act:disabled kbd { opacity: .3; }
 body:not([data-mode="player"]) .act .why { visibility: hidden; }
 /* while cards move the buttons dim, but only after a moment, so quick hits do not flicker them */
-body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[data-mode="insurance"] .decisions { opacity: .55; transition: opacity .3s .35s; }
+body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[data-mode="insurance"] .decisions { opacity: .55; transition: opacity var(--duration-medium, 350ms) var(--duration-medium, 350ms); }
 
 /* ---- settings sheet ------------------------------------------------------------------------------ */
 .sheet { width: min(520px, calc(100vw - 24px)); max-height: min(86vh, 760px); padding: 0; border-radius: 20px; border: 1px solid var(--line-2); background: var(--panel); color: var(--ivory); box-shadow: 0 30px 90px rgba(0, 0, 0, .6); overflow: auto; }
 .sheet::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
 .sheet[open] { animation: sheet-in .5s var(--spring-sheet); }
-.sheet[open]::backdrop { animation: fade-in .25s ease-out; }
+.sheet[open]::backdrop { animation: fade-in var(--duration-quick, 150ms) ease-out; }
 .sheet.closing { animation: sheet-out var(--duration-medium, 350ms) var(--ease-smooth-out, cubic-bezier(.22, 1, .36, 1)) forwards; }   /* (app.mjs closes it when this ends) */
 .sheet.closing::backdrop { animation: fade-out var(--duration-medium, 350ms) var(--ease-smooth-out, cubic-bezier(.22, 1, .36, 1)) forwards; }
 @keyframes sheet-in { from { opacity: 0; transform: translateY(18px) scale(.97); } }
@@ -283,14 +283,14 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 /* the side-bet tray slides back down as it closes */
-.tray.open.closing .tiles { animation: tray-out .19s cubic-bezier(.4, 0, 1, 1) forwards; pointer-events: none; }
+.tray.open.closing .tiles { animation: tray-out 190ms cubic-bezier(.4, 0, 1, 1) forwards; pointer-events: none; }
 @keyframes tray-out { to { opacity: 0; transform: translateY(8px); } }
 .sheet > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .sheet h2 { margin: 0; font: 700 20px/1 Cinzel, Georgia, serif; letter-spacing: .06em; }
 .opts { display: grid; padding: 8px 20px; }
 .opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
 .opt input[type="checkbox"] { appearance: none; width: 44px; height: 26px; border-radius: 99px; background: #2c2c31; position: relative; cursor: pointer; transition: background .2s; margin: 0; }
-.opt input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #cfc8ba; transition: transform .5s var(--spring-pop), background .3s; }   /* Kinetics: Switch Spring */
+.opt input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #cfc8ba; transition: transform var(--duration-very-slow, 500ms) var(--spring-pop), background var(--duration-medium, 350ms); }   /* Kinetics: Switch Spring */
 .opt input[type="checkbox"]:checked { background: var(--gold-lo); }
 .opt input[type="checkbox"]:checked::after { transform: translateX(18px); background: var(--gold-hi); }
 .opt input[type="range"] { width: 160px; accent-color: var(--gold); }
@@ -300,7 +300,7 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .sheet summary { display: flex; align-items: center; justify-content: space-between; list-style: none; padding: 14px 0; cursor: pointer; font: 700 13px/1 Inter, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
 .sheet summary::-webkit-details-marker { display: none; }
 /* Kinetics: Accordion Spring - long soft open, chevron overshoots as it turns */
-.sheet summary .chev { width: 18px; height: 18px; transition: transform .5s var(--spring-pop); }
+.sheet summary .chev { width: 18px; height: 18px; transition: transform var(--duration-very-slow, 500ms) var(--spring-pop); }
 .sheet details.open summary .chev { transform: rotate(180deg); }
 .acc-body { overflow: hidden; }
 .rules { margin: 0 0 16px; padding-left: 18px; color: #cfc8ba; font-size: 14px; line-height: 1.5; }
@@ -422,7 +422,7 @@ body.reduced :is(.r-win, .r-win.show, .r-history, .rstage .r-history) { transiti
 .chip { will-change: transform; }
 
 /* ---- Kinetics: Push Button - a real bottom edge that the button presses down onto ---------------- */
-.pill.deal { box-shadow: 0 5px 0 #6b5226, 0 10px 18px rgba(0, 0, 0, .35); transition: transform .06s ease, box-shadow .06s ease, opacity .2s; }
+.pill.deal { box-shadow: 0 5px 0 #6b5226, 0 10px 18px rgba(0, 0, 0, .35); transition: transform 60ms ease, box-shadow 60ms ease, color var(--duration-fast, 250ms), opacity var(--duration-quick, 150ms); }
 .pill.deal:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 #6b5226, 0 4px 8px rgba(0, 0, 0, .3); }
 .pill.deal:disabled { box-shadow: 0 5px 0 #3b3222; }
 
@@ -435,7 +435,7 @@ body.reduced :is(.r-win, .r-win.show, .r-history, .rstage .r-history) { transiti
 body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .shimmer:disabled :is(.shimmer-spark, .shimmer-cone) { animation-play-state: paused; }
 .shimmer:disabled .shimmer-spark-wrap { opacity: 0; }
 .shimmer .shimmer-backdrop { position: absolute; inset: var(--cut); z-index: -20; border-radius: inherit; background: linear-gradient(#d5b36d, #b08a45); }
-.shimmer .shimmer-highlight { position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 -8px 10px #ffffff1f; transition: box-shadow .3s ease-in-out; pointer-events: none; }
+.shimmer .shimmer-highlight { position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 -8px 10px #ffffff1f; transition: box-shadow var(--duration-medium, 350ms) ease-in-out; pointer-events: none; }
 @media (hover: hover) { .shimmer:hover:not(:disabled) .shimmer-highlight { box-shadow: inset 0 -6px 10px #ffffff3f; } }
 .shimmer:active:not(:disabled) .shimmer-highlight { box-shadow: inset 0 -10px 10px #ffffff3f; }
 .shimmer:disabled .shimmer-spark-wrap { display: none; }
@@ -448,28 +448,28 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .sh
 .hold-ring { width: 26px; height: 26px; transform: rotate(-90deg); flex: none; }
 .hold-ring circle { fill: none; stroke-width: 5; }
 .hold-ring .track { stroke: #333338; }
-.hold-ring .prog { stroke: var(--gold-hi); stroke-dasharray: 207; stroke-dashoffset: 207; stroke-linecap: round; transition: stroke-dashoffset .2s ease-out; }
-.hold-btn.holding .prog { stroke-dashoffset: 0; transition: stroke-dashoffset .8s linear; }
+.hold-ring .prog { stroke: var(--gold-hi); stroke-dasharray: 207; stroke-dashoffset: 207; stroke-linecap: round; transition: stroke-dashoffset var(--duration-quick, 150ms) ease-out; }
+.hold-btn.holding .prog { stroke-dashoffset: 0; transition: stroke-dashoffset 800ms linear; }
 .hold-btn.done .prog { stroke-dashoffset: 0; stroke: #9fd18b; }
 
 /* ---- Kinetics: Badge Counter ---------------------------------------------------------------------------------------- */
-.tile .amt, .tray-toggle .sum { display: inline-block; transition: transform .5s var(--spring-pop); }
+.tile .amt, .tray-toggle .sum { display: inline-block; transition: transform var(--duration-very-slow, 500ms) var(--spring-pop); }
 .tile .amt.pop, .tray-toggle .sum.pop { transform: scale(1.4); }
 
 /* ---- steady betting row: nothing shifts when a chip goes down ------------------------------------------ */
 /* Rebet and Double bets share one slot and cross-fade; Deal keeps one width whatever its label says. */
 .bet-actions { display: grid; grid-template-areas: 'u c s d'; grid-template-columns: auto auto auto auto; align-items: center; gap: 8px; }
 #undo { grid-area: u; } #clear { grid-area: c; } #rebet, #x2 { grid-area: s; justify-self: stretch; justify-content: center; } #deal { grid-area: d; }
-.bet-actions .pill { transition: background .2s, border-color .2s, color .2s, opacity .22s var(--ease), scale .3s var(--spring-press), visibility 0s; }
-.bet-actions .pill.gone { opacity: 0; scale: .86; visibility: hidden; pointer-events: none; transition: opacity .16s, scale .16s, visibility 0s .16s; }
-.pill.deal { min-width: 188px; justify-content: center; transition: transform .06s ease, box-shadow .06s ease, color .25s, opacity .2s; }
-.pill.deal .label { transition: opacity .2s; }
+.bet-actions .pill { transition: background var(--duration-quick, 150ms), border-color var(--duration-quick, 150ms), color var(--duration-quick, 150ms), opacity 220ms var(--ease), scale var(--duration-medium, 350ms) var(--spring-press), visibility 0s; }
+.bet-actions .pill.gone { opacity: 0; scale: .86; visibility: hidden; pointer-events: none; transition: opacity 160ms, scale 160ms, visibility 0s 160ms; }
+.pill.deal { min-width: 188px; justify-content: center; transition: transform 60ms ease, box-shadow 60ms ease, color var(--duration-fast, 250ms), opacity var(--duration-quick, 150ms); }
+.pill.deal .label { transition: opacity var(--duration-quick, 150ms); }
 /* a Deal button that is waiting for a bet reads as switched off, not as a muddy gold one */
 /* not yet: still the gold button, dimmed to an outline, so you can see where the next move is */
 .pill.deal:disabled { opacity: 1; color: rgba(226, 196, 131, .62); border-color: rgba(201, 164, 92, .5) !important; background: rgba(40, 33, 19, .55) !important; box-shadow: 0 5px 0 rgba(10, 9, 7, .7); }
 .pill.deal:disabled .shimmer-backdrop { background: linear-gradient(rgba(46, 38, 22, .82), rgba(30, 25, 15, .82)); }
 .pill.deal:disabled .shimmer-highlight { box-shadow: none; }
-.shimmer .shimmer-backdrop { transition: background .3s; }
+.shimmer .shimmer-backdrop { transition: background var(--duration-medium, 350ms); }
 /* the side-bet total is a badge on the toggle, like the ones on the tiles, so the row does not move */
 .tray-toggle { position: relative; }
 .tray-toggle .sum { position: absolute; top: -8px; right: -8px; min-width: 22px; padding: 3px 6px 2px; border-radius: 99px; background: linear-gradient(#d5b36d, #b08a45); color: #17130b; font: 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: 0; text-align: center; box-shadow: 0 2px 6px rgba(0, 0, 0, .45); }
@@ -553,7 +553,7 @@ body.reduced .ins-ace { animation: none; }
 .lobby-shade { position: fixed; inset: 0; pointer-events: none;
   background: radial-gradient(120% 70% at 50% 46%, transparent 38%, rgba(4, 4, 5, .5) 78%),
     linear-gradient(180deg, rgba(4, 4, 5, .88) 0%, rgba(4, 4, 5, .35) 24%, rgba(4, 4, 5, 0) 42%, rgba(4, 4, 5, .1) 55%, rgba(4, 4, 5, .8) 74%, rgba(4, 4, 5, .97) 100%);
-  transition: opacity .7s; }   /* (with the camera's flight into the seat) */
+  transition: opacity 700ms; }   /* (with the camera's flight into the seat) */
 .lobby-inner { position: relative; min-height: 100%; width: min(1180px, 100%); margin: 0 auto; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
 /* the menu parts as you take a seat: title up, rail down, shade away - while the camera flies in */
 .lobby.leaving { pointer-events: none; }
@@ -590,7 +590,7 @@ body.reduced .ins-ace { animation: none; }
   background: linear-gradient(180deg, rgba(24, 22, 20, .78), rgba(10, 10, 11, .86)); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   border: 1px solid rgba(201, 164, 92, .22); box-shadow: 0 18px 40px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 236, 200, .05);
   transition: transform .6s var(--spring-settle), border-color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), box-shadow var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), background var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); cursor: pointer; overflow: hidden; }
-.tcard::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--acc), transparent); opacity: .5; transition: opacity .3s; }
+.tcard::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--acc), transparent); opacity: .5; transition: opacity var(--duration-medium, 350ms); }
 .tcard[data-mode="freebet"] { --acc: #52c496; } .tcard[data-mode="lightning"] { --acc: #8ea9ff; }
 .tcard:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--acc) 45%, transparent); }
 .tcard:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
@@ -598,7 +598,7 @@ body.reduced .ins-ace { animation: none; }
   background: linear-gradient(180deg, color-mix(in srgb, var(--acc) 14%, rgba(24, 22, 20, .86)), rgba(10, 10, 11, .9));
   box-shadow: 0 26px 50px rgba(0, 0, 0, .55), 0 0 40px color-mix(in srgb, var(--acc) 30%, transparent), inset 0 1px 0 rgba(255, 236, 200, .08); }
 .tcard[aria-checked="true"]::before { opacity: 1; height: 3px; }
-.t-ico { grid-row: 1 / 3; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); color: var(--acc); transition: background .3s, color .3s, box-shadow .3s; }
+.t-ico { grid-row: 1 / 3; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); color: var(--acc); transition: background var(--duration-medium, 350ms), color var(--duration-medium, 350ms), box-shadow var(--duration-medium, 350ms); }
 .t-ico svg { width: 22px; height: 22px; fill: currentColor; }
 .t-ico svg .cut { fill: none; stroke: #121110; stroke-width: 1.6; } .t-ico svg .ring { fill: none; stroke: currentColor; stroke-width: 1.8; }
 .tcard[aria-checked="true"] .t-ico { background: var(--acc); color: #121110; box-shadow: 0 0 22px color-mix(in srgb, var(--acc) 55%, transparent); }
@@ -781,7 +781,7 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* the room falls away into the dark round the table, as under its pendants */
 .r-vignette { position: absolute; inset: 0 0 calc(-1 * var(--under, 0px)); pointer-events: none; background: radial-gradient(120% 95% at 50% 58%, transparent 52%, rgba(5, 4, 3, .38) 82%, rgba(5, 4, 3, .62) 100%); }
-.r-fade { position: absolute; inset: 0; background: #050505; opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 2; }
+.r-fade { position: absolute; inset: 0; background: #050505; opacity: 0; pointer-events: none; transition: opacity var(--duration-quick, 150ms) ease; z-index: 2; }
 .r-fade.on { opacity: 1; }
 .r-hint, body[data-table] .r-hint { top: auto; bottom: 12px; }   /* beat the blackjack tables' hint placement, which may still be on the body */
 /* An upright phone: the layout runs down to the foot of the picture (the column bets are its last row), so the line
@@ -803,7 +803,7 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
 /* While the ball runs the hint is a small pill at the foot. From the drop, and in the replay, the picture is the wheel's
    alone: the strip steps up out of it (it is back as the number is called, with the number) and the hint goes. */
 body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; font-size: 12.5px; }
-.r-history { z-index: 3; transition: opacity .3s var(--ease) .15s, translate .4s var(--ease) .15s; }   /* (over the top bar's blur, which runs on below the bar; back a beat after what took its place) */
+.r-history { z-index: 3; transition: opacity var(--duration-medium, 350ms) var(--ease) 0.15s, translate var(--duration-slow, 400ms) var(--ease) 0.15s; }   /* (over the top bar's blur, which runs on below the bar; back a beat after what took its place) */
 .rstage.r-wheelonly .r-history { opacity: 0; translate: -50% -8px; }
 .rstage.r-wheelonly .r-hint { opacity: 0; }
 
@@ -826,9 +826,9 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 @keyframes rec { 50% { opacity: .2; } }
 
 /* the result */
-.r-win { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 58px); translate: -50% 0; display: grid; justify-items: center; gap: 2px; padding: 10px 26px 11px; border-radius: 16px; background: linear-gradient(rgba(22, 20, 16, .94), rgba(12, 12, 13, .94)); border: 1px solid rgba(226, 196, 131, .35); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(10px) scale(.92); filter: blur(8px); transition: opacity .25s var(--ease), transform .3s var(--ease), filter .25s var(--ease); z-index: 3; }
+.r-win { position: absolute; left: 50%; top: calc(var(--top-h, 0px) + 58px); translate: -50% 0; display: grid; justify-items: center; gap: 2px; padding: 10px 26px 11px; border-radius: 16px; background: linear-gradient(rgba(22, 20, 16, .94), rgba(12, 12, 13, .94)); border: 1px solid rgba(226, 196, 131, .35); box-shadow: 0 16px 40px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(10px) scale(.92); filter: blur(8px); transition: opacity var(--duration-quick, 150ms) var(--ease), transform var(--duration-medium, 350ms) var(--ease), filter var(--duration-quick, 150ms) var(--ease); z-index: 3; }
 /* in as the strip steps up out of its way: it rises, sharpens and settles with a little spring; out quicker */
-.r-win.show { opacity: 1; transform: none; filter: none; transition: opacity .45s var(--ease) .12s, transform .7s var(--spring-pop) .12s, filter .45s var(--ease) .12s; }
+.r-win.show { opacity: 1; transform: none; filter: none; transition: opacity var(--duration-slow, 400ms) var(--ease) 0.12s, transform 700ms var(--spring-pop) 0.12s, filter var(--duration-slow, 400ms) var(--ease) 0.12s; }
 .r-win small { font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
 .r-win.red small { color: #ec8a8f; } .r-win.green small { color: #6fd39e; }
 .r-win b { font: 500 15px/1.2 "Bodoni Moda", serif; font-style: italic; color: var(--ivory); }
@@ -840,7 +840,7 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 /* The result takes the recent numbers' place, the room kept for the strip above the picture: lower down it covered the
    racetrack printed on the cloth beside the layout, and the zero end of it on an upright phone. Beside the layout it is
    one line; on an upright phone the totals go under it. The strip is back with your next bet, the new number first. */
-.rstage:has(.r-win.show) .r-history { opacity: 0; translate: -50% -10px; transition: opacity .22s var(--ease), translate .3s var(--ease); }
+.rstage:has(.r-win.show) .r-history { opacity: 0; translate: -50% -10px; transition: opacity var(--duration-quick, 150ms) var(--ease), translate var(--duration-medium, 350ms) var(--ease); }
 @media (max-width: 760px) and (orientation: portrait) {
   .r-win { top: calc(var(--top-h, 0px) + 6px); width: max-content; max-width: calc(100% - 24px); grid-template-columns: repeat(3, auto); grid-template-areas: 's b e' 'g g g'; align-items: center; column-gap: 12px; row-gap: 1px; padding: 5px 16px 6px; }
   .r-win small, .r-win b, .r-win em { white-space: nowrap; }
