@@ -470,7 +470,7 @@ body.reduced :is(.r-win, .r-win.show, .r-history, .rstage .r-history) { transiti
 /* The spark runs while the Deal button can be pressed, a few passes each time it becomes pressable (its wrap comes back
    from display: none, which starts the animations over) and then rests: a spark that never stopped redrew the page every
    frame for as long as you thought about your bet. */
-body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .shimmer:disabled :is(.shimmer-spark, .shimmer-cone) { animation-play-state: paused; }
+body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), body:is(.in-lobby, .flying) .shimmer :is(.shimmer-spark, .shimmer-cone), .shimmer:disabled :is(.shimmer-spark, .shimmer-cone) { animation-play-state: paused; }   /* (and in the lobby, where its dock is out of sight: Firefox drew it over the moving table all the same) */
 .shimmer:disabled .shimmer-spark-wrap { opacity: 0; }
 .shimmer .shimmer-backdrop { position: absolute; inset: var(--cut); z-index: -20; border-radius: inherit; background: linear-gradient(#d5b36d, #b08a45); }
 .shimmer .shimmer-highlight { position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 -8px 10px #ffffff1f; transition: box-shadow var(--duration-medium) ease-in-out; pointer-events: none; }

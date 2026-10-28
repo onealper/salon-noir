@@ -59,6 +59,7 @@ node --test                     # from the repo root, Node 22+; about 6 s, no in
 | `__spader.roulette.test` | `rig(n)` fixes the next number, `rigStrikes([...])` the next lightning, `turbo` hurries the ball, `place(spot, units)`, `history`, `plan`, `at`, `bolts` (the strikes) |
 | `?table` | Skips the lobby and sits you at the last room's table (any session) |
 | `?nosw` | Runs without the service worker and removes it from that browser |
+| `?perf=aa0,pr1.25,shadow0,phys0,env0,fps30` | Takes one cost out of every frame, to measure it (testing session only; `PERF` in `scene/stage.mjs`): no multisampling, at most n pixels per CSS pixel, no shadow maps, clearcoat and sheen materials drawn plain, no environment light, 30 frames a second |
 
 ## Tech
 

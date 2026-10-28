@@ -30,9 +30,19 @@ export const pixelRatio = (q, w, h, cap = q.ratio) => Math.min(devicePixelRatio 
 // otherwise crawl as the wheel turns. Phones' tiled GPUs (Apple's above all) keep the extra samples on the chip and
 // resolve them there, so it costs them little; only the battery saver goes without (on a high-density screen). It is
 // chosen with the context, at load: a preset changed in Settings keeps the multisampling the page started with.
+// Switches for measuring what a frame costs, each taking one thing away (testing sessions only: ?test, or
+// salonnoir.dev = '1'), as ?perf=aa0,pr1.25,shadow0,phys0,env0,fps30: aa0 no multisampling, pr<n> at most n device pixels
+// per CSS pixel, shadow0 no shadow maps, phys0 the clearcoat and sheen materials drawn as plain standard ones, env0 no
+// environment lighting (the room's reflections), fps30 thirty frames a second. Nothing when absent.
+export const PERF = (() => { try {
+  const p = new URLSearchParams(location.search), o = {};
+  if (!(p.has('test') || localStorage.getItem('salonnoir.dev') === '1') || !p.get('perf')) return o;
+  for (const t of p.get('perf').split(',')) { const m = /^([a-z]+)([\d.]+)$/.exec(t.trim()); if (m) o[m[1]] = +m[2]; }
+  return o;
+} catch { return {}; } })();
 // The GPU is the browser's own choice ('default'): asking for 'high-performance' wakes the discrete GPU of a MacBook that
 // has two, which runs hot for a table that is still most of the time.
-export const glOptions = q => ({ antialias: q.name !== 'saver' || (devicePixelRatio || 1) < 2, powerPreference: 'default' });
+export const glOptions = q => ({ antialias: PERF.aa === 0 ? false : q.name !== 'saver' || (devicePixelRatio || 1) < 2, powerPreference: 'default' });
 // A room environment for reflections, made once; the generator and the room it was rendered from are freed.
 export function roomEnvironment(renderer, blur = .04) {
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment(), rt = pmrem.fromScene(room, blur);
@@ -135,11 +145,22 @@ export function fitFov(fits, lo, hi, tol) {
 
 // A room's renderer, scene and camera. `lights`: the lights that cast shadows (their maps are let go while the room
 // is out of sight); `restored`: what the room remakes itself after a lost context, besides the room environment.
+// (the perf switches env0 and phys0: the scene without its environment light, its clearcoat and sheen materials plain)
+const plain = new WeakMap();
+function strip(scene) {
+  if (PERF.env === 0) scene.environment = null;
+  if (PERF.phys === 0) scene.traverse(o => {
+    if (!o.material?.isMeshPhysicalMaterial) return;
+    let m = plain.get(o.material);
+    if (!m) { const f = o.material; m = new THREE.MeshStandardMaterial(); for (const k of ['color', 'map', 'roughness', 'metalness', 'normalMap', 'bumpMap', 'bumpScale', 'roughnessMap', 'envMap', 'transparent', 'opacity', 'side', 'emissive', 'emissiveMap', 'alphaMap', 'depthWrite']) if (f[k] !== undefined) m[k] = f[k]?.clone && !f[k].isTexture ? f[k].clone() : f[k]; plain.set(f, m); }
+    o.material = m;
+  });
+}
 export function createStage(canvas, { quality = detectQuality(), background, environment, fov, far, lights = () => [], restored = () => {} }) {
   const renderer = new THREE.WebGLRenderer({ canvas, ...glOptions(quality) });
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   // shadows are redrawn only when something that casts one moves (see loop), not for a moving camera
-  renderer.shadowMap.enabled = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = shadowType(quality);
+  renderer.shadowMap.enabled = PERF.shadow !== 0; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = shadowType(quality);
   const scene = new THREE.Scene(); scene.background = new THREE.Color(background);
   scene.environment = roomEnvironment(renderer); scene.environmentIntensity = environment;
   const camera = new THREE.PerspectiveCamera(fov, 1, 1, far);
@@ -147,7 +168,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // would have the new context delete objects it never had.
   watchContext(canvas, () => { scene.environment = roomEnvironment(renderer); for (const k of lights()) k.shadow.map = null; restored(); requestRender(); });
   const view = { w: 1, h: 1 };   // the canvas in CSS pixels (the room's frame() sets it)
-  let ratioCap = quality.ratio; const ratio = (w = view.w, h = view.h) => pixelRatio(quality, w, h, ratioCap);
+  let ratioCap = quality.ratio; const ratio = (w = view.w, h = view.h) => Math.min(PERF.pr ?? Infinity, pixelRatio(quality, w, h, ratioCap));
 
   // Drawn only when something changes. A ticker draws every frame while it runs, unless it is `lazy` (it
   // asks for its own frames); it redraws the shadows too, unless it is `still` (it moves no shadow caster:
@@ -156,7 +177,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // refresh to reach it, so a 120 Hz screen (a ProMotion Mac's) is drawn for on every other refresh, which halves the
   // GPU's work while anything moves, and a 90 or 144 Hz one on the refreshes nearest each sixtieth. Fallen behind (a
   // slow frame, or nothing to draw for a while), the next is drawn at once and the count starts again from it.
-  const STEP = 1000 / 60;
+  const STEP = 1000 / (PERF.fps || 60);
   let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0, due = 0; const tickers = new Set();
   function requestRender(shadows = true) { dirty = true; if (shadows) shadowsDirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
   // Frame-time watch: while things move, compare each frame with the display's refresh (the shortest recent interval,
@@ -187,6 +208,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
     for (const f of tickers) { try { f(t); busy ||= !f.lazy; moving ||= !f.still; } catch (e) { tickers.delete(f); console.error('ticker', e); } }   // one bad ticker must not stop the table (a finishing tween may request another frame here)
     if (dirty || busy) {
       dirty = false; if (shadowsDirty || moving) { renderer.shadowMap.needsUpdate = true; shadowsDirty = false; }
+      if (PERF.env === 0 || PERF.phys === 0) strip(scene);
       renderer.render(scene, camera);
     }
     if ((tickers.size || dirty) && !running) { running = true; requestAnimationFrame(loop); }
