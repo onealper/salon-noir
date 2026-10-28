@@ -283,14 +283,14 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 /* the side-bet tray slides back down as it closes */
-.tray.open.closing .tiles { animation: tray-out var(--duration-quick, 150ms) cubic-bezier(.4, 0, 1, 1) forwards; pointer-events: none; }
+.tray.open.closing .tiles { animation: tray-out var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)) forwards; pointer-events: none; }
 @keyframes tray-out { to { opacity: 0; transform: translateY(8px); } }
 .sheet > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .sheet h2 { margin: 0; font: 700 20px/1 Cinzel, Georgia, serif; letter-spacing: .06em; }
 .opts { display: grid; padding: 8px 20px; }
 .opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
-.opt input[type="checkbox"] { appearance: none; width: 44px; height: 26px; border-radius: 99px; background: #2c2c31; position: relative; cursor: pointer; transition: background .2s; margin: 0; }
-.opt input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #cfc8ba; transition: transform var(--duration-very-slow, 500ms) var(--spring-pop), background var(--duration-medium, 350ms); }   /* Kinetics: Switch Spring */
+.opt input[type="checkbox"] { appearance: none; width: 44px; height: 26px; border-radius: 99px; background: #2c2c31; position: relative; cursor: pointer; transition: background var(--duration-quick, 150ms); margin: 0; }
+.opt input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #cfc8ba; transition: transform var(--duration-very-slow, 500ms) var(--spring-pop), background var(--duration-quick, 150ms); }   /* Kinetics: Switch Spring */
 .opt input[type="checkbox"]:checked { background: var(--gold-lo); }
 .opt input[type="checkbox"]:checked::after { transform: translateX(18px); background: var(--gold-hi); }
 .opt input[type="range"] { width: 160px; accent-color: var(--gold); }
@@ -484,7 +484,7 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), .sh
 .tray.open .tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
 .tile { --c: var(--gold); grid-template-columns: 34px minmax(0, 1fr); column-gap: 9px; row-gap: 3px; min-width: 128px; padding: 6px 12px 6px 6px; border-radius: 12px; }
 .tile .ico { grid-row: span 2; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--c);
-  background: color-mix(in srgb, var(--c) 14%, #121214); border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); transition: background .2s, color .2s, border-color .2s; }
+  background: color-mix(in srgb, var(--c) 14%, #121214); border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); transition: background var(--duration-quick, 150ms), color var(--duration-quick, 150ms), border-color var(--duration-quick, 150ms); }
 .tile .ico svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .tile b { font: 700 12.5px/1.1 Inter, system-ui, sans-serif; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .tile small { font: 800 12.5px/1 "Barlow Condensed", sans-serif; color: var(--c); letter-spacing: .04em; }
@@ -590,9 +590,10 @@ body.reduced .ins-ace { animation: none; }
   background: linear-gradient(180deg, rgba(24, 22, 20, .78), rgba(10, 10, 11, .86)); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   border: 1px solid rgba(201, 164, 92, .22); box-shadow: 0 18px 40px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 236, 200, .05);
   transition: transform .6s var(--spring-settle), border-color var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), box-shadow var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), background var(--duration-fast, 250ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)); cursor: pointer; overflow: hidden; }
+@media (hover: hover) { .tcard:hover { transform: translateY(-3px); } }
 .tcard::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--acc), transparent); opacity: .5; transition: opacity var(--duration-medium, 350ms); }
 .tcard[data-mode="freebet"] { --acc: #52c496; } .tcard[data-mode="lightning"] { --acc: #8ea9ff; }
-.tcard:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--acc) 45%, transparent); }
+.tcard:hover { border-color: color-mix(in srgb, var(--acc) 45%, transparent); }
 .tcard:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
 .tcard[aria-checked="true"] { transform: translateY(-10px); border-color: color-mix(in srgb, var(--acc) 75%, transparent);
   background: linear-gradient(180deg, color-mix(in srgb, var(--acc) 14%, rgba(24, 22, 20, .86)), rgba(10, 10, 11, .9));
@@ -736,7 +737,7 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 @keyframes splash-in { 0% { opacity: 0; scale: 2.2; filter: blur(8px); } 40% { opacity: 1; scale: .94; filter: none; } 70% { scale: 1.04; } 100% { opacity: 1; scale: 1; } }
 @keyframes splash-out { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 1.08; } }
 .zap .l-splash em { font-variant-numeric: tabular-nums; }
-.zap .l-splash em.done { animation: tally var(--duration-medium, 350ms) cubic-bezier(.2, .9, .25, 1); }
+.zap .l-splash em.done { animation: tally var(--duration-quick, 150ms) cubic-bezier(.2, .9, .25, 1); }
 @keyframes tally { 0% { scale: 1.35; color: #fff; text-shadow: 0 0 18px rgba(255, 220, 140, .95), 0 0 40px rgba(255, 190, 90, .7); } 100% { scale: 1; } }
 /* your multiplier, waiting beside your bet */
 .l-badge { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 4px; padding: 4px 9px 4px 6px; translate: -50% -50%; border-radius: 99px; pointer-events: auto;
