@@ -60,7 +60,7 @@ export async function createRoulette(ctx) {
       <div class="r-loupe" hidden><b></b><span></span></div>
       <div class="r-bubble" hidden><b></b><small></small></div>
       <div class="r-replay" hidden>Replay</div>
-      <div class="r-slam" aria-hidden="true" hidden><b></b><small>Lightning strikes</small></div>
+      <div class="r-slam" aria-hidden="true" hidden><small>Lightning strikes</small><b></b><em></em></div>
       <div class="r-win" role="status" hidden><small></small><b></b><em></em><span class="r-gross"></span></div>
       <div class="r-tags"></div>
       <div class="r-sheet" id="rRaceSheet" role="region" hidden aria-label="Racetrack"></div>
@@ -506,13 +506,36 @@ export async function createRoulette(ctx) {
   // Your straight up on a struck number, the biggest moment at the Lightning tables: the dealer calls it, a gold bolt
   // drives into its plaque on the cloth, the multiplier slams onto the screen; then the croupier pays it as he pays any win.
   async function lightningPays(r) {
-    const x = r.x, big = x >= 200, slam = $('.r-slam');
+    const x = r.x, big = x >= 200, slam = $('.r-slam'), num = slam.querySelector('b'), amt = slam.querySelector('em'), win = r.wins.find(w => w.x)?.pay ?? 0;
     say('bj-lightning', { prio: 3 }); feel.tap(big ? 'strike-big' : 'strike');   // "Lightning strikes!"
     audio.cue(big ? 'thunder-mega' : 'thunder-1', { gain: .6, delay: .2 });
     await bolts.payoff(r.n);
-    slam.querySelector('b').textContent = `${x}×`; slam.classList.toggle('big', big); ui.shown(slam); slam.classList.remove('go'); void slam.offsetWidth; slam.classList.add('go');
-    await untilSkip(sleep(skipLevel ? 150 : 1500));
-    ui.leave(slam, { scale: .9, ms: 260 });
+    // the multiplier, figure by figure (app.css, .r-slam): each lands with a knock, the × last
+    const figs = [...String(x)], span = (cls, t, i) => { const e = document.createElement('span'); e.className = cls; e.textContent = t; e.style.setProperty('--i', i); return e; };
+    num.replaceChildren(...figs.map((c, i) => span('d', c, i)), span('x', 'x', figs.length)); amt.textContent = '';
+    slam.style.setProperty('--n', figs.length); slam.classList.toggle('big', big);
+    ui.shown(slam); slam.classList.remove('go'); void slam.offsetWidth; slam.classList.add('go');
+    if (!reduced()) figs.forEach((_, i) => setTimeout(() => audio.blip(180 + 45 * i, { gain: .16 }), i * 70 + 160));
+    await untilSkip(sleep(skipLevel || reduced() ? 0 : figs.length * 70 + 520));
+    await countUp(amt, win, skipLevel || reduced() ? 0 : Math.min(1300, 600 + figs.length * 150));
+    await untilSkip(sleep(skipLevel ? 150 : 1100));
+    ui.leave(slam, { scale: .96, ms: 220 });
+  }
+  // The win under it, counted up: quick at first and slowing onto its figure, a tick a step, each a little higher (as the
+  // blackjack table counts its Lightning bonus).
+  function countUp(el, to, ms) {
+    if (ms <= 0) { el.textContent = `+${fmt(to)}`; return Promise.resolve(); }
+    const steps = Math.max(8, Math.min(26, Math.round(ms / 40)));
+    return new Promise(res => {
+      let i = 0;
+      const step = () => {
+        i++; const k = i / steps; el.textContent = `+${fmt(i >= steps ? to : Math.round(to * (1 - (1 - k) ** 2.4)))}`;
+        audio.blip(560 * 2 ** (1.3 * k), { gain: .1 + .08 * k }); if (i % 3 === 0) feel.tap('tick');
+        if (i >= steps || skipLevel) { el.textContent = `+${fmt(to)}`; res(); return; }
+        setTimeout(step, ms / steps * (.55 + 1.1 * k));
+      };
+      step();
+    });
   }
   // The ring light answers the number as the croupier calls it: a flash in its colour (red, a cold white for black, green
   // for zero) fading back to the gold over a second and a bit. With Flashing effects on Soft, only a gentle tint; Off, none.

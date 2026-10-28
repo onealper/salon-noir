@@ -29,7 +29,7 @@ const KIT = [...n('ball-click', ...to(6)), ...n('ball-launch', 1, 2), ...n('whee
   ...['james', 'sofia'].flatMap(v => BJ.map(l => `voice/${v}-bj-${l}`)), ...['place-bets', 'last-bets', 'no-more-bets', 'good-luck', 'winning-number', 'congrats', ...to(37).map(i => `n${i - 1}`)].map(l => `voice/james-${l}`)];
 const WAV = [...n('card-slide', 3, 4, 7, 8), ...n('card-place', ...to(4)), ...n('card-shove', ...to(4)), 'card-fan-1', 'card-shuffle', ...n('chip-lay', ...to(3)), ...n('chips-collide', ...to(4)),
   ...n('chips-handle', 1, 3, 4, 6), ...n('chips-stack', 1, 2, 4, 5, 6), 'hael-draw'];
-const FONTS = [...n('barlow-condensed-latin', '600-normal', '700-normal', '800-normal'), ...n('bodoni-moda-latin', '400-italic', '500-italic', '500-normal', '600-italic', '700-normal'),
+const FONTS = [...n('barlow-condensed-latin', '600-normal', '700-normal', '800-normal'), ...n('bodoni-moda-latin', '400-italic', '500-italic', '500-normal', '600-italic', '700-normal', '900-normal'),
   ...n('cinzel-latin', '600-normal', '700-normal'), ...n('inter-latin', '500-normal', '600-normal', '700-normal', '800-normal')];
 const SUITS = ['clubs', 'diamonds', 'hearts', 'spades'];
 const FILES = [...['icon-192', 'icon-512', 'maskable-192', 'maskable-512', 'apple-touch-icon'].map(f => `icons/${f}.png`), ...FONTS.map(f => `src/fonts/${f}.woff2`),

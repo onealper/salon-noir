@@ -136,7 +136,7 @@ export function createLightningUI({ world, table, view, motion, audio, feel, set
     flash(.5 + .2 * k, light); shake(5 + 9 * k);
     audio.cue(m >= 10 ? 'thunder-mega' : take('thunder', 2), { gain: .5 + .35 * k, delay: .04 });
     call?.('lightning');
-    const b = splash.querySelector('b'), em = splash.querySelector('em'); b.textContent = `×${m}`; em.textContent = '+0'; em.classList.remove('done');
+    const b = splash.querySelector('b'), em = splash.querySelector('em'); b.innerHTML = `${m}<span class="x">x</span>`; em.textContent = '+0';   // (in Bodoni Black: its x carries where its × is a hairline) em.classList.remove('done');
     splash.hidden = false; splash.classList.remove('go', 'out'); void splash.offsetWidth; splash.classList.add('go');
     badge.classList.add('spent'); setTimeout(() => { badge.classList.remove('spent'); renderBadge(false); }, 700);
     // paid in chips onto the winning hand's stack, crackling as they land and for a moment after

@@ -24,15 +24,36 @@ const TABLES = [
 ];
 
 const gameOf = mode => TABLES.find(t => t.mode === mode)?.game ?? 'blackjack';
+// The rail shows one game's tables at a time under a Blackjack | Roulette switch (the casino lobby's game tabs), so each
+// card has the room to read: three across, never two rows. Each game keeps the table last picked in it.
+const GAMES = [['blackjack', 'Blackjack'], ['roulette', 'Roulette']], last = {};
+const calm = () => document.body.classList.contains('reduced') || matchMedia('(prefers-reduced-motion: reduce)').matches;
 let root, onPlay = () => {}, onChange = () => {}, onPreview = () => {}, onRefuse = () => {}, currentMode = () => 'classic', unsub = null, isOpen = false, picked = 'classic', noteText = '';
 // While the lobby is up, the room behind it (bar, table, dock) is inert: no focus or taps reach the
 // controls you can't see. The wheel's stage and dock join the room later, so new arrivals are caught too.
 const behind = () => [...(root?.parentElement?.children ?? [])].filter(el => el !== root && el.tagName !== 'DIALOG');
 const setInert = on => { for (const el of behind()) el.inert = on; };
 const showNote = () => { const el = root?.querySelector('.lobby-note'); if (el) { el.textContent = noteText; el.hidden = !noteText; } };
+// The switch's gold pill slides to the game shown (transitions.dev's sliding tabs): JS writes where the tab is, CSS tweens
+// it there. Placed without a tween the first time and on a resize, so it never slides in from nowhere.
+function placePill(animate) {
+  const bar = root.querySelector('.games'), pill = bar.querySelector('.games-pill'), tab = bar.querySelector('.game[aria-selected="true"]'); if (!tab || !tab.offsetWidth) return;
+  if (!animate) pill.style.transition = 'none';
+  pill.style.transform = `translateX(${tab.offsetLeft}px)`; pill.style.width = `${tab.offsetWidth}px`;
+  if (!animate) { void pill.offsetWidth; pill.style.transition = ''; }
+}
+// Showing a game's tables: the switch moves, and its cards rise into place one after another (transitions.dev's texts
+// reveal, card by card).
+function setGame(game, animate) {
+  if (root.dataset.game === game) return; const first = !root.dataset.game; root.dataset.game = game;
+  for (const t of root.querySelectorAll('.game')) t.setAttribute('aria-selected', t.dataset.game === game);
+  placePill(animate && !first);
+  if (!animate || first || calm()) return;
+  root.querySelectorAll(`.tcard[data-game="${game}"]`).forEach((c, i) => { c.classList.remove('arrive'); c.style.setProperty('--i', i); void c.offsetWidth; c.classList.add('arrive'); });
+}
 function pick(mode, { preview = true } = {}) {
   const t = TABLES.find(x => x.mode === mode && !x.soon); if (!t) return;
-  picked = mode; root.dataset.mode = mode;
+  picked = mode; root.dataset.mode = mode; last[t.game] = mode; setGame(t.game, preview);
   for (const c of root.querySelectorAll('.tcard[data-mode]')) { const on = c.dataset.mode === mode; c.setAttribute('aria-checked', on); if (on && preview) c.scrollIntoView({ inline: 'center', block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }
   root.querySelector('.seat .which').textContent = `${t.name} ${t.kicker}`;
   if (preview) onPreview(mode);
@@ -50,21 +71,25 @@ export const lobby = {
       </header>
       <section class="rail" aria-label="Tables">
         <p class="rail-title">Choose your table</p>
+        <div class="games" role="tablist" aria-label="Games"><span class="games-pill" aria-hidden="true"></span>${GAMES.map(([g, name]) => `<button class="game" role="tab" data-game="${g}" aria-selected="false">${name}<small>${TABLES.filter(t => t.game === g && !t.soon).length}</small></button>`).join('')}</div>
         <div class="tcards" role="radiogroup" aria-label="Tables">${TABLES.map(t => t.soon
           ? `<div class="tcard soon" aria-disabled="true"><span class="t-ico">${ICON.lightning}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="rope" aria-hidden="true"></span></div>`
-          : `<button class="tcard" role="radio" data-mode="${t.mode}" aria-checked="false"><span class="t-ico">${ICON[t.icon ?? (t.game === 'roulette' ? 'roulette' : t.mode)]}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>
+          : `<button class="tcard" role="radio" data-mode="${t.mode}" data-game="${t.game}" aria-checked="false"><span class="t-ico">${ICON[t.icon ?? (t.game === 'roulette' ? 'roulette' : t.mode)]}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>
         <p class="lobby-note" role="status" hidden></p>
         <button class="pill gold seat" data-play><span class="label">Take a seat</span><span class="which"></span></button>
       </section>
     </div>`;
     showNote();
     new MutationObserver(() => { if (isOpen) setInert(true); }).observe(root.parentElement, { childList: true });
+    new ResizeObserver(() => placePill(false)).observe(root.querySelector('.games'));
     root.addEventListener('click', e => {
       const c = e.target.closest('.tcard[data-mode]'); if (c) { pick(c.dataset.mode); return; }
+      const g = e.target.closest('.game'); if (g) { if (g.dataset.game !== root.dataset.game) pick(last[g.dataset.game] ?? TABLES.find(t => t.game === g.dataset.game && !t.soon).mode); return; }
       const s = e.target.closest('.tcard.soon'); if (s) { this.note('Lightning Roulette is still being built. It opens soon.'); onRefuse(s); return; }
       const b = e.target.closest('[data-play]'); if (b && isOpen) { this.close(); onPlay(gameOf(picked), picked); }   // once: a held Enter repeats the click
     });
-    // arrow keys move along the rail; Enter takes the seat. A held key acts once.
+    // arrow keys run along every table, the switch turning to the other game past one game's last; Enter takes the seat.
+    // A held key acts once.
     addEventListener('keydown', e => {
       if (!isOpen) return;
       if (e.repeat) { if (['Enter', ' ', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault(); return; }
