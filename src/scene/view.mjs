@@ -6,17 +6,17 @@ import { CARD_W, CARD_H, CHIP_H } from './textures.mjs';
 import { createCard, createChip, createMarker, cardQuat, headingOf, ease, chipToss, bendCard } from './pieces.mjs';
 import { breakDown } from '../engine.mjs';
 
-export const TIMING = { dealPlayer: 720, dealDealer: 640, reveal: 620, peek: 560, chip: 300, chipToss: 440, chipMove: 460, payout: 500, square: 180, gather: 300, discard: 620, toPlayer: 560, split: 440, shoeFill: 1100 };
+export const TIMING = { dealPlayer: 860, dealDealer: 760, reveal: 620, peek: 560, chip: 300, chipToss: 440, chipMove: 460, payout: 500, square: 180, gather: 300, discard: 620, toPlayer: 560, split: 440, shoeFill: 1100 };
 // Dealers don't all deal alike. Each keeps the same technique (out of the shoe, turned, slid across
 // on the cloth) but with their own pace and hand: how quickly the card leaves the shoe and turns,
 // how wide the sweep, how high the page-turn lifts, how much it settles, and how exactly it lands.
 // Sofia slides the card across face down and turns it over at its spot instead. `voice`: whose
 // recorded lines they speak (two voices for now: James's and Sofia's).
 export const DEALERS = {
-  james: { name: 'James', voice: 'james', style: 'Classic', speed: 1, out: .17, turn: .42, reach: .34, lift: .92, hop: .12, jitter: 0, flip: 'shoe' },
-  marco: { name: 'Marco', voice: 'james', style: 'Brisk', speed: .74, out: .12, turn: .31, reach: .26, lift: .78, hop: .05, jitter: 1, flip: 'shoe' },
-  elena: { name: 'Elena', voice: 'sofia', style: 'Smooth', speed: 1.28, out: .21, turn: .48, reach: .44, lift: 1.05, hop: .2, jitter: 0, flip: 'shoe' },
-  sofia: { name: 'Sofia', voice: 'sofia', style: 'Turns at the spot', speed: .92, out: .16, turn: .24, reach: .3, lift: 0, hop: .1, jitter: .5, flip: 'spot' },
+  james: { name: 'James', voice: 'james', style: 'Classic', speed: 1, out: .27, turn: .52, reach: .34, lift: .92, hop: .12, jitter: 0, flip: 'shoe' },
+  marco: { name: 'Marco', voice: 'james', style: 'Brisk', speed: .74, out: .21, turn: .4, reach: .26, lift: .78, hop: .05, jitter: 1, flip: 'shoe' },
+  elena: { name: 'Elena', voice: 'sofia', style: 'Smooth', speed: 1.28, out: .3, turn: .56, reach: .44, lift: 1.05, hop: .2, jitter: 0, flip: 'shoe' },
+  sofia: { name: 'Sofia', voice: 'sofia', style: 'Turns at the spot', speed: .92, out: .25, turn: .34, reach: .3, lift: 0, hop: .1, jitter: .5, flip: 'spot' },
 };
 const clamp01 = x => Math.min(1, Math.max(0, x)), smooth = x => x * x * (3 - 2 * x);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -175,14 +175,16 @@ export class TableView {
 
   // ---- the shoe ------------------------------------------------------------------------------
   syncShoe(remaining, untilCut) { this.world.shoe.setStack(remaining, untilCut); this.world.requestRender(); }
-  // The next card sits face down on the front slope. `settle` slides it down into the mouth,
-  // as the weighted stack pushes it in a real shoe.
-  stageFront(card, settle = false) {
+  // The next card sits face down on the front slope. `how`: 'settle' slides it down into the mouth, as the weighted stack
+  // pushes it in a real shoe (a card put in the shoe anew); 'behind' has it already there, at the front of the stack
+  // behind the card being drawn, uncovered as that one slides out.
+  stageFront(card, how) {
     if (this.front?.userData.card === card) return;
     if (this.front) this.world.shoe.group.remove(this.front);
     this.front = null; if (!card) return;
     const m = createCard(card), p = this.world.shoe.frontPose(); m.quaternion.copy(p.quat); m.position.copy(p.pos); this.world.shoe.group.add(m); this.front = m;
-    if (settle && !this.motion.reduced) {
+    if (how === 'behind') m.position.add(V(Math.sin(SHOE.slope), -Math.cos(SHOE.slope), 0).multiplyScalar(.035));
+    else if (how === 'settle' && !this.motion.reduced) {
       const up = V(Math.cos(SHOE.slope), Math.sin(SHOE.slope), 0).multiplyScalar(1.4), from = p.pos.clone().add(up);
       void this.motion.tween(180, t => m.position.lerpVectors(from, p.pos, t), ease.out);
     }
@@ -226,6 +228,7 @@ export class TableView {
     const faceDown = hidden || atSpot;
     if (!this.front || this.front.userData.card !== card) this.stageFront(card);
     const m = this.front; this.front = null; this.T.attach(m); this.world.shoe.read?.();   // out over the reader at the mouth
+    next?.('behind');   // the next card, behind it at the front of the stack
     const q0 = m.quaternion.clone(), p0 = m.position.clone(), exit = this.shoeToTable(this.world.shoe.exitPose()), pE = exit.pos;
     const tgt = this.anchor(owner, i, turn), total = (owner === 'dealer' ? TIMING.dealDealer : TIMING.dealPlayer) * D.speed;
     // a less exact hand lands a touch off the mark and off square
@@ -235,8 +238,8 @@ export class TableView {
     const d1 = V(pE.x - p0.x, 0, pE.z - p0.z).normalize(), flat = V(p3.x, pE.y, p3.z);
     const reach = Math.max(CARD_W * 1.5, flat.distanceTo(pE) * D.reach), c1 = pE.clone().addScaledVector(d1, reach);
     const inDir = flat.clone().sub(c1).setY(0).normalize(), c2 = flat.clone().addScaledVector(inDir, -Math.min(8, flat.distanceTo(pE) * .25));
-    const outLeg = track([p0, pE]), curve = track(bezier(pE, c1, c2, flat)), LA = outLeg.length, S = LA + curve.length;
-    const at = s => s <= LA ? outLeg.at(s) : curve.at(s - LA);
+    const curve = track(bezier(pE, c1, c2, flat)), LA = this.world.shoe.outLength, S = LA + curve.length;   // out of the mouth (its way: world.mjs), then across
+    const at = s => curve.at(s - LA);
     const turnLen = CARD_W * 1.25, sF = LA + turnLen;
     const speed = profile([[0, 0], [D.out, LA], [D.turn, sF], [1, S]]);
     // the turn: about the card's long axis, trailing edge rising (axis = up x direction of travel)
@@ -248,14 +251,13 @@ export class TableView {
     m.children[0].rotation.z = flipFace ? Math.PI : 0;
     const qT = cardQuat(h1, faceDown ? 0 : 1), yT = p3.y;
     this.audio?.play('slide', { x: p0.x });
-    let staged = false, snapped = faceDown;
+    let snapped = faceDown;
     await this.motion.tween(total, t => {
       const s = speed(t), p = at(s);
       // sounds on the frames they happen: the snap as the face lands, the slide across the cloth
       if (!snapped && s > LA + turnLen * .9) { snapped = true; this.audio?.play('turn', { x: p.x }); }
       if (s <= LA) { const q = this.shoeToTable(this.world.shoe.slidePose(s / (LA || 1))); m.quaternion.copy(q.quat); p.copy(q.pos); bendCard(m, q.bend); }   // drawn out of the mouth (world.mjs)
       else {
-        if (!staged) { staged = true; next?.(); }    // the next card settles into the mouth
         const f = clamp01((s - LA) / turnLen), th = Math.PI * smooth(f);
         bendCard(m, faceDown ? null : flex(f));
         const qTurn = faceDown ? exit.quat : turnAbout(axis, th).multiply(exit.quat);
@@ -267,7 +269,6 @@ export class TableView {
       m.position.copy(p);
     });
     m.position.copy(p3); m.quaternion.copy(qT); bendCard(m, null);
-    if (!staged) next?.();
     const c = { card, mesh: m, owner, i, turn, hidden, heading: h1, flipFace, yaw: tgt.seat != null ? seatAngle(tgt.seat) : 0 }; this.cards.push(c);
     if (atSpot) await this.turnOver(c, 300 * D.speed);
   }
@@ -275,14 +276,19 @@ export class TableView {
   async burn(card, next) {
     if (!this.front || this.front.userData.card !== card) this.stageFront(card);
     const m = this.front; this.front = null; this.T.attach(m); this.world.shoe.read?.();   // out over the reader at the mouth
+    next?.('behind');
     const p0 = m.position.clone(), q0 = m.quaternion.clone(), exit = this.shoeToTable(this.world.shoe.exitPose());
     const d = this.world.discard.group; d.updateMatrixWorld();
     const into = V(0, this.world.discard.topY() + .3, 0).applyMatrix4(d.matrix), qD = cardQuat(d.rotation.y + Math.PI / 2, 0);
     this.audio?.play('slide', { x: p0.x });
-    await this.motion.tween(300, t => { const q = this.shoeToTable(this.world.shoe.slidePose(t)); m.position.copy(q.pos); m.quaternion.copy(q.quat); bendCard(m, q.bend); }, ease.in);
-    bendCard(m, null); next?.();
-    const a = exit.pos.clone();
-    await this.motion.tween(620, t => { m.position.lerpVectors(a, into, t); m.position.y += Math.sin(Math.PI * t) * 7; m.quaternion.slerpQuaternions(exit.quat, qD, smooth(t)); }, ease.inOut);
+    // one move: out of the mouth, then up and over into the holder, the pace carried through
+    const LA = this.world.shoe.outLength, a = exit.pos, arc = a.distanceTo(into) + 7, speed = profile([[0, 0], [.32, LA], [1, LA + arc]]);
+    await this.motion.tween(920, t => {
+      const s = speed(t);
+      if (s <= LA) { const q = this.shoeToTable(this.world.shoe.slidePose(s / LA)); m.position.copy(q.pos); m.quaternion.copy(q.quat); bendCard(m, q.bend); return; }
+      const u = clamp01((s - LA) / arc); bendCard(m, null);
+      m.position.lerpVectors(a, into, u); m.position.y += Math.sin(Math.PI * u) ** 2 * 7; m.quaternion.slerpQuaternions(exit.quat, qD, smooth(u));
+    });
     this.T.remove(m); this.world.discard.set(this.world.discard.count + 1);
   }
   // Checking the hole card, as it was done by hand before peek devices: the dealer bends up its corner nearest him on

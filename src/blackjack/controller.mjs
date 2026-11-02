@@ -318,7 +318,7 @@ export function createBlackjack(ctx) {
   function choose(what) { if (!decide) return; const d = decide; decide = null; d(what); }
   for (const b of $$('[data-act]')) b.addEventListener('click', () => choose(b.dataset.act));
 
-  function stageNext() { view.stageFront(table.cards.at(-1), true); syncShoe(); }
+  function stageNext(how = 'settle') { view.stageFront(table.cards.at(-1), how); syncShoe(); }
   function syncShoe() { view.syncShoe(Math.max(0, table.remaining - 1), CUT_AT - table.dealt); renderShoe(); }
   let cutOut = false;
   // The first card of every new shoe is burned: dealt face down straight to the discard holder.

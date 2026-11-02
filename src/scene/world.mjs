@@ -5,7 +5,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { createStage, detectQuality, leatherMaterial, brassMaterial, fitFov, salonWall, carpetFloor, orbitPace } from './stage.mjs';
 import { acrylic, frosted, sheet, sheetBox, reflectionProbe, groundDecal } from './glass.mjs';
-import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, stackEdgeTexture, STACK_TILE, backTexture, setFaceDetail, onArtLanded, CARD_W, CARD_H, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
+import { artImage, paintFelt, paintSpot, paintBand, medallionTexture, edgeTexture, stackEdgeTexture, STACK_TILE, backTexture, setFaceDetail, onArtLanded, CARD_W, CARD_H, CARD_R, CHIP_R, CHIP_H, chipFaceTexture, chipEdgeTexture, chipBumpTexture } from './textures.mjs';
 
 export const EDGE_Z = -40, R = 100, CARD_T = .03;
 // Your eye is placed per screen shape (see frame()): seated height and distance are searched
@@ -468,8 +468,13 @@ function buildShoe({ stackTex, glass }) {
   }
   { const mid = P1.clone().lerp(P2, .5), post = new THREE.Mesh(new THREE.CylinderGeometry(.22, .3, 1, 16), glass.steel), knob = new THREE.Mesh(new THREE.SphereGeometry(.62, 24, 16), glass.steel);
     post.quaternion.setFromUnitVectors(V(0, 1), n); post.position.copy(mid).addScaledVector(n, .6); knob.position.copy(mid).addScaledVector(n, 1.35); post.castShadow = knob.castShadow = true; roller.add(post, knob); }
-  // The stack: a prism leaning with the slope on the climbing floor, its cards' edges on its sides.
-  const stackMats = new THREE.MeshStandardMaterial({ map: stackTex, roughness: .82, side: THREE.DoubleSide });   // one material: an array would need geometry groups
+  // The stack: the cards leaning with the slope on the climbing floor, built a few at a time (SLAB) so that it reads as
+  // cards and not as a block: each few stands a little higher or lower than the next, a little to one side, leans a
+  // little its own way and is a shade of its own (decks shuffled together never make one smooth block), and their tops
+  // are rounded at the corners as a card's are. What each few is like goes with the cards, counted from the back of the
+  // shoe, so it stays with them as the stack is drawn down and pushed on toward the mouth. Each card's edge is a line of
+  // the texture.
+  const stackMats = new THREE.MeshStandardMaterial({ map: stackTex, roughness: .78, vertexColors: true, side: THREE.DoubleSide });
   const stack = new THREE.Mesh(new THREE.BufferGeometry(), stackMats); stack.castShadow = true; g.add(stack);
   const cut = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: '#f2c417', roughness: .4, emissive: '#3a2c00', side: THREE.DoubleSide })); g.add(cut);
   const card = V(cos, sin).multiplyScalar(CARD_W);
@@ -488,11 +493,61 @@ function buildShoe({ stackTex, glass }) {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
   }
+  // The top of a card seen end on, round from one side to the other: [across, height, normal across, normal up], from the
+  // foot of one side, round its top corner, along the top and round the other corner to the foot of the other side.
+  const PROFILE = [[-1, 0]].concat(...[-1, 1].map(s => Array.from({ length: 5 }, (_, k) => (s < 0 ? 4 - k : k) / 4 * Math.PI / 2).map(a => [s, a])), [[1, 0]])
+    .map(([s, a], i, all) => i === 0 || i === all.length - 1
+      ? [s * CARD_H / 2, 0, s, 0]
+      : [s * (CARD_H / 2 - CARD_R + CARD_R * Math.sin(a)), CARD_W - CARD_R + CARD_R * Math.cos(a), s * Math.sin(a), Math.cos(a)]);
+  const SLAB = 4, hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const noise = x => { const i = Math.floor(x), f = x - i, e = f * f * (3 - 2 * f); return hash(i) + (hash(i + 1) - hash(i)) * e; };
+  const slabOf = s => ({   // the few cards s from the back: their rise, their shift across, their lean, their shade
+    rise: .09 * (noise(s / 3) - .5) * 2 + .05 * (noise(s / 13 + 40) - .5) * 2 + .02 * (hash(s + 9) - .5),
+    across: .06 * (noise(s / 4 + 20) - .5) * 2,
+    lean: .06 * (hash(s + 7) - .5) * 2,
+    shade: .91 + .05 * (noise(s / 5 + 90) - .5) * 2 + .025 * (hash(s + 3) - .5),
+  });
+  const cardUp = V(cos, sin), cardOut = V(-sin, cos);   // up a card, and out of its back toward the mouth
+  function buildStack(geo, n, d0, d1) {
+    const pos = [], nor = [], col = [], uv = [], idx = [], P = new THREE.Vector3(), N = new THREE.Vector3();
+    const vert = (d, row, sl, k) => {   // a point of the profile at depth d, for the cards k from the back (u: one card a line)
+      const [z, h, nz, nh] = PROFILE[row], up = h > 0 ? sl.rise : 0;
+      P.copy(footAt(d)).addScaledVector(cardUp, h + up); pos.push(P.x, P.y, z + (h > 0 ? sl.across : 0));
+      N.copy(cardUp).multiplyScalar(nh).addScaledVector(cardOut, nh * sl.lean); nor.push(N.x, N.y, nz);
+      const c = sl.shade * (h > 0 ? 1 : .9); col.push(c, c * .985, c * .955); uv.push(k / STACK_TILE, row / (PROFILE.length - 1));
+    };
+    const L = PROFILE.length, row = (d, sl, k, face) => {   // one profile's points; `face`: a flat face's normal for them all
+      const i = pos.length / 3; for (let r = 0; r < L; r++) vert(d, r, sl, k);
+      if (face) for (let r = 0; r < L; r++) nor.splice(3 * (i + r), 3, face.x, face.y, 0);
+      return i;
+    };
+    const strip = (a, b) => { for (let r = 0; r < L - 1; r++) idx.push(a + r, b + r + 1, b + r, a + r, a + r + 1, b + r + 1); };   // a in front of b, or below it
+    const fan = (i, out) => { for (let r = 1; r < L - 1; r++) out ? idx.push(i, i + r + 1, i + r) : idx.push(i, i + r, i + r + 1); };
+    const back = cardOut.clone().negate();
+    let prev = null;
+    // card p from the front stands at depth p * CARD_T: the back one is n - 1 from the front, 0 from the back
+    for (let s = 0; s * SLAB < n; s++) {
+      const kb = s * SLAB, kf = Math.min(n, kb + SLAB), b = Math.min(d1, (n - kb) * CARD_T), f = Math.max(d0, (n - kf) * CARD_T);
+      if (b - f < 1e-5) continue;
+      const sl = slabOf(s);
+      strip(row(f, sl, kf), row(b, sl, kb));
+      if (!prev) fan(row(b, sl, kb, back), false);   // the back of the stack, against the weight
+      else {   // the step between these and the few behind, facing the mouth where those stand higher
+        const up = prev.rise > sl.rise, face = up ? cardOut : back, lo = row(b, sl, kb, face), hi = row(b, prev, kb, face);
+        up ? strip(lo, hi) : strip(hi, lo);
+      }
+      prev = sl;
+    }
+    if (prev) fan(row(d0, prev, n, cardOut), true);   // the front of the stack, behind the front card
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx); geo.computeBoundingSphere();
+  }
   function setStack(remaining, untilCut) {
     const depth = Math.max(.02, (remaining - 1) * CARD_T);
-    prism(stack.geometry, CARD_T, depth); stack.visible = remaining > 1;
+    buildStack(stack.geometry, remaining, CARD_T, depth); stack.visible = remaining > 1;
     cut.visible = untilCut > 0 && untilCut < remaining;
-    if (cut.visible) prism(cut.geometry, untilCut * CARD_T, untilCut * CARD_T + .06, .12);
+    if (cut.visible) prism(cut.geometry, untilCut * CARD_T, untilCut * CARD_T + .06, .25);
     roller.position.copy(on(footAt(depth), .03));   // the weight, square against the last card
   }
   // Pose of the front card: lying on the slope, back facing out of the shoe (for the card mesh,
@@ -529,13 +584,27 @@ function buildShoe({ stackTex, glass }) {
   };
   let lo = 0, hi = legs[0] + legs[1]; for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (bowed(mid).up > 0) lo = mid; else hi = mid; }
   const free = bowed(lo), SPLIT = .6, RING = .35, flatAt = exitPose();   // `free`: the moment its top leaves the stack
-  const slidePose = f => {
+  // From there to flat on the tongue it never stops: it goes on at the pace it was drawn at, and leaves the tongue at the
+  // pace the deal goes on at (f is the distance from the front card's place to the tongue's, so one of f is that far).
+  const clear = poseOf(free.A, free.A.clone().add(free.e)), span = clear.pos.distanceTo(flatAt.pos), LA = frontPose().pos.distanceTo(flatAt.pos);
+  const m0 = Math.min(3, lo * (1 - SPLIT) / (SPLIT * span)), m1 = Math.min(3, LA * (1 - SPLIT) / span);
+  const glide = k => (k ** 3 - 2 * k * k + k) * m0 + (3 * k * k - 2 * k ** 3) + (k ** 3 - k * k) * m1;
+  const drawn = f => {
     if (f <= SPLIT) { const b = bowed(lo * f / SPLIT), p = poseOf(b.A, b.A.clone().add(b.e)); return { ...p, bend: { s0: b.s0, k: b.k, L: b.L } }; }
-    const k = (f - SPLIT) / (1 - SPLIT), clear = poseOf(free.A, free.A.clone().add(free.e)), e = k * k * (3 - 2 * k);
+    const k = (f - SPLIT) / (1 - SPLIT), e = glide(k);
     const w = k < RING ? Math.cos(k / RING * Math.PI * 2.5) * (1 - k / RING) ** 2 : 0;   // the spring as it lets go, dying out
-    return { pos: clear.pos.clone().lerp(flatAt.pos, e).add(V(0, Math.sin(Math.PI * k) * .2)), quat: clear.quat.clone().slerp(flatAt.quat, e), bend: w ? { s0: free.s0, k: free.k * w, L: free.L } : null };
+    return { pos: clear.pos.clone().lerp(flatAt.pos, e), quat: clear.quat.clone().slerp(flatAt.quat, Math.min(1, e)), bend: w ? { s0: free.s0, k: free.k * w, L: free.L } : null };
   };
-  return { group: g, setStack, frontPose, exitPose, slidePose, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
+  // Walked at an even pace: f is the way the card has gone, counting its turn as the way its edge goes (outLength cm in
+  // all), so that a deal's speed curve (view.mjs) carries on through the draw without a jolt where its top lets go.
+  const way = [0], STEPS = 240;
+  for (let i = 1, a = drawn(0); i <= STEPS; i++) { const b = drawn(i / STEPS); way.push(way[i - 1] + a.pos.distanceTo(b.pos) + a.quat.angleTo(b.quat) * CARD_W / 2); a = b; }
+  const outLength = way[STEPS];
+  const slidePose = f => {
+    const d = Math.min(1, Math.max(0, f)) * outLength; let i = 0, j = STEPS; while (j - i > 1) { const mid = (i + j) >> 1; if (way[mid] < d) i = mid; else j = mid; }
+    return drawn((i + (d - way[i]) / ((way[j] - way[i]) || 1)) / STEPS);
+  };
+  return { group: g, setStack, frontPose, exitPose, slidePose, outLength, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
 }
 
 class ArcXZ extends THREE.Curve {
