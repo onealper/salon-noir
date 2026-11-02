@@ -323,8 +323,10 @@ export function createBlackjack(ctx) {
   let cutOut = false;
   // The first card of every new shoe is burned: dealt face down straight to the discard holder.
   async function burn() { const c = table.draw(); await view.burn(c, stageNext); }
-  async function dealTo(owner, i, card, opts = {}) {
-    await view.deal(card, { owner, i, next: stageNext, ...opts });
+  // `more`: another card follows at once (the round's first deal), so the next is drawn while this one goes across
+  async function dealTo(owner, i, card, { more, ...opts } = {}) {
+    const follow = more && table.cards.length > 1 ? table.cards.at(-2) : null;   // the card behind the next
+    await view.deal(card, { owner, i, next: stageNext, follow, ...opts });
     if (table.cutReached && !cutOut) { cutOut = true; hint('The cut card is out. This is the last hand of the shoe.'); await view.ejectCut(); }
     renderTotals();
   }
@@ -364,10 +366,10 @@ export function createBlackjack(ctx) {
       const order = [...inPlay.map(x => x.seat), YOU].sort((a, b) => a - b);
       for (const i of [0, 1]) {
         for (const k of order) {
-          if (k === YOU) { await dealTo(0, i, table.initialCard('player')); continue; }
-          const p = seating.seats[k], card = table.draw(); p.hand.cards.push(card); await dealTo(seatKey(k), i, card);
+          if (k === YOU) { await dealTo(0, i, table.initialCard('player'), { more: true }); continue; }
+          const p = seating.seats[k], card = table.draw(); p.hand.cards.push(card); await dealTo(seatKey(k), i, card, { more: true });
         }
-        await dealTo('dealer', i, table.initialCard('dealer'), { hidden: i === 1 });
+        await dealTo('dealer', i, table.initialCard('dealer'), { hidden: i === 1, more: i === 0 });
       }
       let res = table.finishDeal();
       await Promise.all([settleSides(), settleSeatSides(inPlay)]);

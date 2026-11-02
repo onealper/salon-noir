@@ -76,7 +76,7 @@ export const SEAT_SPOTS = { p: { x: -10.5, z: 43, r: 3 }, t: { x: 10.5, z: 43, r
 export class TableView {
   constructor(world, motion, audio) {
     Object.assign(this, { world, motion, audio }); this.T = world.table;
-    this.front = null; this.cards = []; this.stacks = new Map(); this.handCount = 1; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Map();
+    this.front = null; this.waiting = null; this.cards = []; this.stacks = new Map(); this.handCount = 1; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Map();
   }
   get split() { return this.handCount > 1; }
   seatHands(k) { return this.seatSplits.get(k) ?? 1; }   // how many hands that seat is playing
@@ -218,30 +218,42 @@ export class TableView {
   handCards(owner) { return this.cards.filter(c => c.owner === owner).sort((a, b) => a.i - b.i); }
 
   // ---- cards: the draw -------------------------------------------------------------------------
-  // How it is done at a shoe table (NY 9 NYCRR 5324.11; dealer-school practice; the recordings):
-  // the left hand slides the card out of the mouth face down; it is turned face up right beside
-  // the shoe, over its long edge like a page, the leading edge staying on the felt; the right hand
-  // then slides it across the layout to its place - on the cloth, never tossed. One continuous
-  // speed curve: quick out of the shoe, easing through the turn, fast across, settling at the end.
-  async deal(card, { owner, i, hidden = false, turn = null, next }) {
+  // How it is done at a shoe table (NY 9 NYCRR 5324.11; dealer-school practice; the recordings of live tables): the
+  // left hand slides the card out of the mouth face down and leaves it on the tongue; the right hand takes it there,
+  // turns it face up beside the shoe, over its long edge like a page, lifted a little in the fingers, and slides it
+  // across the layout to its place - on the cloth, never tossed. Through a round's first deal the two hands work
+  // together: while the right hand carries one card across, the left is already drawing the next (`follow`: the card
+  // behind that one, to stand at the front of the shoe), so it is waiting on the tongue when the right hand comes back.
+  // The way across is one speed curve: from rest on the tongue, easing through the turn, fast across, settling at the end.
+  drawOut(m, ms) {   // m, taken from the front of the shoe, slid out onto the tongue (its way: world.mjs)
+    this.T.attach(m); this.world.shoe.read?.(); this.audio?.play('slide', { x: m.position.x });
+    return this.motion.tween(ms, t => { const q = this.shoeToTable(this.world.shoe.slidePose(t)); m.position.copy(q.pos); m.quaternion.copy(q.quat); bendCard(m, q.bend); }, ease.smooth)
+      .then(() => bendCard(m, null));
+  }
+  async deal(card, { owner, i, hidden = false, turn = null, next, follow = null }) {
     const D = this.dealer, atSpot = D.flip === 'spot' && !hidden;   // turned over where it lands
-    const faceDown = hidden || atSpot;
-    if (!this.front || this.front.userData.card !== card) this.stageFront(card);
-    const m = this.front; this.front = null; this.T.attach(m); this.world.shoe.read?.();   // out over the reader at the mouth
-    next?.('behind');   // the next card, behind it at the front of the stack
-    const q0 = m.quaternion.clone(), p0 = m.position.clone(), exit = this.shoeToTable(this.world.shoe.exitPose()), pE = exit.pos;
-    const tgt = this.anchor(owner, i, turn), total = (owner === 'dealer' ? TIMING.dealDealer : TIMING.dealPlayer) * D.speed;
+    const faceDown = hidden || atSpot, total = (owner === 'dealer' ? TIMING.dealDealer : TIMING.dealPlayer) * D.speed;
+    let m, w = this.waiting; this.waiting = null;
+    if (w && w.card !== card) { w.m.parent?.remove(w.m); w = null; }   // (never: a card drawn ahead is the next one dealt)
+    if (w) { m = w.m; next?.('behind'); await w.job; }   // drawn already, waiting on the tongue
+    else {
+      if (!this.front || this.front.userData.card !== card) this.stageFront(card);
+      m = this.front; this.front = null;
+      next?.('behind');   // the next card, behind it at the front of the stack
+      await this.drawOut(m, total * D.out);
+      await this.motion.wait(70 * D.speed);   // the other hand comes to take it
+    }
+    const exit = this.shoeToTable(this.world.shoe.exitPose()), pE = exit.pos, p0 = this.shoeToTable(this.world.shoe.frontPose()).pos;
+    const tgt = this.anchor(owner, i, turn);
     // a less exact hand lands a touch off the mark and off square
     const jx = (Math.random() - .5) * .5 * D.jitter, jz = (Math.random() - .5) * .5 * D.jitter, jh = (Math.random() - .5) * .09 * D.jitter;
     const p3 = tgt.pos.clone().add(V(jx, 0, jz));
-    // out of the mouth, then a curve that leaves in the same direction and arrives settling in
+    // on from the way it came out of the mouth, along a curve that arrives settling in
     const d1 = V(pE.x - p0.x, 0, pE.z - p0.z).normalize(), flat = V(p3.x, pE.y, p3.z);
     const reach = Math.max(CARD_W * 1.5, flat.distanceTo(pE) * D.reach), c1 = pE.clone().addScaledVector(d1, reach);
     const inDir = flat.clone().sub(c1).setY(0).normalize(), c2 = flat.clone().addScaledVector(inDir, -Math.min(8, flat.distanceTo(pE) * .25));
-    const curve = track(bezier(pE, c1, c2, flat)), LA = this.world.shoe.outLength, S = LA + curve.length;   // out of the mouth (its way: world.mjs), then across
-    const at = s => curve.at(s - LA);
-    const turnLen = CARD_W * 1.25, sF = LA + turnLen;
-    const speed = profile([[0, 0], [D.out, LA], [D.turn, sF], [1, S]]);
+    const curve = track(bezier(pE, c1, c2, flat)), S = curve.length, turnLen = CARD_W * 1.25;
+    const ms = total * (1 - D.out), speed = profile([[0, 0], [(D.turn - D.out) / (1 - D.out), turnLen], [1, S]]);
     // the turn: about the card's long axis, trailing edge rising (axis = up x direction of travel)
     const axis = V(0, 0, 0).crossVectors(UP, d1).normalize(), flipped = turnAbout(axis, Math.PI).multiply(exit.quat);
     const qFlat = faceDown ? exit.quat : flipped;
@@ -250,22 +262,20 @@ export class TableView {
     const ch = Math.cos(h1), flipFace = ch < -.1 || (Math.abs(ch) <= .1 && Math.sin(h1) < 0);
     m.children[0].rotation.z = flipFace ? Math.PI : 0;
     const qT = cardQuat(h1, faceDown ? 0 : 1), yT = p3.y;
-    this.audio?.play('slide', { x: p0.x });
-    let snapped = faceDown;
-    await this.motion.tween(total, t => {
-      const s = speed(t), p = at(s);
+    let snapped = faceDown, ahead = !follow || !this.front;
+    await this.motion.tween(ms, t => {
+      const s = speed(t), p = curve.at(s);
       // sounds on the frames they happen: the snap as the face lands, the slide across the cloth
-      if (!snapped && s > LA + turnLen * .9) { snapped = true; this.audio?.play('turn', { x: p.x }); }
-      if (s <= LA) { const q = this.shoeToTable(this.world.shoe.slidePose(s / (LA || 1))); m.quaternion.copy(q.quat); p.copy(q.pos); bendCard(m, q.bend); }   // drawn out of the mouth (world.mjs)
-      else {
-        const f = clamp01((s - LA) / turnLen), th = Math.PI * smooth(f);
-        bendCard(m, faceDown ? null : flex(f));
-        const qTurn = faceDown ? exit.quat : turnAbout(axis, th).multiply(exit.quat);
-        const w = smooth(clamp01((s - LA - turnLen * .6) / (S - LA - turnLen * .6) * 1.15));   // square up to the spot on the way
-        m.quaternion.slerpQuaternions(qTurn, qT, w);
-        const down = smooth(clamp01((s - LA) / (turnLen * 1.1)));
-        p.y = pE.y + (yT - pE.y) * down + (faceDown ? 0 : Math.sin(th) * CARD_W * .5 * D.lift) + Math.sin(Math.PI * clamp01((s - sF) / (S - sF))) * D.hop;
-      }
+      if (!snapped && s > turnLen * .9) { snapped = true; this.audio?.play('turn', { x: p.x }); }
+      // once this one is clear of the shoe, the left hand draws the next
+      if (!ahead && s > turnLen) { ahead = true; const n = this.front; this.front = null; this.stageFront(follow, 'behind'); this.waiting = { card: n.userData.card, m: n, job: this.drawOut(n, TIMING.dealPlayer * D.speed * D.out) }; }
+      const f = clamp01(s / turnLen), th = Math.PI * smooth(f);
+      bendCard(m, faceDown ? null : flex(f));
+      const qTurn = faceDown ? exit.quat : turnAbout(axis, th).multiply(exit.quat);
+      const w = smooth(clamp01((s - turnLen * .6) / (S - turnLen * .6) * 1.15));   // square up to the spot on the way
+      m.quaternion.slerpQuaternions(qTurn, qT, w);
+      const down = smooth(clamp01(s / (turnLen * 1.1))), lifted = faceDown ? 0 : Math.sin(th) * CARD_W * .5 * D.lift + Math.sin(Math.PI * f) * .8;
+      p.y = pE.y + (yT - pE.y) * down + lifted + Math.sin(Math.PI * clamp01((s - turnLen) / (S - turnLen))) * D.hop;
       m.position.copy(p);
     });
     m.position.copy(p3); m.quaternion.copy(qT); bendCard(m, null);
@@ -390,6 +400,7 @@ export class TableView {
   async newShoe(total, untilCut) {
     if (this.cutOnFelt) { this.T.remove(this.cutOnFelt); this.cutOnFelt = null; }
     if (this.front) { this.world.shoe.group.remove(this.front); this.front = null; }
+    if (this.waiting) { this.waiting.m.parent?.remove(this.waiting.m); this.waiting = null; }
     this.audio?.play('shuffle', { x: LAYOUT.shoe.x });
     const had = this.world.discard.count;
     await this.motion.tween(TIMING.shoeFill, t => { this.world.discard.set(Math.round(had * (1 - t))); this.world.shoe.setStack(Math.max(2, Math.round(total * t)), t > .7 ? untilCut : 0); }, ease.inOut);
