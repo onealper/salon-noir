@@ -115,11 +115,11 @@ src/                       All code, styles, fonts, sounds and libraries
                            sheets, and what glass does to the cloth (shade, caustics)
     world.mjs              Blackjack 3D table and seated camera; what holds the table up (tableBase: a lacquered apron with
                            lines of warm light, a pedestal, a brass-edged plinth lighting the carpet); the clear acrylic shoe (after real 8-deck shoes: a lidded
-                           trough climbing to its back on a frosted floor, the weight (a wedge on steel rollers, with a knob) behind the cards (built a few at a time, each few its own height, set, lean and shade, so the stack reads as cards), a
+                           trough climbing to its back on a frosted floor, the weight (a wedge on steel rollers, with a knob) behind the cards (built a few at a time, each few its own height, set, lean and shade, so the stack reads as cards; a drawn card is the front one, pushed down the face and out through the mouth along the shoe's `lane`), a
                            frosted chin, and in the tongue the card reader: a slot window with a red light guide that brightens
                            as each card goes over it), and the matching discard holder
     view.mjs               Dealer choreography: how cards and chips move
-    pieces.mjs             Card and chip objects (a card bends as paper does: bendCard) plus a small motion engine
+    pieces.mjs             Card and chip objects (a card bends as paper does: bendCard; laid along a way, as out of the shoe: shapeCard) plus a small motion engine
     textures.mjs           Canvas-drawn card faces, felt layout, chips
     lightning3d.mjs        Lightning-table bolts and their afterimages, felt burns, sparks, the static before a strike
     portal.mjs             The lobby's portal between the rooms: the ring in the floor, the table drawn down; the ring above, the table dropped

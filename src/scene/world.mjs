@@ -429,7 +429,8 @@ function buildShoe({ stackTex, glass }) {
   spill.rotation.x = -Math.PI / 2; spill.position.set(WX, .2, 0);
   const label = add(new THREE.Mesh(new THREE.PlaneGeometry(.95, .36), new THREE.MeshBasicMaterial({ map: readerLabel(), transparent: true }))); label.rotation.x = -Math.PI / 2; label.position.set(WX - .3, .17, -WZ + .6);
   // the bloom at the guide's lit end, and a smaller one where it ends
-  const bloom = (z, size, k) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTexture('rgba(255,90,110,1)', 'rgba(255,40,60,0)'), color: '#ff4a60', transparent: true, opacity: k, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); m.position.set(WX + .1, .3, z); m.scale.set(size, size, 1); g.add(m); return m; };
+  // (lying in the window, not facing the eye: a card going over covers it, as it covers the light)
+  const bloom = (z, size, k) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: radialTexture('rgba(255,90,110,1)', 'rgba(255,40,60,0)'), color: '#ff4a60', transparent: true, opacity: k, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.position.set(WX + .1, .24, z); m.scale.set(size, size, 1); g.add(m); return m; };
   const blooms = [bloom(WZ - .25, 2.4, .55), bloom(-WZ + .25, 1.3, .3)];
   const glow = v => { guide.material.color.copy(LED).multiplyScalar(.9 + 1.2 * v); spill.material.opacity = .55 + .45 * v; blooms[0].material.opacity = .55 + .4 * v; blooms[1].material.opacity = .3 + .3 * v; glass.tongue.edge.emissiveIntensity = .22 + .7 * v; glass.bed.emissiveIntensity = .015 + .12 * v; reddened.material.opacity = .5 + .5 * v; };
   // What the glass does to the cloth under it (the pendant is high and to the seat's left, so the light comes down a little
@@ -566,45 +567,42 @@ function buildShoe({ stackTex, glass }) {
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0));
     return { pos: new THREE.Vector3(-3.4, .44, 0), quat: new THREE.Quaternion().setFromRotationMatrix(m) };   // (over the tongue, clear of the reader's rim)
   };
-  // The card on its way out, f from 0 (the front card, leaning in the shoe) to 1 (flat on the tongue), as a dealer draws
-  // it: a finger on its back through the frame pushes it down, so its foot slides out over the chin and the tongue while
-  // its top is still pressed to the stack, the card bowed between them round the foot of the stack; as its top leaves
-  // the stack it springs straight, a wobble running out of it, and drops flat onto the tongue. Returns its pose and its
-  // bend (for bendCard: the pose is that of its lower, straight part, the bend from there up).
-  const TY = .44, RB = 1.1, poseOf = (A, B) => {   // the card from its foot A toward B, its back out of the shoe
-    const x = B.clone().sub(A).normalize(), m = new THREE.Matrix4().makeBasis(x, V(0, 0, 1), V(0, 0, 0).crossVectors(x, V(0, 0, 1)));
-    return { pos: A.clone().addScaledVector(x, CARD_W / 2).addScaledVector(V(-x.y, x.x), .02), quat: new THREE.Quaternion().setFromRotationMatrix(m) };
+  // The card on its way out, as a dealer draws it: two fingers on its back through the frame push it down the front of
+  // the stack and out through the mouth, so the whole card travels - its top edge sinks down the face, uncovering the
+  // next card from the top, its foot goes round the edge of the floor, down the chin and round the lip onto the tongue,
+  // where it lies flat. A card can't stretch, so it runs along that way like a strip through a channel (`lane`), bent
+  // where the way bends. `lane(f)`, f from 0 (the front card in its place) to 1 (flat on the tongue, at exitPose):
+  // where each point of the card is, in the shoe's frame, for pieces.shapeCard. `outLength`: how far it travels.
+  const TY = .42, lane = (() => {
+    const F = V(foot.x, foot.y), corners = [F.clone().addScaledVector(d, CARD_W), F, V(-.05, TY), V(-30, TY)], radius = [0, .6, 1, 0];
+    const pts = [corners[0]];
+    for (let i = 1; i < corners.length - 1; i++) {   // each corner rounded: an arc between the points where it meets the straight runs
+      const a = corners[i - 1].clone().sub(corners[i]).normalize(), b = corners[i + 1].clone().sub(corners[i]).normalize(), phi = Math.acos(Math.max(-1, Math.min(1, a.dot(b))));
+      const tl = radius[i] / Math.tan(phi / 2), A = corners[i].clone().addScaledVector(a, tl), Bp = corners[i].clone().addScaledVector(b, tl), mid = a.clone().add(b).normalize();
+      const C = corners[i].clone().addScaledVector(mid, radius[i] / Math.sin(phi / 2)), a0 = Math.atan2(A.y - C.y, A.x - C.x), a1 = Math.atan2(Bp.y - C.y, Bp.x - C.x);
+      let da = a1 - a0; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+      for (let k = 0; k <= 16; k++) { const t = a0 + da * k / 16; pts.push(V(C.x + radius[i] * Math.cos(t), C.y + radius[i] * Math.sin(t))); }
+    }
+    pts.push(corners.at(-1));
+    const acc = [0]; for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    const at = (sg, P, T) => {   // the point sg along the way, and the way's direction there
+      let i = 1, j = pts.length - 1; sg = Math.max(0, Math.min(acc[j], sg)); while (j - i > 0) { const m = (i + j) >> 1; if (acc[m] < sg) i = m + 1; else j = m; }
+      const f = (sg - acc[i - 1]) / ((acc[i] - acc[i - 1]) || 1); P.lerpVectors(pts[i - 1], pts[i], f); T.copy(pts[i]).sub(pts[i - 1]).normalize();
+    };
+    // how far the card goes: until its top edge is past the lip, lying where exitPose has it (centre at x = -3.4)
+    const P = V(0, 0), T = V(0, 0); let lo = 0, hi = acc.at(-1);
+    for (let k = 0; k < 50; k++) { const mid = (lo + hi) / 2; at(mid + CARD_W / 2, P, T); if (P.x > -3.4) lo = mid; else hi = mid; }
+    return { at, length: lo };
+  })();
+  const outLength = lane.length;
+  const laneAt = f => {
+    const L = Math.max(0, Math.min(1, f)) * outLength, P = V(0, 0), T = V(0, 0);
+    return (x, y, z, out) => {   // the card's own x runs up the card from its foot: its top edge is L along the way, its foot L + CARD_W
+      lane.at(L + CARD_W / 2 - x, P, T); const nx = -T.y, ny = T.x, o = z - .02;   // its face's normal, and the card a hair off the way
+      out.set(P.x + nx * o, P.y + ny * o, y);
+    };
   };
-  const F = V(foot.x, foot.y), mouth = V(-.05, TY), chinDir = F.clone().sub(mouth).normalize(), legs = [F.distanceTo(mouth), CARD_W];
-  const footOut = l => l <= legs[0] ? F.clone().addScaledVector(chinDir, -l) : V(mouth.x - (l - legs[0]), TY);
-  const bowed = l => {   // the foot drawn l along its way: the lower part from the foot to the stack, the bend, the rest up the stack
-    const A = footOut(l), c = F.distanceTo(A), e = c > 1e-4 ? F.clone().sub(A).divideScalar(c) : chinDir, phi = Math.atan2(e.x * d.y - e.y * d.x, e.dot(d));
-    const r = Math.max(.001, Math.min(RB, c / Math.tan(phi / 2))), tl = r * Math.tan(phi / 2);
-    return { A, e, s0: c - tl - CARD_W / 2, k: -1 / r, L: r * phi, up: CARD_W - (c - tl) - r * phi };
-  };
-  let lo = 0, hi = legs[0] + legs[1]; for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (bowed(mid).up > 0) lo = mid; else hi = mid; }
-  const free = bowed(lo), SPLIT = .6, RING = .35, flatAt = exitPose();   // `free`: the moment its top leaves the stack
-  // From there to flat on the tongue it never stops: it goes on at the pace it was drawn at, and leaves the tongue at the
-  // pace the deal goes on at (f is the distance from the front card's place to the tongue's, so one of f is that far).
-  const clear = poseOf(free.A, free.A.clone().add(free.e)), span = clear.pos.distanceTo(flatAt.pos), LA = frontPose().pos.distanceTo(flatAt.pos);
-  const m0 = Math.min(3, lo * (1 - SPLIT) / (SPLIT * span)), m1 = Math.min(3, LA * (1 - SPLIT) / span);
-  const glide = k => (k ** 3 - 2 * k * k + k) * m0 + (3 * k * k - 2 * k ** 3) + (k ** 3 - k * k) * m1;
-  const drawn = f => {
-    if (f <= SPLIT) { const b = bowed(lo * f / SPLIT), p = poseOf(b.A, b.A.clone().add(b.e)); return { ...p, bend: { s0: b.s0, k: b.k, L: b.L } }; }
-    const k = (f - SPLIT) / (1 - SPLIT), e = glide(k);
-    const w = k < RING ? Math.cos(k / RING * Math.PI * 2.5) * (1 - k / RING) ** 2 : 0;   // the spring as it lets go, dying out
-    return { pos: clear.pos.clone().lerp(flatAt.pos, e), quat: clear.quat.clone().slerp(flatAt.quat, Math.min(1, e)), bend: w ? { s0: free.s0, k: free.k * w, L: free.L } : null };
-  };
-  // Walked at an even pace: f is the way the card has gone, counting its turn as the way its edge goes (outLength cm in
-  // all), so that a deal's speed curve (view.mjs) carries on through the draw without a jolt where its top lets go.
-  const way = [0], STEPS = 240;
-  for (let i = 1, a = drawn(0); i <= STEPS; i++) { const b = drawn(i / STEPS); way.push(way[i - 1] + a.pos.distanceTo(b.pos) + a.quat.angleTo(b.quat) * CARD_W / 2); a = b; }
-  const outLength = way[STEPS];
-  const slidePose = f => {
-    const d = Math.min(1, Math.max(0, f)) * outLength; let i = 0, j = STEPS; while (j - i > 1) { const mid = (i + j) >> 1; if (way[mid] < d) i = mid; else j = mid; }
-    return drawn((i + (d - way[i]) / ((way[j] - way[i]) || 1)) / STEPS);
-  };
-  return { group: g, setStack, frontPose, exitPose, slidePose, outLength, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
+  return { group: g, setStack, frontPose, exitPose, lane: laneAt, outLength, roller, stack, cut, glow, beforeGlass: f => { before = f; } };
 }
 
 class ArcXZ extends THREE.Curve {

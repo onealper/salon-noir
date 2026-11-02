@@ -27,7 +27,7 @@ function roundedCard() {
   if (cardGeo) return cardGeo;
   const w = CARD_W / 2, h = CARD_H / 2, r = CARD_R, C = 3;   // C: steps across a corner
   const steps = (half, n) => [...Array.from({ length: C }, (_, k) => -half + r * k / C), ...Array.from({ length: n + 1 }, (_, k) => -half + r + (2 * (half - r)) * k / n), ...Array.from({ length: C }, (_, k) => half - r + r * (k + 1) / C)];
-  const xs = steps(w, 10), ys = steps(h, 14), pos = [], uv = [], idx = [];
+  const xs = steps(w, 20), ys = steps(h, 14), pos = [], uv = [], idx = [];
   for (const y of ys) for (const x of xs) {
     let px = x, py = y; const a = Math.abs(x) - (w - r), b = Math.abs(y) - (h - r);
     if (a > 0 && b > 0) { const m = Math.max(a, b) / Math.hypot(a, b); px = Math.sign(x) * (w - r + a * m); py = Math.sign(y) * (h - r + b * m); }
@@ -74,6 +74,19 @@ export function bendCard(card, bend) {
       }
       _v.applyMatrix4(_i); dst.setXYZ(i, _v.x, _v.y, _v.z);
     }
+    dst.needsUpdate = true; mesh.geometry.computeVertexNormals();
+  }
+}
+
+// A card laid along a way of any shape (it can't stretch, so each point keeps its distance along the card): `place(x, y,
+// z, out)` puts the point x, y, z of the flat card (its own frame, as above) where it goes, in the card's own frame too.
+// The card keeps geometry of its own until bendCard(card, null) lays it flat again.
+export function shapeCard(card, place) {
+  for (const mesh of card.children) {
+    if (mesh.geometry === cardGeo) { mesh.geometry = cardGeo.clone(); mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 40); }
+    mesh.updateMatrix(); _m.copy(mesh.matrix); _i.copy(_m).invert();
+    const src = cardGeo.attributes.position, dst = mesh.geometry.attributes.position;
+    for (let i = 0; i < src.count; i++) { _v.fromBufferAttribute(src, i).applyMatrix4(_m); place(_v.x, _v.y, _v.z, _v); _v.applyMatrix4(_i); dst.setXYZ(i, _v.x, _v.y, _v.z); }
     dst.needsUpdate = true; mesh.geometry.computeVertexNormals();
   }
 }
