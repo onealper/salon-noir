@@ -475,7 +475,7 @@ function buildShoe({ stackTex, glass }) {
   // are rounded at the corners as a card's are. What each few is like goes with the cards, counted from the back of the
   // shoe, so it stays with them as the stack is drawn down and pushed on toward the mouth. Each card's edge is a line of
   // the texture.
-  const stackMats = new THREE.MeshStandardMaterial({ map: stackTex, roughness: .78, vertexColors: true, side: THREE.DoubleSide });
+  const stackMats = new THREE.MeshStandardMaterial({ map: stackTex, roughness: .86, vertexColors: true, side: THREE.DoubleSide });
   const stack = new THREE.Mesh(new THREE.BufferGeometry(), stackMats); stack.castShadow = true; g.add(stack);
   const cut = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: '#f2c417', roughness: .4, emissive: '#3a2c00', side: THREE.DoubleSide })); g.add(cut);
   const card = V(cos, sin).multiplyScalar(CARD_W);
@@ -500,46 +500,41 @@ function buildShoe({ stackTex, glass }) {
     .map(([s, a], i, all) => i === 0 || i === all.length - 1
       ? [s * CARD_H / 2, 0, s, 0]
       : [s * (CARD_H / 2 - CARD_R + CARD_R * Math.sin(a)), CARD_W - CARD_R + CARD_R * Math.cos(a), s * Math.sin(a), Math.cos(a)]);
+  // What the cards are like, counted from the back of the shoe (k, in cards, so it stays with them as the stack is drawn
+  // down): how far they stand up or down and to one side, gently, as decks shuffled together do (a soft wave, not steps:
+  // from the seat a step of a few cards reads as a tooth), which way the few at k lean (it catches the light, in bands),
+  // and their shade.
   const SLAB = 4, hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
   const noise = x => { const i = Math.floor(x), f = x - i, e = f * f * (3 - 2 * f); return hash(i) + (hash(i + 1) - hash(i)) * e; };
-  const slabOf = s => ({   // the few cards s from the back: their rise, their shift across, their lean, their shade
-    rise: .09 * (noise(s / 3) - .5) * 2 + .05 * (noise(s / 13 + 40) - .5) * 2 + .02 * (hash(s + 9) - .5),
-    across: .06 * (noise(s / 4 + 20) - .5) * 2,
-    lean: .06 * (hash(s + 7) - .5) * 2,
-    shade: .91 + .05 * (noise(s / 5 + 90) - .5) * 2 + .025 * (hash(s + 3) - .5),
-  });
+  const wave = (k, a, span, at = 0) => a * (noise(k / span + at) - .5) * 2;
+  // and, about a deck apart, a faint seam where the shuffled packs don't quite meet
+  const seam = k => { const j = Math.round(k / 52), at = j * 52 + (hash(j + 400) - .5) * 24; return hash(j + 500) < .7 ? Math.exp(-(((k - at) / 2.5) ** 2)) : 0; };
+  const cardsAt = k => ({ rise: wave(k, .05, 14) + wave(k, .03, 60, 40), across: wave(k, .04, 16, 20), lean: wave(k, .07, 2.2, 70), shade: .9 + wave(k, .04, 9, 90) - .09 * seam(k) });
   const cardUp = V(cos, sin), cardOut = V(-sin, cos);   // up a card, and out of its back toward the mouth
   function buildStack(geo, n, d0, d1) {
-    const pos = [], nor = [], col = [], uv = [], idx = [], P = new THREE.Vector3(), N = new THREE.Vector3();
-    const vert = (d, row, sl, k) => {   // a point of the profile at depth d, for the cards k from the back (u: one card a line)
-      const [z, h, nz, nh] = PROFILE[row], up = h > 0 ? sl.rise : 0;
-      P.copy(footAt(d)).addScaledVector(cardUp, h + up); pos.push(P.x, P.y, z + (h > 0 ? sl.across : 0));
-      N.copy(cardUp).multiplyScalar(nh).addScaledVector(cardOut, nh * sl.lean); nor.push(N.x, N.y, nz);
-      const c = sl.shade * (h > 0 ? 1 : .9); col.push(c, c * .985, c * .955); uv.push(k / STACK_TILE, row / (PROFILE.length - 1));
-    };
-    const L = PROFILE.length, row = (d, sl, k, face) => {   // one profile's points; `face`: a flat face's normal for them all
-      const i = pos.length / 3; for (let r = 0; r < L; r++) vert(d, r, sl, k);
-      if (face) for (let r = 0; r < L; r++) nor.splice(3 * (i + r), 3, face.x, face.y, 0);
+    const pos = [], nor = [], col = [], uv = [], idx = [], P = new THREE.Vector3(), N = new THREE.Vector3(), L = PROFILE.length;
+    // one profile across the stack at depth d (the card k from the back): `face`, a flat face's normal for all its points
+    const row = (d, face) => {
+      const i = pos.length / 3, k = n - d / CARD_T, c = cardsAt(k);
+      for (let r = 0; r < L; r++) {
+        const [z, h, nz, nh] = PROFILE[r], top = h > 0;
+        P.copy(footAt(d)).addScaledVector(cardUp, h + (top ? c.rise : 0)); pos.push(P.x, P.y, z + (top ? c.across : 0));
+        if (face) nor.push(face.x, face.y, 0); else { N.copy(cardUp).multiplyScalar(nh).addScaledVector(cardOut, nh * c.lean); nor.push(N.x, N.y, nz); }
+        // the tops catch the light; down the sides the edges are a shade darker, and darker still toward the floor
+        const v = c.shade * (face ? .8 : top ? .78 + .22 * nh : .66);
+        col.push(v, v * .975, v * .935); uv.push(k / STACK_TILE, r / (L - 1));
+      }
       return i;
     };
-    const strip = (a, b) => { for (let r = 0; r < L - 1; r++) idx.push(a + r, b + r + 1, b + r, a + r, a + r + 1, b + r + 1); };   // a in front of b, or below it
+    const strip = (a, b) => { for (let r = 0; r < L - 1; r++) idx.push(a + r, b + r + 1, b + r, a + r, a + r + 1, b + r + 1); };   // a in front of b
     const fan = (i, out) => { for (let r = 1; r < L - 1; r++) out ? idx.push(i, i + r + 1, i + r) : idx.push(i, i + r, i + r + 1); };
-    const back = cardOut.clone().negate();
-    let prev = null;
-    // card p from the front stands at depth p * CARD_T: the back one is n - 1 from the front, 0 from the back
-    for (let s = 0; s * SLAB < n; s++) {
-      const kb = s * SLAB, kf = Math.min(n, kb + SLAB), b = Math.min(d1, (n - kb) * CARD_T), f = Math.max(d0, (n - kf) * CARD_T);
-      if (b - f < 1e-5) continue;
-      const sl = slabOf(s);
-      strip(row(f, sl, kf), row(b, sl, kb));
-      if (!prev) fan(row(b, sl, kb, back), false);   // the back of the stack, against the weight
-      else {   // the step between these and the few behind, facing the mouth where those stand higher
-        const up = prev.rise > sl.rise, face = up ? cardOut : back, lo = row(b, sl, kb, face), hi = row(b, prev, kb, face);
-        up ? strip(lo, hi) : strip(hi, lo);
-      }
-      prev = sl;
-    }
-    if (prev) fan(row(d0, prev, n, cardOut), true);   // the front of the stack, behind the front card
+    // card p from the front stands at depth p * CARD_T; a profile every few cards, the surface running smoothly between
+    const ds = [d1]; for (let k = Math.ceil((n - d1 / CARD_T) / SLAB) * SLAB; (n - k) * CARD_T > d0 + 1e-5; k += SLAB) if ((n - k) * CARD_T < d1 - 1e-5) ds.push((n - k) * CARD_T);
+    ds.push(d0);
+    fan(row(d1, cardOut.clone().negate()), false);   // the back of the stack, against the weight
+    let prev = row(d1);
+    for (let j = 1; j < ds.length; j++) { const r = row(ds[j]); strip(r, prev); prev = r; }
+    fan(row(d0, cardOut), true);   // the front of the stack, behind the front card
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.setIndex(idx); geo.computeBoundingSphere();

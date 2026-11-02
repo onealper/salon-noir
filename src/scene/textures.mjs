@@ -171,8 +171,8 @@ export const STACK_TILE = 128;
 export function stackEdgeTexture() {
   const c = canvas(512, 32), ctx = c.getContext('2d');
   for (let i = 0; i < STACK_TILE; i++) {
-    ctx.fillStyle = `hsl(40, 10%, ${90 + Math.random() * 8}%)`; ctx.fillRect(i * 4, 0, 4, 32);
-    ctx.fillStyle = `rgba(58,54,48,${.3 + Math.random() * .3})`; ctx.fillRect(i * 4 + 3, 0, 1, 32);
+    ctx.fillStyle = `hsl(40, 12%, ${91 + Math.random() * 6}%)`; ctx.fillRect(i * 4, 0, 4, 32);
+    ctx.fillStyle = `rgba(70,64,56,${.12 + Math.random() * .16})`; ctx.fillRect(i * 4 + 3, 0, 1, 32);
   }
   return texture(c, { repeat: true });
 }
