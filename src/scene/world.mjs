@@ -351,7 +351,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     setMode, pause: st.pause, hold: st.hold, get paused() { return st.paused; },
     // a change of table in the lobby, swept in by a band of light (stage.swap), the orbit standing still meanwhile
     swap(apply, o) { showcase.freeze(true); return st.swap(apply, o).finally(() => showcase.freeze(false)); },
-    compile: () => renderer.compileAsync(scene, camera), floorY: () => FLOOR_Y,
+    compile: () => renderer.compileAsync(scene, camera), warm: st.warm, floorY: () => FLOOR_Y,
     get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     discard: { group: discard, get count() { return discarded; }, set: setDiscards, topY: () => .6 + discarded * CARD_T },
     edgeTex,

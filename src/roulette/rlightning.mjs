@@ -123,7 +123,8 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
   }
   const hold = ms => { if (!quiet() && !soft()) S.hold?.(ms); };
   // the strike's own light on the table, in the room only at the Lightning tables (a light at zero still costs a pass)
-  const lamp = new THREE.PointLight('#c4d2ff', 0, 220, 1.2); lamp.visible = false; scene.add(lamp);
+  // (always in the scene, dark until a strike: a light shown or hidden changes every material's shader, all to be built again)
+  const lamp = new THREE.PointLight('#c4d2ff', 0, 220, 1.2); scene.add(lamp);
 
   // ---- the channel ------------------------------------------------------------------------------------------------------
   // A jagged path by midpoint displacement: each midpoint pushed off the line, at right angles to it, by a share of the
@@ -422,9 +423,25 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
       }, done);
     }
   }
+  // One of each thing a strike makes, for the room's warm-up: their shaders built before the first strike needs them
+  // (never drawn: only built, so the uniforms here are only what each shader declares).
+  function samples() {
+    const any = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 0, 1], 3)), shader = (fs, uniforms) => new THREE.ShaderMaterial({ vertexShader: DECAL_VS, fragmentShader: fs, ...additive, uniforms });
+    return [
+      new THREE.Mesh(boltGeometry(V(0, 40, 0), V(0, 0, 0), { forks: 1, width: 1, flat: false, rough: .3 }).geo, boltMat('cold')),
+      new THREE.Points(any, new THREE.PointsMaterial({ map: glowTex, size: 11, opacity: 0, ...additive })),
+      new THREE.Mesh(flatGeo, shader(WAVE_FS, { uR: { value: 0 }, uI: { value: 0 }, uC: { value: new THREE.Color() } })),
+      new THREE.Mesh(flatGeo, shader(BURN_FS, { uMap: { value: glowTex }, uGrow: { value: 0 }, uHeat: { value: 0 }, uFade: { value: 0 }, uHot: { value: new THREE.Color() }, uEmber: { value: new THREE.Color() } })),
+      new THREE.Mesh(flatGeo, shader(STATIC_FS, { uT: { value: 0 }, uI: { value: 0 }, uCells: { value: new THREE.Vector2(12, 3) } })),
+      new THREE.Mesh(flatGeo, shader(EDGE_FS, { uT: { value: 0 }, uI: { value: 0 }, uC: { value: new THREE.Color() }, uSize: { value: new THREE.Vector2(1, 1) }, uR: { value: .1 } })),
+      new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, opacity: 0, transparent: true, depthWrite: false })),
+      new THREE.Mesh(flatGeo, new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, toneMapped: false })),
+      new THREE.Mesh(flatGeo, new THREE.MeshBasicMaterial({ map: glowTex, opacity: .5, ...additive })),
+    ];
+  }
   return {
-    show, payoff, clear,
-    setTable(on) { lamp.visible = on; if (!on) clear({ quietly: true }); requestRender(false); },
+    show, payoff, clear, samples,
+    setTable(on) { if (!on) { lamp.intensity = 0; clear({ quietly: true }); } requestRender(false); },
     get struck() { return [...plaques.keys()]; },
   };
 }

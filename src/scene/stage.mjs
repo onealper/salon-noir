@@ -31,12 +31,13 @@ export const pixelRatio = (q, w, h, cap = q.ratio) => Math.min(devicePixelRatio 
 // resolve them there, so it costs them little; only the battery saver goes without (on a high-density screen). It is
 // chosen with the context, at load: a preset changed in Settings keeps the multisampling the page started with.
 // Switches for measuring what a frame costs, each taking one thing away (testing sessions only: ?test, or
-// salonnoir.dev = '1'), as ?perf=aa0,pr1.25,shadow0,phys0,env0,fps30: aa0 no multisampling, pr<n> at most n device pixels
+// salonnoir.dev = '1'), as ?perf=aa0,pr1.25,shadow0,phys0,env0,fps30,sc0: aa0 no multisampling, pr<n> at most n device pixels
 // per CSS pixel, shadow0 no shadow maps, phys0 the clearcoat and sheen materials drawn as plain standard ones, env0 no
 // environment lighting (the room's reflections), fps30 thirty frames a second. Nothing when absent.
+const TESTING = (() => { try { return new URLSearchParams(location.search).has('test') || localStorage.getItem('salonnoir.dev') === '1'; } catch { return false; } })();
 export const PERF = (() => { try {
   const p = new URLSearchParams(location.search), o = {};
-  if (!(p.has('test') || localStorage.getItem('salonnoir.dev') === '1') || !p.get('perf')) return o;
+  if (!TESTING || !p.get('perf')) return o;
   for (const t of p.get('perf').split(',')) { const m = /^([a-z]+)([\d.]+)$/.exec(t.trim()); if (m) o[m[1]] = +m[2]; }
   return o;
 } catch { return {}; } })();
@@ -156,8 +157,13 @@ function strip(scene) {
     o.material = m;
   });
 }
+// A moment when the page has nothing else to do (or the next frame, where the browser can't say).
+const idle = () => new Promise(r => window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 400 }) : setTimeout(r, 16));
 export function createStage(canvas, { quality = detectQuality(), background, environment, fov, far, lights = () => [], restored = () => {} }) {
   const renderer = new THREE.WebGLRenderer({ canvas, ...glOptions(quality) });
+  // Reading a shader's log after it is built makes the page wait there for the GPU to finish compiling it, which holds
+  // whatever frame asked for it: done only in a testing session, where a broken shader should say why.
+  renderer.debug.checkShaderErrors = TESTING && PERF.sc !== 0;   // (?perf=sc0: as players have it, to measure)
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   // shadows are redrawn only when something that casts one moves (see loop), not for a moving camera
   renderer.shadowMap.enabled = PERF.shadow !== 0; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = shadowType(quality);
@@ -240,8 +246,11 @@ export function createStage(canvas, { quality = detectQuality(), background, env
       const r = canvas.getBoundingClientRect(), o = canvas.parentElement.getBoundingClientRect();
       for (const el of [pic, band]) { el.setAttribute('aria-hidden', 'true'); Object.assign(el.style, { left: `${r.left - o.left}px`, top: `${r.top - o.top}px`, width: `${r.width}px`, height: `${r.height}px` }); }
       canvas.after(pic, ...(calm ? [] : [band]));
-      apply(); requestRender();
-      return new Promise(done => {
+      apply();
+      // the new dressing's shaders built in the background first (the picture holds meanwhile), so the band runs smoothly
+      const ready = Promise.race([renderer.compileAsync(scene, camera).catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
+      return ready.then(() => new Promise(done => {
+        requestRender();
         let t0 = 0, n = 0; const crackle = tone === 'lightning';
         const step = now => {
           if (++n < 3) { requestAnimationFrame(step); return; }   // (the first frames of a new dressing may be slow to draw: the sweep starts after them)
@@ -255,7 +264,34 @@ export function createStage(canvas, { quality = detectQuality(), background, env
           if (k < 1) requestAnimationFrame(step); else { pic.remove(); band.remove(); done(); }
         };
         requestAnimationFrame(step);
-      });
+      }));
+    },
+    // Everything the room will draw, made ready before the moment that needs it: a shader compiled, or a texture sent
+    // to the GPU, in the frame that first draws it holds that frame (mid-sweep, mid-portal, at a spin's first moving chip).
+    // The programs are built in the background, hidden things with them (the rake, the dolly) and what the room only
+    // makes as it plays, lent to the scene meanwhile: `drawn` (a chip in hand, a card: drawn in the warm frame too, for
+    // their shadows) and `built` (a bolt: only built); the textures go up one at a time while the page is idle; then,
+    // once, a frame drawn small and out of sight with everything shown builds the shadow pass's own programs. Resolves
+    // when done; harmless to call again.
+    async warm({ drawn = [], built = [] } = {}) {
+      if (gl.isContextLost()) return;
+      const lent = new THREE.Group(), only = new THREE.Group(); for (const o of drawn) lent.add(o); for (const o of built) only.add(o); scene.add(lent, only);
+      try {
+        // (one frame drawn first: three builds programs for the clipping the last frame drew with, the portal's cut)
+        renderer.render(scene, camera);
+        await renderer.compileAsync(scene, camera);
+        const textures = new Set();
+        scene.traverse(o => { for (const m of [o.material ?? []].flat()) for (const v of Object.values(m)) if (v?.isTexture && !v.isRenderTargetTexture) textures.add(v); });
+        for (const t of textures) { await idle(); if (!gl.isContextLost()) renderer.initTexture(t); }
+        await idle(); if (gl.isContextLost()) return;
+        // (drawn to the canvas itself: drawn anywhere else, three builds other programs, without the tone mapping; the
+        // true picture is drawn over it in the same task, so the warm frame is never seen)
+        scene.remove(only); const shown = [], culled = []; scene.traverse(o => { if (!o.visible) { shown.push(o); o.visible = true; } if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+        try { renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); }
+        finally { for (const o of shown) o.visible = false; for (const o of culled) o.frustumCulled = true; }
+        scene.remove(lent); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); shadowsDirty = false;
+      } catch (e) { console.warn('warm', e); }
+      finally { scene.remove(lent, only); requestRender(false); }
     },
     // Out of sight (the other room): no frames, the smallest drawing buffer and no shadow maps held.
     pause(on) {

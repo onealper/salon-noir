@@ -276,6 +276,19 @@ async function crossRooms(game, tableMode) {
   portalFlash.classList.remove('on');
   await to.portal.into();
 }
+// While you look over the tables, the other room is built and made ready out of sight (it warms itself: scene/stage.mjs),
+// so the portal finds it ready to drop in rather than building it in the middle of the crossing; not on the battery saver.
+let otherTimer = 0;
+function readyOther() {
+  const other = room === 'roulette' ? 'blackjack' : 'roulette';
+  if (rooms[other] || loading[other] || gfxProfile(settings.gfx).name === 'saver') return;
+  clearTimeout(otherTimer);
+  otherTimer = setTimeout(() => {
+    if (!lobby.isOpen || rooms[other] || loading[other]) return;
+    const go = () => load(other).then(r => { if (room !== other) r.hide(); }).catch(err => console.warn(`${other} could not be made ready`, err));
+    window.requestIdleCallback ? requestIdleCallback(go, { timeout: 4000 }) : go();
+  }, 2500);
+}
 // picking a table in the lobby re-dresses the room behind the menu: the blackjack table, or the wheel. The picks are
 // shown one after another, and only the latest waiting counts: a pick made while a table is changing, or a room still
 // loading, is passed over if another has come since (or you have sat down).
@@ -309,12 +322,12 @@ lobby.init({
   refuse: el => { kit.shake(el); feel.tap('refuse'); audio.cue('ui-click-2', { bus: 'ui', rate: .7, gain: .6 }); },
   change: open => {
     if (audio.unlocked) roomFor(open);
-    if (open) rooms[room].toLobby(); else { document.body.classList.add('flying'); rooms[room].fromLobby?.(); }
+    if (open) { rooms[room].toLobby(); readyOther(); } else { document.body.classList.add('flying'); rooms[room].fromLobby?.(); }
   },
 });
 // the lobby opens between rounds, never with money on a spinning wheel or a hand in play
 $('#brandBtn').onclick = async () => { if ($('#settingsDialog').open) return; const r = rooms[room]; if (r.busy && !await r.moveOn?.()) { r.hint(`Finish this ${r.round} first.`); kit.shake($('#brandBtn')); feel.tap('refuse'); return; } lobby.open(); };   // a result waiting on you moves on first
-if (!params.has('table')) lobby.open(); else rooms[room].enter(0, { direct: true });
+if (!params.has('table')) { lobby.open(); readyOther(); } else rooms[room].enter(0, { direct: true });
 // The browser took the 3D view away (iOS does, under memory pressure) and has not given it back: a reload does.
 addEventListener('salonnoir:gpulost', () => {
   if ($('#gpuLost')) return;

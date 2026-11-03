@@ -91,6 +91,9 @@ export async function createRoulette(ctx) {
   const S = createRouletteScene(canvas, { quality: ctx.quality(), dressing: kind }), motion = new Motion(S);
   const portal = createPortal(S, { body: S.table, floorY: S.floorY(), showcase: S.showcase, audio, reduced: () => settings.reduced });   // (the lobby's change of game: scene/portal.mjs)
   const bolts = createLightning(S, { audio, settings, stage, canvas, pan: p => panX(p) }); bolts.setTable(lit()); document.body.dataset.rtable = kind;
+  // Made ready, out of sight, for all it will draw (scene/stage.mjs, warm): the portal's cut (the renderer's, on all), a
+  // chip in hand and at rest, one of each thing a strike makes; so nothing is built in the middle of a spin or a strike.
+  portal.clip(); const warmed = S.warm({ drawn: S.chipSamples(), built: bolts.samples() });
   // the Lightning tables' own sounds (rlightning.mjs), fetched once a Lightning table is sat at
   const litSounds = () => { if (lit()) audio.preload(['lr-charge', 'lr-strike-1', 'lr-strike-2', 'lr-strike-3', 'lr-chain', 'lr-double', 'lr-fizzle', 'lr-payoff', 'voice/james-bj-lightning']); };
   litSounds();

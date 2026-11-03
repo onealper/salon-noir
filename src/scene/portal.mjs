@@ -141,13 +141,11 @@ export function createPortal(S, { body, floorY, showcase, canvas = S.renderer.do
   // ---- into: out of the air -------------------------------------------------------------------------------------------------
   const clip = new THREE.Plane(V(0, -1, 0), 1e6);   // keeps what is below the ring: far above anything, it keeps it all
   let clipped = false;
-  // the table's materials cut at the ring (once: the plane then stays on them, far out of the way, so no material has to
-  // be built again for it)
-  function clipOn() {
-    renderer.localClippingEnabled = true;
-    body.traverse(o => { for (const mat of [o.material ?? []].flat()) if (mat.clippingPlanes?.[0] !== clip) { mat.clippingPlanes = [clip]; mat.clipShadows = true; } });
-    clipped = true;
-  }
+  // The cut at the ring is the renderer's own, on everything it draws, from the room's first frame and for good: far out
+  // of the way, it keeps it all. Set on the materials instead, each would have its shaders built twice, with it and
+  // without, as materials came and went (a chip, a table re-dressed) and took it at different moments. While the table
+  // drops, what is over the ring is the dark above it, cut with it.
+  function clipOn() { if (!clipped) { renderer.clippingPlanes = [clip]; clipped = true; } }
   let arrival = null;
   // Before the room's first frame: the table up above the ring, out of sight, and the camera down by the floor, looking
   // up at where the ring will open. Resolves once its materials are built (cut at the ring), so the flash can lift.
@@ -158,14 +156,16 @@ export function createPortal(S, { body, floorY, showcase, canvas = S.renderer.do
     const sky = m.top + Math.max(95, (m.top - floorY) * 1.1), fall = sky - floorY;   // the ring in the dark above, the table's foot at it
     const flat = V(orbit.eye.x - m.c.x, 0, orbit.eye.z - m.c.z), dist = flat.length() * 1.08;
     const low = V(m.c.x, m.top + 6, m.c.z).add(flat.normalize().multiplyScalar(dist)), up = V(m.c.x, sky, m.c.z);
-    clip.constant = sky; pose(m.foot, fall); placeRing(sky, m.rx * 1.12, m.rz * 1.12, m.c.x, m.c.z); ring.material.uniforms.uOpen.value = 0;
+    clip.constant = sky + .05; pose(m.foot, fall);   // (a hair over the ring itself, which lies in that plane) placeRing(sky, m.rx * 1.12, m.rz * 1.12, m.c.x, m.c.z); ring.material.uniforms.uOpen.value = 0;
     look(low, up, low, up, 0); requestRender();
+    S.hold?.(4000);   // nothing drawn until into(): unseen behind the other room, it would only double the GPU's work
     arrival = { m, orbit, low, up, sky, fall };
     return Promise.resolve(renderer.compileAsync?.(scene, camera)).catch(() => {});
   }
   const IN = 2300, LAND = 1000;
   async function into() {
     if (!arrival) prime();
+    S.hold?.(0);
     const { m, orbit, low, up, fall } = arrival, g = 2 * fall / ((LAND - 380) / 1000) ** 2, focus = V();
     cue('portal-open', { gain: .5, rate: 1.08 }); let landed = false;
     await run(IN, t => {
@@ -190,5 +190,5 @@ export function createPortal(S, { body, floorY, showcase, canvas = S.renderer.do
     dust.position.set(m.c.x, floorY + .3, m.c.z); dust.scale.set(m.rx * 4, 1, m.rz * 4); dust.visible = true;
     run(900, t => { const k = t / 900; dust.material.uniforms.uR.value = .3 + .65 * ease.out(k); dust.material.uniforms.uI.value = (1 - k) ** 1.5; }, true).then(() => { dust.visible = false; });
   }
-  return { out, settle, prime, into, get clipped() { return clipped; } };
+  return { out, settle, prime, into, clip: clipOn, get clipped() { return clipped; } };
 }

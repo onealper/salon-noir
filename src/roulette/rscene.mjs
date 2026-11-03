@@ -554,6 +554,8 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
   // true size: a 39 mm chip, CHIP_H thick (the regulation 1.55 in, and Paulson's roulette chip)
   const chipMesh = v => { const m = new THREE.Mesh(chipGeometry(), typeof v === 'number' ? chipMaterials(v) : wheelChipMaterials(v)); m.castShadow = m.receiveShadow = true; chipsG.add(m); return m; };
   const chipLook = (color, look) => { chipLooks.set(color, look); };
+  // a chip in hand and a batch of them at rest, of value and of a player's colour: for the room's warm-up (stage.warm)
+  const chipSamples = () => [5, '#7a7a7a'].flatMap(v => { const m = chipMesh(v); chipsG.remove(m); return [m, new THREE.InstancedMesh(chipGeometry(), m.material, 1)]; });
   // ---- chips at rest: one instanced draw per kind of chip --------------------------------------------------------
   // A chip that has come to rest is folded into its kind's InstancedMesh (a value, or a player's colour): two draws for
   // every chip of that kind on the cloth, shadows included, where each chip on its own cost two draws and two more in
@@ -926,7 +928,7 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
 
   setStudio(dressing);   // the room asked for (a salon table changes nothing)
   return {
-    THREE, renderer, scene, camera, wheel, table, tickers, requestRender, lights: { key: keyW, hemi, glow }, frame, project, pick, highlight, anchor, chipMesh, chipLook, chips, setMarkers, dolly, rake, chipsG, mood, setBoard,
+    THREE, renderer, scene, camera, wheel, table, tickers, requestRender, lights: { key: keyW, hemi, glow }, frame, project, pick, highlight, anchor, chipMesh, chipSamples, chipLook, chips, setMarkers, dolly, rake, chipsG, mood, setBoard,
     shots, move, setPose, showcase, relayout, setQuality, setStudio, get studio() { return Object.keys(DRESS).find(k => DRESS[k] === dress); }, fit: fitNow,
     get layout() { return L; }, get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     get view() { return view; }, get current() { return current; },
@@ -934,7 +936,7 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     pause: st.pause, hold: st.hold,   // (hold: a hit-stop, the picture held for a breath)
     // a change of table in the lobby, swept in by a band of light (stage.swap), the orbit standing still meanwhile
     swap(apply, o) { showcase.freeze(true); return st.swap(apply, o).finally(() => showcase.freeze(false)); },
-    compile: () => renderer.compileAsync(scene, camera), floorY: () => FLOOR_Y,
+    compile: () => renderer.compileAsync(scene, camera), warm: st.warm, floorY: () => FLOOR_Y,
     get debug() { return st.debug; },
     GEO,
   };
