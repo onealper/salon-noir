@@ -157,6 +157,33 @@ function strip(scene) {
     o.material = m;
   });
 }
+// Every program three builds is kept for as long as the page is open. Three lets a program go once no material uses it,
+// and a table re-dressed (a mode, a studio: its top, leather and cloth made again) disposes the old materials before the
+// new ones are drawn, so the very same shaders were built again at each change, each holding a frame. A room's programs
+// are a few dozen kinds, so keeping them all costs little.
+const kept = new WeakSet();
+function keep(renderer) { for (const p of renderer.info.programs) if (!kept.has(p)) { kept.add(p); p.usedTimes++; } }
+// Shaders built in the background, resolving once they are ready to draw with: three's compileAsync, without its one
+// fault (a material let go while it waits, as when a table is re-dressed, threw in its wait and left it waiting for
+// good). `target`: what to build for (the scene, or a group of things not yet in it, lit as `lit` is). Then each new
+// program is linked, one to an idle moment: where the browser can't build shaders in parallel (no
+// KHR_parallel_shader_compile), a program is only finished when it is first asked about, which three does as it first
+// draws with it, so a thing compiled ahead but not yet drawn (the portal's ring, a strike) held that frame.
+const linked = new WeakSet();
+export function compiled(renderer, target, camera, lit = null) {
+  const mats = renderer.compile(target, camera, lit); keep(renderer);
+  const parallel = renderer.extensions.get('KHR_parallel_shader_compile'), gl = renderer.getContext(), waiting = new Set(mats);
+  const program = m => renderer.properties.get(m).currentProgram;
+  return new Promise(done => {
+    const check = () => { for (const m of waiting) { const p = program(m); if (!p || p.isReady()) waiting.delete(m); } if (waiting.size) setTimeout(check, 10); else done(); };
+    parallel ? check() : setTimeout(check, 10);
+  }).then(async () => {
+    for (const m of mats) {
+      const p = program(m); if (!p || linked.has(p)) continue; linked.add(p);
+      await idle(); if (gl.isContextLost()) return; if (p.program) { p.getUniforms(); p.getAttributes(); }
+    }
+  });
+}
 // A moment when the page has nothing else to do (or the next frame, where the browser can't say).
 const idle = () => new Promise(r => window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 400 }) : setTimeout(r, 16));
 export function createStage(canvas, { quality = detectQuality(), background, environment, fov, far, lights = () => [], restored = () => {} }) {
@@ -184,7 +211,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
   // GPU's work while anything moves, and a 90 or 144 Hz one on the refreshes nearest each sixtieth. Fallen behind (a
   // slow frame, or nothing to draw for a while), the next is drawn at once and the count starts again from it.
   const STEP = 1000 / (PERF.fps || 60);
-  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0, due = 0; const tickers = new Set();
+  let dirty = true, running = false, paused = false, shadowsDirty = true, loops = 0, heldUntil = 0, due = 0, programs = 0; const tickers = new Set();
   function requestRender(shadows = true) { dirty = true; if (shadows) shadowsDirty = true; if (!running) { running = true; requestAnimationFrame(loop); } }
   // Frame-time watch: while things move, compare each frame with the display's refresh (the shortest recent interval,
   // held between 60 and 48 a second: a 120 Hz screen is asked for 60, and a GPU that only manages 30 is never mistaken
@@ -216,15 +243,19 @@ export function createStage(canvas, { quality = detectQuality(), background, env
       dirty = false; if (shadowsDirty || moving) { renderer.shadowMap.needsUpdate = true; shadowsDirty = false; }
       if (PERF.env === 0 || PERF.phys === 0) strip(scene);
       renderer.render(scene, camera);
+      if (renderer.info.programs.length !== programs) { keep(renderer); programs = renderer.info.programs.length; }
     }
     if ((tickers.size || dirty) && !running) { running = true; requestAnimationFrame(loop); }
   }
   const freeShadows = () => { for (const k of lights()) { k.shadow.map?.dispose(); k.shadow.map = null; } };
   return {
-    THREE, renderer, scene, camera, view, tickers, requestRender,
+    THREE, renderer, scene, camera, view, tickers, requestRender, compiled: (target = scene, cam = camera, lit = null) => compiled(renderer, target, cam, lit),
     maxTex: renderer.capabilities.maxTextureSize, aniso: renderer.capabilities.getMaxAnisotropy(),
     // the drawing buffer for a w x h canvas (CSS pixels), at the preset's pixels
-    size(w, h) { renderer.setPixelRatio(ratio(w, h)); renderer.setSize(w, h, false); },
+    size(w, h) {   // (not again at the size it has: setting a canvas's size, even to the same, clears and makes its buffers again)
+      const pr = ratio(w, h); if (renderer.getPixelRatio() === pr && canvas.width === Math.floor(w * pr) && canvas.height === Math.floor(h * pr)) return;
+      renderer.setPixelRatio(pr); renderer.setSize(w, h, false);
+    },
     // A preset's pixels and shadows apply at once (a change of softness recompiles the materials); the room
     // repaints its own cloth, chips and cards after.
     setQuality(q) {
@@ -248,7 +279,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
       canvas.after(pic, ...(calm ? [] : [band]));
       apply();
       // the new dressing's shaders built in the background first (the picture holds meanwhile), so the band runs smoothly
-      const ready = Promise.race([renderer.compileAsync(scene, camera).catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
+      const ready = Promise.race([compiled(renderer, scene, camera).catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
       return ready.then(() => new Promise(done => {
         requestRender();
         let t0 = 0, n = 0; const crackle = tone === 'lightning';
@@ -279,9 +310,9 @@ export function createStage(canvas, { quality = detectQuality(), background, env
       const lent = new THREE.Group(), only = new THREE.Group(); lent.visible = only.visible = false;
       for (const o of drawn) lent.add(o); for (const o of built) only.add(o); scene.add(lent, only);
       try {
-        // (one frame drawn first: three builds programs for the clipping the last frame drew with, the portal's cut)
+        // (one frame drawn first: three builds programs for the state the last frame drew with, its lights and clipping)
         renderer.render(scene, camera);
-        await renderer.compileAsync(scene, camera);
+        await compiled(renderer, scene, camera);
         const textures = new Set();
         scene.traverse(o => { for (const m of [o.material ?? []].flat()) for (const v of Object.values(m)) if (v?.isTexture && !v.isRenderTargetTexture) textures.add(v); });
         for (const t of textures) { await idle(); if (!gl.isContextLost()) renderer.initTexture(t); }
@@ -291,7 +322,7 @@ export function createStage(canvas, { quality = detectQuality(), background, env
         scene.remove(only); const shown = [], culled = []; scene.traverse(o => { if (!o.visible) { shown.push(o); o.visible = true; } if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
         try { renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); }
         finally { for (const o of shown) o.visible = false; for (const o of culled) o.frustumCulled = true; }
-        scene.remove(lent); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); shadowsDirty = false;
+        scene.remove(lent); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); shadowsDirty = false; keep(renderer);
       } catch (e) { console.warn('warm', e); }
       finally { scene.remove(lent, only); requestRender(false); }
     },

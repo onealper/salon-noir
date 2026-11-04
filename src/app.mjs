@@ -258,12 +258,14 @@ let previewTurn = 0, previewing = Promise.resolve();
 const WHEELS = { roulette: 'european', 'roulette-lightning': 'lightning', 'roulette-mega': 'mega' }, wheelMode = k => Object.keys(WHEELS).find(m => WHEELS[m] === k) ?? 'roulette';
 const couldNotLoad = game => lobby.note(`The ${game} table could not be loaded. Check the connection, then reload the page.`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-// The portal's light, filling the picture as the ring snaps shut: the rooms change under it (scene/portal.mjs).
-const portalFlash = Object.assign(document.createElement('div'), { className: 'portal-flash' }); portalFlash.setAttribute('aria-hidden', 'true'); $('#lobby').before(portalFlash);   // (under the menu, which stays as it was)
-// From one game to the other in the lobby: the table you are looking at goes down through the floor, a flash, and the
-// other drops out of the air (each room's portal). The room coming in is shown at once, out of sight behind this one
-// (body[data-coming]), dressed for the table picked and its materials built, while this table goes down; under the flash
-// the rooms change places. With reduced motion (or a room without a portal) the rooms simply change.
+// From one game to the other in the lobby: the table you are looking at goes down through the floor and you after it,
+// and you come down out of the air in the other room, its table falling ahead of you (each room's portal). The room
+// coming in is shown at once, out of sight behind this one (body[data-coming]), dressed for the table picked and its
+// shaders built, while this table goes down. The two rooms meet inside the vortex, which fills the picture alike in
+// both: there the room coming in is laid over this one in a moment, and this one is let go once you have landed. With
+// reduced motion (or a room without a portal) the rooms simply change.
+// an element faded in over `ms`, frame by frame (on the page's clock, as the rooms are)
+const fadeIn = (el, ms) => new Promise(done => { const t0 = performance.now(); const f = () => { const k = Math.min(1, (performance.now() - t0) / ms); el.style.opacity = k < 1 ? k.toFixed(3) : ''; if (k < 1) requestAnimationFrame(f); else done(); }; el.style.opacity = '0'; requestAnimationFrame(f); });
 async function crossRooms(game, tableMode) {
   const from = rooms[room], to = rooms[game];
   if (game === 'roulette') await to.preview(WHEELS[tableMode], { sweep: false });
@@ -271,13 +273,20 @@ async function crossRooms(game, tableMode) {
     setRoom(game); to.showcase.start(settings.reduced); if (game === 'blackjack') to.preview(tableMode, { sweep: false });
     return;
   }
-  document.body.dataset.coming = game; to.show(); to.showcase.start(false); if (game === 'blackjack') to.preview(tableMode, { sweep: false });
+  // The page is the new room's from the start (its dock in place, so it is framed once, as it will stand), the room it
+  // leaves kept on show under it and framed as it was (its picture must not change size or lens mid-dive)
+  const b = document.body.dataset; b.coming = game; b.going = room; b.room = game;
+  to.show(); to.showcase.start(false); if (game === 'blackjack') to.preview(tableMode, { sweep: false });
   const ready = to.portal.prime();
-  const shut = sleep(1000).then(() => portalFlash.classList.add('on'));
-  await from.portal.out(); await shut; await Promise.race([ready, sleep(2500)]);
-  from.portal.settle(); from.hide(); room = game; store.set('room', game); document.body.dataset.room = game; delete document.body.dataset.coming;
-  portalFlash.classList.remove('on');
-  await to.portal.into();
+  const way = await from.portal.out(); await Promise.race([ready, sleep(2500)]);
+  // the cut, inside the vortex: the room coming in, its picture the same, laid over this one
+  const landing = to.portal.into(way), st = to.stage;
+  st.style.zIndex = '1'; st.style.opacity = '0'; delete b.coming;
+  room = game; store.set('room', game);
+  await fadeIn(st, 170);
+  from.portal.settle();
+  await landing;
+  st.style.zIndex = ''; delete b.going; from.hide();   // (its buffers let go once you have landed: done mid-flight, it would hold a frame)
 }
 // While you look over the tables, the other room is built and made ready out of sight (it warms itself: scene/stage.mjs),
 // so the portal finds it ready to drop in rather than building it in the middle of the crossing; not on the battery saver.

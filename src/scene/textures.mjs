@@ -179,8 +179,11 @@ export function stackEdgeTexture() {
 
 // ---- felt: 200 x 100 cm, the dealer's straight edge at the top of the image -----
 export const FELT = { w: 200, d: 100, zTop: -40 };
-export function paintFelt(px = 2048, mode = MODES.classic) {
-  const W = px, H = px / 2, k = W / FELT.w, c = canvas(W, H), ctx = c.getContext('2d');
+// `into`: a felt painted before, at this size, to paint again in place (its canvas and its texture kept: a new pair at
+// 4096 px is a big allocation, and a new texture on the GPU)
+export function paintFelt(px = 2048, mode = MODES.classic, into = null) {
+  const W = px, H = px / 2, k = W / FELT.w, c = into?.image?.width === W ? into.image : canvas(W, H), ctx = c.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.letterSpacing = '0px'; ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = INK.felt; ctx.fillRect(0, 0, W, H);
   const cloth = artImage('table:felt');
   if (cloth) {
@@ -225,6 +228,7 @@ export function paintFelt(px = 2048, mode = MODES.classic) {
   }
   ctx.font = `700 ${1.4 * k}px Inter, system-ui, sans-serif`; ctx.letterSpacing = `${.8 * k}px`; ctx.fillStyle = mode.id === 'classic' ? 'rgba(236,228,210,.62)' : 'rgba(226,196,131,.85)'; ctx.fillText(mode.title, X(0) + .4 * k, Y(-5.6));
   ctx.letterSpacing = '0px';
+  if (into?.image === c) { into.needsUpdate = true; return into; }
   const t = texture(c, { aniso: 16 }); return t;
 }
 // Letters sit on the arc with their tops toward the dealer, reading left to right from the seat.

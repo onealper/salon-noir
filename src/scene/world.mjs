@@ -183,7 +183,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   readTick.still = true; shoe.read = () => { readAt = performance.now(); tickers.add(readTick); requestRender(false); };
   shoe.group.position.set(LAYOUT.shoe.x, 0, LAYOUT.shoe.z); shoe.group.rotation.y = LAYOUT.shoe.yaw; table.add(shoe.group);
   // What the glass reflects: the table as seen from the shoe and from the holder, the pendant drawn in (glass.mjs). Again after
-  // a lost context, and for a new cloth.
+  // a lost context.
   const lamp = { at: key.position, size: 16, color: '#ffe2b8', power: 30 }, probes = [];
   function reflect() {
     scene.updateMatrixWorld(); for (const t of probes.splice(0)) t.dispose();
@@ -334,12 +334,12 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // is repainted only when the table really changes (it is the largest picture in the room).
   let slot = specs.find(s => s.id === 'dpairs') ?? null;
   function paintMode(m) {
-    mode = m; const t = paintFelt(Math.min(maxTex, quality.felt), m); t.anisotropy = aniso;
-    felt.material.map.dispose(); felt.material.map.image.width = 0; felt.material.map = t;   // width 0 frees the old canvas's pixels now, not at the next collection
+    mode = m; const was = felt.material.map, t = paintFelt(Math.min(maxTex, quality.felt), m, was); t.anisotropy = aniso;
+    if (t !== was) { was.dispose(); was.image.width = 0; felt.material.map = t; }   // (a new size: width 0 frees the old canvas's pixels now, not at the next collection)
     requestRender();
   }
   function setMode(m, slotSpec) {
-    if (m !== mode) { paintMode(m); reflect(); }
+    if (m !== mode) paintMode(m);   // (the glass's picture of the table stands: only the printing changed, which a reflection can't make out, and a dozen renders of the table mid-orbit would hold a frame)
     const top = spots.dpairs?.children[1];
     if (top && slotSpec && slotSpec !== slot) { slot = slotSpec; top.material.map = medallion(slotSpec); requestRender(); }
   }
@@ -351,7 +351,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     setMode, pause: st.pause, hold: st.hold, get paused() { return st.paused; },
     // a change of table in the lobby, swept in by a band of light (stage.swap), the orbit standing still meanwhile
     swap(apply, o) { showcase.freeze(true); return st.swap(apply, o).finally(() => showcase.freeze(false)); },
-    compile: () => renderer.compileAsync(scene, camera), warm: st.warm, floorY: () => FLOOR_Y,
+    compile: () => st.compiled(), compiled: st.compiled, warm: st.warm, floorY: () => FLOOR_Y,
     get quality() { return quality; }, get pixelRatio() { return st.pixelRatio; },
     discard: { group: discard, get count() { return discarded; }, set: setDiscards, topY: () => .6 + discarded * CARD_T },
     edgeTex,

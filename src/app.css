@@ -863,9 +863,7 @@ body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flyi
    same place as the one going, out of sight, until the flash; the flash is the portal's light filling the picture as its
    ring snaps shut (under the lobby's menu, which stays as it was) */
 body[data-coming="roulette"] .rstage, body[data-coming="blackjack"] #stage { display: block !important; visibility: hidden; }
-.portal-flash { position: absolute; inset: 0; z-index: 19; pointer-events: none; opacity: 0; transition: opacity .55s cubic-bezier(.2, .7, .3, 1);
-  background: radial-gradient(circle at 50% 55%, #fffaf0 0%, #ffe6ad 16%, #dcae5c 38%, #3a260c 74%, #0b0805 100%); }
-.portal-flash.on { opacity: 1; transition: opacity .17s cubic-bezier(.5, 0, .9, .4); }
+body[data-going="roulette"] .rstage, body[data-going="blackjack"] #stage { display: block !important; }   /* (the room left, under the one coming in, until you have landed: app.mjs, crossRooms) */
 .rcanvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; touch-action: none; }
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* the room falls away into the dark round the table, as under its pendants */

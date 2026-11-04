@@ -427,16 +427,28 @@ export function createLightning3D(world, { reduced = () => false, soft = () => f
   let warm = null;
   function setTable(on) {
     if (lamp.visible === on) return; lamp.visible = on; requestRender(false);
-    if (!on || warm) return;
+    if (!on || warm?.compiled) return;
+    stand(); warm.compiled = true;
+    const go = () => world.compiled(warm, camera, scene).catch(() => {});
+    requestAnimationFrame(() => setTimeout(go, 0));
+  }
+  // Ahead of the first Lightning table, as the room warms behind the lobby: the room's materials built as they are drawn
+  // with the lamp in it, and the strike's, the lamp counted for that one build only (never shown or hidden on screen), so
+  // the first change to the Lightning table builds next to nothing.
+  function prepare() {
+    if (lamp.visible || !world.compiled) return Promise.resolve();
+    stand(); warm.compiled = true; lamp.visible = true; const ready = world.compiled(scene, camera); lamp.visible = false;
+    return ready.catch(() => {});
+  }
+  function stand() {
+    if (warm) return;
     warm = new THREE.Group(); warm.visible = false; scene.add(warm);
     const geo = ribbon([{ pts: [new THREE.Vector3(), new THREE.Vector3(0, 1, 0)], a0: 0, a1: 1, w0: 1, w1: 1, bright: 1 }]), pt = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
     for (const m of [ribbonMat(), ribbonMat({ flat: true }), new THREE.ShaderMaterial({ vertexShader: DECAL_VS, fragmentShader: BURN_FS, ...additive, uniforms: { uMap: { value: null } } })]) warm.add(new THREE.Mesh(geo, m));
     warm.add(new THREE.Points(pt, new THREE.PointsMaterial({ map: glowTex, size: .8, ...additive })), new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, ...additive })));
-    const r = world.renderer, go = () => r.compileAsync ? r.compileAsync(warm, camera, scene).catch(() => {}) : r.compile(warm, camera, scene);
-    requestAnimationFrame(() => setTimeout(go, 0));
   }
   return {
-    bolt, sparks, flare, burn, crawl, lampFlash, dim, hit, ground, atScreen, charge: setCharge, ambient, setTable, windowFlash, buildUp,
+    bolt, sparks, flare, burn, crawl, lampFlash, dim, hit, ground, atScreen, charge: setCharge, ambient, setTable, prepare, windowFlash, buildUp,
     clear() { ambient(false); brownJob++; browning = false; buildJob++; dim(0, 0); setCharge(false); winJob++; lampJob++; lamp.intensity = 0; gobo.visible = false; lights.room?.flash(0); },
   };
 }

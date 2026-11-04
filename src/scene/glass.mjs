@@ -95,10 +95,13 @@ export function reflectionProbe(renderer, scene, at, { hide = [], lamp = null, s
   cam.update(renderer, scene);
   hide.forEach((o, i) => { o.visible = shown[i]; }); scene.remove(cam);
   if (disc) { scene.remove(disc); disc.geometry.dispose(); disc.material.dispose(); }
-  const pmrem = new THREE.PMREMGenerator(renderer), env = pmrem.fromCubemap(rt.texture).texture;
-  pmrem.dispose(); rt.dispose();
+  const env = pmremOf(renderer).fromCubemap(rt.texture).texture; rt.dispose();
   return env;
 }
+// One filter per renderer, kept: let go after each probe, its shaders went with it and were built again for the next one
+// (every change of table, at blackjack, compiled them all again).
+const pmrems = new WeakMap();
+const pmremOf = renderer => { let p = pmrems.get(renderer); if (!p) { p = new THREE.PMREMGenerator(renderer); p.compileCubemapShader(); pmrems.set(renderer, p); } return p; };
 
 // Something drawn on the cloth under the glass: a canvas over x0..x1, z0..z1 (cm, in the parent's frame) at 20 px a cm,
 // `draw(g, px)` painting it (px(x, z) → canvas point). `additive`: light (caustics, a lamp's spill); otherwise shade.

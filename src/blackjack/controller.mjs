@@ -138,6 +138,7 @@ export function createBlackjack(ctx) {
   // The top bar floats over the table; the camera frames the area below it (plus the bar's fade). A dock along the foot
   // of the picture is floated over it too: the canvas runs on under it, blurred, and the seat is framed clear of the blur.
   function reframeNow() {
+    if (document.body.dataset.going === 'blackjack') return;   // leaving through the portal: its dock gone, the vortex must stay framed as it is (app.mjs, crossRooms)
     const w = stage.clientWidth, h = stage.clientHeight, bar = barCover(), top = bar + boardCover(bar), under = ctx.dockCover(stage), k = `${w}x${h}x${top}x${under}`; if (k === framed || !w || !h) return;
     framed = k; $('.app').style.setProperty('--top-h', `${bar}px`); $('.app').style.setProperty('--board-h', `${top - bar}px`); stage.style.setProperty('--under', `${under}px`);
     world.frame(w, h + under, top, under ? under + ctx.BLUR_RISE : 0); layoutOverlay();
@@ -709,9 +710,9 @@ export function createBlackjack(ctx) {
   async function misdealQuiet() { table.abandon(); for (const { p } of others()) p.refund(); renderSeats(); world.setPan(0); decide = null; view.clearCards(); view.clearChips(); hideBanner(); clearFeed(); for (const t of Object.values(totals)) t.hidden = true; busy = false; setMode('betting'); }
   // ---- Lightning ------------------------------------------------------------------------------------------------------------
   const lightning = createLightningUI({ world, table, view, motion, audio, feel, settings, take, stage, overlay, call: line => dealerSays(line, { prio: 3, fresh: 1500 }), paid: () => ctx.showBalance(table.balance), inView: () => visible && !lobby.isOpen, shown: () => visible, reframe: () => { framed = ''; reframeNow(); } });
-  // Made ready, out of sight, for all it will draw (scene/stage.mjs, warm): the portal's cut (the renderer's, on all) and
-  // what is only made in play (a card, a chip, a free-bet marker), so nothing is built in the middle of a deal.
-  portal.clip(); world.warm({ drawn: [createCard({ rank: 'A', suit: '♠' }), createChip(5), createMarker()] });
+  // Made ready, out of sight, for all it will draw (scene/stage.mjs, warm): what is only made in play (a card, a chip, a
+  // free-bet marker), so nothing is built in the middle of a deal.
+  world.warm({ drawn: [createCard({ rank: 'A', suit: '♠' }), createChip(5), createMarker()] }).then(() => lightning.three.prepare());   // (and the Lightning table's lamp-lit shaders after)
   lightningLayout = lightning.layout;
 
   // Rules and paytables, written from the same data the game settles with.

@@ -936,7 +936,7 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     pause: st.pause, hold: st.hold,   // (hold: a hit-stop, the picture held for a breath)
     // a change of table in the lobby, swept in by a band of light (stage.swap), the orbit standing still meanwhile
     swap(apply, o) { showcase.freeze(true); return st.swap(apply, o).finally(() => showcase.freeze(false)); },
-    compile: () => renderer.compileAsync(scene, camera), warm: st.warm, floorY: () => FLOOR_Y,
+    compile: () => st.compiled(), compiled: st.compiled, warm: st.warm, floorY: () => FLOOR_Y,
     get debug() { return st.debug; },
     GEO,
   };
