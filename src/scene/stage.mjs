@@ -275,7 +275,9 @@ export function createStage(canvas, { quality = detectQuality(), background, env
     // when done; harmless to call again.
     async warm({ drawn = [], built = [] } = {}) {
       if (gl.isContextLost()) return;
-      const lent = new THREE.Group(), only = new THREE.Group(); for (const o of drawn) lent.add(o); for (const o of built) only.add(o); scene.add(lent, only);
+      // (hidden: built all the same, hidden or not, and shown only for the one warm frame, never on screen)
+      const lent = new THREE.Group(), only = new THREE.Group(); lent.visible = only.visible = false;
+      for (const o of drawn) lent.add(o); for (const o of built) only.add(o); scene.add(lent, only);
       try {
         // (one frame drawn first: three builds programs for the clipping the last frame drew with, the portal's cut)
         renderer.render(scene, camera);
