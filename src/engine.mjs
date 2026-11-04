@@ -239,7 +239,7 @@ export class Table {
       if (h.evenMoney) { payout = stake * 2; title = 'Even money.'; kind = 'win'; }   // paid already, at the offer
       else if (pb && db) { payout = stake; title = 'Two blackjacks. Push.'; kind = 'push'; }
       else if (db) title = 'Dealer blackjack.';
-      else if (pb) { payout = stake * 2.5; title = 'Blackjack!'; kind = 'blackjack'; }
+      else if (pb) { payout = stake * 2.5; title = 'Blackjack.'; kind = 'blackjack'; }
       else if (p > 21) title = 'Bust.';
       else if (h.charlie) { payout = stake * 2 + h.free; title = 'Ten-card Charlie.'; kind = 'win'; }
       else if (push22s) { payout = stake; title = 'Dealer 22. Push.'; kind = 'push'; }

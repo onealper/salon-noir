@@ -90,7 +90,10 @@ function roomFor(inLobby) { audio.ambience('room-casino-1'); audio.music(inLobby
 let shownBalance = NaN;
 function showBalance(v = wallet.balance, bump = true) { if (v === shownBalance) return; ui.morph($('#balance'), fmt(v)); if (bump && v > shownBalance) ui.bump($('#balance'), 1.1); shownBalance = v; }
 const showInPlay = v => ui.morph($('#bet'), fmt(v));
-const title = (name, page) => { $('#tableName').textContent = name; document.title = `${BRAND_TITLE} · ${page}`; };
+// the table's name under the logo, as a name is written (the felt prints it in capitals: modes.mjs, rgame's TABLES)
+const NAMES = new Set(['european', 'free', 'bet', 'lightning', 'mega']);
+const named = s => s.toLowerCase().split(' ').map((w, i) => i === 0 || NAMES.has(w) ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
+const title = (name, page) => { $('#tableName').textContent = named(name); document.title = `${BRAND_TITLE} · ${page}`; };
 // how far the bar reaches down over a room's stage
 const barCover = el => { const b = $('.top').getBoundingClientRect(), r = el.getBoundingClientRect(); return Math.max(0, Math.round(b.bottom - r.top)); };
 // How tall the dock is where it runs along the foot of a room's picture, full width (the picture goes on under it,

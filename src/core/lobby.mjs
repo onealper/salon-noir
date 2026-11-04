@@ -55,7 +55,7 @@ function pick(mode, { preview = true } = {}) {
   const t = TABLES.find(x => x.mode === mode && !x.soon); if (!t) return;
   picked = mode; root.dataset.mode = mode; last[t.game] = mode; setGame(t.game, preview);
   for (const c of root.querySelectorAll('.tcard[data-mode]')) { const on = c.dataset.mode === mode; c.setAttribute('aria-checked', on); if (on && preview) c.scrollIntoView({ inline: 'center', block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }
-  root.querySelector('.seat .which').textContent = `${t.name} ${t.kicker}`;
+  root.querySelector('.seat .which').textContent = `${t.name} ${t.kicker.toLowerCase()}`;
   if (preview) onPreview(mode);
 }
 export const lobby = {
@@ -71,7 +71,7 @@ export const lobby = {
       </header>
       <section class="rail" aria-label="Tables">
         <p class="rail-title">Choose your table</p>
-        <div class="games" role="tablist" aria-label="Games"><span class="games-pill" aria-hidden="true"></span>${GAMES.map(([g, name]) => `<button class="game" role="tab" data-game="${g}" aria-selected="false">${name}<small>${TABLES.filter(t => t.game === g && !t.soon).length}</small></button>`).join('')}</div>
+        <div class="games" role="tablist" aria-label="Games"><span class="games-pill" aria-hidden="true"></span>${GAMES.map(([g, name]) => `<button class="game" role="tab" data-game="${g}" aria-selected="false">${name}</button>`).join('')}</div>
         <div class="tcards" role="radiogroup" aria-label="Tables">${TABLES.map(t => t.soon
           ? `<div class="tcard soon" aria-disabled="true"><span class="t-ico">${ICON.lightning}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="rope" aria-hidden="true"></span></div>`
           : `<button class="tcard" role="radio" data-mode="${t.mode}" data-game="${t.game}" aria-checked="false"><span class="t-ico">${ICON[t.icon ?? (t.game === 'roulette' ? 'roulette' : t.mode)]}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>

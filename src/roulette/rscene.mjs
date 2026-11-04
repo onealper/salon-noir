@@ -842,7 +842,7 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     // a slow sway round the table from the players' side, looking toward the salon behind it
     const t = ((show.frozen || now) - show.lag) / 1000, portrait = camera.aspect < .9, wc = wheelCentre(), cx = (L.wheelX - WELL + L.xEnd) / 2, a = Math.sin(t * .07) * .32 + Math.sin(t * .029) * .08;
     if (portrait) { const r = 370; orbitEye.set(cx + Math.cos(a) * r, 300 + Math.sin(t * .11) * 5, wc.z + Math.sin(a) * r); orbitAt.set(cx - 22, -46, wc.z); return 40; }
-    const r = 300; orbitEye.set(cx + Math.sin(a) * r, 185 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); orbitAt.set(cx + Math.sin(a) * 36, -30, wc.z - 14); return 36;
+    const r = 340; orbitEye.set(cx + Math.sin(a) * r, 205 + Math.sin(t * .11) * 5, wc.z + Math.cos(a) * r); orbitAt.set(cx + Math.sin(a) * 36, -40, wc.z - 14); return 36;   // (in the band between the title and the rail, clear of both)
   }
   function placeShowcase(now) {
     if (show.driven) return; const fov = orbitPose(now); if (fov == null) return;

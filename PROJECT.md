@@ -179,6 +179,7 @@ Settings worth knowing: **Flashing effects** (Full / Soft / Off; Soft by default
 - Type: **Bodoni Moda** (wordmark, display), **Cinzel** (felt lettering), **Inter** (UI and numbers), **Barlow Condensed** (card indices, chip values)
 - Logo: a brass spade with a lit keyhole (`src/core/brand.mjs`)
 - Feels physical: real dealer pace, chip sounds placed left/right, haptics on phone, confetti only for big moments
+- The richness is in the tables (felt, chips, cards, the wheel) and in a win landing; the chrome around them stays quiet: dark glass, ivory text in three shades, and brass only for the primary action and the selection (no colour of its own for each side bet or table card, no glows round controls). Labels in sentence case at normal tracking (the capitals are the felt's own printing, Cinzel, which has no lowercase, and the *Salon* over the lobby's *Noir*); weights 400 to 600 in the chrome; corners sized to the control (12 to 14 for buttons and capsules), not every control a pill. Gold leaf (the gilt gradient) only where money lands: the lobby's *Noir* and a win's figure. Nothing in the chrome loops
 
 ## Assets you can't see
 

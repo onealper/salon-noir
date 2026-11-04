@@ -161,7 +161,7 @@ export function createBlackjack(ctx) {
   function renderShoe() {
     const dealt = table.dealt, left = SHOE_CARDS - dealt, toCut = CUT_AT - dealt;
     setGauge(left / SHOE_CARDS * 100);
-    $('#shoeText').textContent = toCut > 0 ? `${left} cards · cut in ${toCut}` : `${left} cards · last hand`;
+    $('#shoeText').innerHTML = `${left}<span class="more"> cards · ${toCut > 0 ? `cut in ${toCut}` : 'last hand'}</span>`;   // (a narrow screen shows the count alone)
     $('#shoeMeter').title = `8-deck shoe: ${left} of ${SHOE_CARDS} cards left. The cut card is at ${CUT_AT}; the shoe is replaced after the hand it appears in.`;
   }
   function handLabel(cards, { bj = true } = {}) {
@@ -201,7 +201,6 @@ export function createBlackjack(ctx) {
   function paintTile(t, b) {
     const pays = Math.max(...b.table.map(r => r[1]));
     t.setAttribute('aria-label', `${b.name}, pays up to ${pays} to 1. ${b.cards}.`); t.title = `${b.name}: ${b.cards}. ` + b.table.map(([l, p]) => `${l} ${p}:1`).join(' · ') + `. House edge ${b.edge.toFixed(1)}%.`;
-    t.style.setProperty('--c', TRAY_ICONS[b.id].c);
     t.innerHTML = `<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">${TRAY_ICONS[b.id].svg}</svg></span><b>${b.name.length > 13 && b.short ? b.short : b.name}</b><small><i>up to </i>${pays}:1</small><span class="amt"></span>`;
   }
   for (const b of SIDE_BETS) {

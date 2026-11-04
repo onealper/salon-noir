@@ -260,9 +260,9 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     const portrait = camera.aspect < .9, t = ((show.frozen || now) - show.lag) / 1000;
     const a = Math.sin(t * .075) * .62 + Math.sin(t * .031) * .12;          // a slow sweep around the table
     // framed for the lobby's layout: the table floats in the band between the title and the rail
-    const r = portrait ? 300 : 200, y = (portrait ? 190 : 118) + Math.sin(t * .11) * 6;
+    const r = portrait ? 300 : 262, y = (portrait ? 190 : 150) + Math.sin(t * .11) * 6;   // (in the band between the title and the rail, clear of both)
     orbitEye.set(Math.sin(a) * r, y, 10 + Math.cos(a) * r);
-    orbitAt.set(Math.sin(a) * 8, portrait ? -120 : -44, portrait ? -8 : 0);
+    orbitAt.set(Math.sin(a) * 8, portrait ? -120 : -30, portrait ? -8 : 0);
   }
   function placeShowcase(now) {
     if (show.driven) return; orbitPose(now);

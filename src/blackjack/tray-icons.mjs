@@ -1,7 +1,6 @@
 // The side-bet tray's icons (blackjack: see paintTile in controller.mjs).
-// The tray has its own flat line icons, one colour per bet, so each reads at a glance apart from the felt art.
-// Side-bet icons, drawn for these bets: each is a line drawing with a soft tint fill (duotone),
-// in the bet's own colour, echoing the medallion printed for it on the felt.
+// The tray has its own flat line icons, so each reads at a glance apart from the felt art: a line drawing with a soft
+// tint fill (duotone), in the tray's ivory (each `c` is the bet's colour on its felt medallion, not shown in the tray).
 const T = 'fill="currentColor" fill-opacity=".22"', SOLID = 'fill="currentColor" stroke="none"';
 const leaf = r => `<path transform="rotate(${r} 12 11)" ${T} d="M12 11C10.8 10 7.6 7.9 7.6 5.3a2.2 2.2 0 0 1 4.4-1 2.2 2.2 0 0 1 4.4 1c0 2.6-3.2 4.7-4.4 5.7Z"/>`;
 const pip = (x, y, k = 1) => `<path ${SOLID} transform="translate(${x} ${y}) scale(${k})" d="M0-2.6C-1.2-1.3-2.5-.4-2.5.8a1.3 1.3 0 0 0 2.2 1L-.7 3h1.4L.3 1.8a1.3 1.3 0 0 0 2.2-1C2.5-.4 1.2-1.3 0-2.6Z"/>`;
