@@ -184,15 +184,19 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity var(
 .seat-tag .say { position: absolute; left: 50%; bottom: calc(100% + 6px); translate: -50% 4px; padding: 4px 8px 3px; border-radius: 6px; background: var(--ivory); color: #141416; font: 600 13px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; opacity: 0; transition: opacity var(--duration-quick), translate var(--duration-fast) cubic-bezier(.2, .9, .3, 1.3); }
 .seat-tag .say.show { opacity: 1; translate: -50% 0; }
 .hand-total.seat { font-size: 14px; padding: 4px 7px 3px; min-width: 28px; opacity: .92; }
-/* Cheat mode (blackjack, a setting): the next card over the shoe, the hole card over the dealer's face-down card, each a
-   small card face on the totals' dark glass */
+/* Cheat mode (blackjack, a setting): the next card at the shoe's mouth, on the totals' dark glass; the dealer's hole card
+   is the card itself, lifted off the felt from its far edge and turned toward you (both faces drawn as the cards are) */
 .peek-tag { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; border-radius: 10px; background: rgba(12, 12, 13, .86); border: 1px solid var(--line-2); box-shadow: 0 4px 14px rgba(0, 0, 0, .35); white-space: nowrap; }
 .peek-tag.next { translate: -50% 0; }   /* (under the point, over the shoe's mouth: above it, the hint line runs on a phone) */
-.peek-tag.hole { translate: -50% -50%; }
-.peek-tag .pc { width: 22px; height: 30px; border-radius: 4px; background: linear-gradient(#fbf7ee, #e9e1cf); color: #131416; display: grid; align-content: center; justify-items: center; gap: 1px; }
-.peek-tag .pc b { font: 800 15px/1 "Barlow Condensed", sans-serif; }
-.peek-tag .pc i { font: 400 11px/1 system-ui, sans-serif; font-style: normal; }
-.peek-tag .pc.red { color: #c4122b; }
+.peek-tag .pc { display: block; }
+.peek-card { translate: -18% -80%; }   /* (its lower left on the face-down card's middle) */
+.peek-card .face { display: block; rotate: 9deg; transform-origin: 18% 92%; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .55)) drop-shadow(0 1px 1px rgba(0, 0, 0, .45)); }
+.peek-card canvas { display: block; }
+.peek-card.rise .face { animation: peek-rise .36s cubic-bezier(.2, .8, .25, 1) both; }
+.peek-card.sink .face { animation: peek-sink .24s cubic-bezier(.5, 0, .75, 0) both; }
+@keyframes peek-rise { from { opacity: 0; translate: -6px 8px; rotate: 0deg; scale: .72; } }
+@keyframes peek-sink { to { opacity: 0; translate: -6px 8px; rotate: 0deg; scale: .72; } }
+body.reduced .peek-card .face { animation: none; }
 .peek-tag .pw { font: 500 11px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 .offscreen { visibility: hidden; }
 .opt.sub > span { padding-left: 14px; color: var(--muted); font-size: .92em; }

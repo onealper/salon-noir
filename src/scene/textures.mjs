@@ -110,6 +110,18 @@ function drawFace(c, card) {
   }
   ctx.globalCompositeOperation = 'source-over'; ctx.restore(); return c;
 }
+// A card's face drawn small for the page over the table (cheat mode's peek: blackjack/controller.mjs), w x h CSS
+// pixels at `dpr`: the cards' own ivory, ink and suits, the index alone and large for its size, so it reads at a glance.
+export function drawMiniFace(c, card, w, h, dpr = 1) {
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const ctx = c.getContext('2d'), color = RED_SUITS.has(card.suit) ? INK.red : INK.black, fs = h * .5;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  roundRect(ctx, .5, .5, w - 1, h - 1, w * CR / CW * 1.6); ctx.fillStyle = '#fbfaf6'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = `800 ${fs}px "Barlow Condensed", "Arial Narrow", Arial, sans-serif`;
+  ctx.save(); ctx.translate(w / 2, h * .53); if (card.rank === '10') { ctx.scale(.74, 1); ctx.letterSpacing = `${-fs * .04}px`; } ctx.fillText(card.rank, 0, 0); ctx.restore();
+  drawSuit(ctx, card.suit, w / 2, h * .74, h * .27, color);
+  return c;
+}
 export function paintBack() { return texture(drawBack(canvas(1, 1))); }
 function drawBack(c) {
   const art = artImage('table:back');

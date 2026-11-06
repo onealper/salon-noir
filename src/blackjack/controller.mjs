@@ -8,7 +8,7 @@ import { MODES } from '../core/modes.mjs';
 import { createWorld, LAYOUT, toSeat } from '../scene/world.mjs';
 import { createPortal } from '../scene/portal.mjs';
 import { Seating, SEAT_COUNT, YOU } from '../players.mjs';
-import { loadCourtArt, CARD_W, CARD_H } from '../scene/textures.mjs';
+import { loadCourtArt, drawMiniFace, CARD_W, CARD_H } from '../scene/textures.mjs';
 import { wallet, inFlight } from '../core/wallet.mjs';
 import { ledger } from '../core/ledger.mjs';
 import { lobby } from '../core/lobby.mjs';
@@ -104,13 +104,12 @@ export function createBlackjack(ctx) {
   // Whether any other player still has a hand the dealer must play against.
   table.othersLive = () => others().some(({ p }) => p.standing);
   function mk(cls) { const e = document.createElement('div'); e.className = cls; e.hidden = true; e.append(document.createElement('span')); overlay.append(e); return e; }
-  // Cheat mode (a setting at this table only): the next card out of the shoe, over the shoe, and the dealer's hole card,
-  // over the card, each as a small card face.
-  const peekEls = { next: mkPeek('next', 'Next', 'The next card out of the shoe'), hole: mkPeek('hole', 'Hole', "The dealer's hole card") };
-  function mkPeek(cls, word, what) {
-    const e = document.createElement('div'); e.className = `peek-tag ${cls}`; e.hidden = true; e.setAttribute('role', 'img'); e.dataset.what = what;
-    e.innerHTML = `<span class="pc"><b></b><i></i></span><span class="pw">${word}</span>`; overlay.append(e); return e;
-  }
+  // Cheat mode (a setting at this table only). The next card out of the shoe: a tag at the shoe's mouth. The dealer's hole
+  // card: the card itself, lifted off the felt from its far edge and turned toward you, rising out of the face-down card
+  // as it lands and settling back into it as the dealer turns it over. Both drawn as the cards are (textures.mjs).
+  const peekNext = peekEl('peek-tag next', 'The next card out of the shoe', '<canvas class="pc"></canvas><span class="pw">Next</span>');
+  const peekHole = peekEl('peek-card', "The dealer's hole card", '<span class="face"><canvas></canvas></span>');
+  function peekEl(cls, what, html) { const e = document.createElement('div'); e.className = cls; e.hidden = true; e.setAttribute('role', 'img'); e.dataset.what = what; e.innerHTML = html; overlay.append(e); return e; }
   // A hand total rolls to its new value and gives a small bump, so a changed count is noticed.
   function setTotal(el, text) { const v = el.firstChild; if (el.dataset.v === text) return; const first = !el.dataset.v; el.dataset.v = text; ui.morph(v, text); if (!first) ui.bump(v, 1.2); else ui.pop(v, { from: .5 }); }
 
@@ -138,25 +137,42 @@ export function createBlackjack(ctx) {
     layoutPeek();
   }
   function layoutPeek() {
-    if (!peekEls.next.hidden) { const p = view.shoeToTable(world.shoe.frontPose()).pos; place(peekEls.next, p.x, p.y, p.z, 0, 6); }
-    if (!peekEls.hole.hidden) { const a = view.anchor('dealer', 1).pos; place(peekEls.hole, a.x, a.y, a.z); }
+    if (!peekNext.hidden) { const p = view.shoeToTable(world.shoe.frontPose()).pos; place(peekNext, p.x, p.y, p.z, 0, 6); }
+    if (!peekHole.hidden && holeCard) {
+      // fanned out of the face-down card from its middle, up and to the right (away from the up card); half again the
+      // card's size in the picture, so it reads, and no more than a small part of the screen's width (a phone)
+      const a = view.anchor('dealer', 1).pos, l = world.project(a.x - CARD_W / 2, a.y, a.z), r = world.project(a.x + CARD_W / 2, a.y, a.z);
+      const w = Math.round(Math.max(28, Math.min((r.x - l.x) * 1.5, 40, stage.clientWidth * .08)));
+      place(peekHole, a.x, a.y, a.z); paintPeek(peekHole, holeCard, w, Math.round(w * CARD_H / CARD_W));
+    }
   }
   // What cheat mode shows: the shoe's front card while one stands there (not while a new shoe goes in), and the hole
   // card while it lies face down.
   const RANK_NAME = { A: 'ace', K: 'king', Q: 'queen', J: 'jack' }, SUIT_NAME = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
   function renderPeek() {
-    const on = settings.cheat;
-    showPeek(peekEls.next, on && (view.front || view.waiting) ? table.nextCard : null);
-    showPeek(peekEls.hole, on ? view.handCards('dealer').find(c => c.hidden)?.card ?? null : null);
+    const on = settings.cheat, next = on && (view.front || view.waiting) ? table.nextCard : null;
+    peekNext.hidden = !next; if (next && paintPeek(peekNext, next, 22, 30)) ui.pop(peekNext.querySelector('canvas'), { from: .7 });   // a new card in the same place: noticed
+    liftHole(on ? view.handCards('dealer').find(c => c.hidden)?.card ?? null : null);
     layoutPeek();
   }
-  function showPeek(el, card) {
-    el.hidden = !card; if (!card) { delete el.dataset.card; return; }
-    const id = card.rank + card.suit; if (el.dataset.card === id) return;
-    const fresh = !!el.dataset.card; el.dataset.card = id;
-    const pc = el.querySelector('.pc'); pc.querySelector('b').textContent = card.rank; pc.querySelector('i').textContent = card.suit; pc.classList.toggle('red', card.suit === '♥' || card.suit === '♦');
+  // A card's mini face on an element's canvas, again only when the card, its size or the screen's density has changed.
+  // True when it is another card than the one shown.
+  function paintPeek(el, card, w, h) {
+    const id = card.rank + card.suit, key = `${id} ${w}x${h} ${devicePixelRatio}`; if (el.dataset.drawn === key) return false;
+    const other = !!el.dataset.card && el.dataset.card !== id, cv = el.querySelector('canvas'); el.dataset.drawn = key; el.dataset.card = id;
+    drawMiniFace(cv, card, w, h, devicePixelRatio); cv.style.width = `${w}px`; cv.style.height = `${h}px`;
     el.setAttribute('aria-label', `${el.dataset.what}: the ${RANK_NAME[card.rank] ?? card.rank} of ${SUIT_NAME[card.suit]}`);
-    if (fresh) ui.pop(pc, { from: .7 });   // a new card in the same place: noticed
+    return other;
+  }
+  // The hole card rises out of the face-down card (drawn as it is laid out: its size comes from the picture) and sinks back.
+  let holeCard = null, holeGone = 0;
+  function liftHole(card) {
+    if (card === holeCard) return;
+    holeCard = card; clearTimeout(holeGone);
+    if (card) { peekHole.hidden = false; peekHole.classList.remove('sink'); peekHole.classList.add('rise'); delete peekHole.dataset.drawn; return; }
+    if (peekHole.hidden) return;
+    peekHole.classList.remove('rise'); peekHole.classList.add('sink');
+    holeGone = setTimeout(() => { peekHole.hidden = true; peekHole.classList.remove('sink'); delete peekHole.dataset.card; }, settings.reduced ? 0 : 200);
   }
   // Re-aim the camera only when the table's box really changes size (rotation, window resize), once per frame.
   let framed = '', reframe = 0;
