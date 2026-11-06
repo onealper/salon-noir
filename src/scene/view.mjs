@@ -21,7 +21,7 @@ export const DEALERS = {
 const clamp01 = x => Math.min(1, Math.max(0, x)), smooth = x => x * x * (3 - 2 * x);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
-const UP = V(0, 1, 0), CHIPS = [1000, 500, 100, 50, 25, 10, 5, 1], PER_COLUMN = 20;
+const UP = V(0, 1, 0), CHIPS = [1000, 500, 100, 50, 25, 10, 5, 1], BIG_CHIPS = [10000, 5000, ...CHIPS], PER_COLUMN = 20;
 const turnAbout = (axis, angle) => new THREE.Quaternion().setFromAxisAngle(axis, angle);
 
 // A smooth, monotone speed profile through keyframes (t, s): Fritsch–Carlson cubic. The card
@@ -111,9 +111,10 @@ export class TableView {
     const flight = this.motion.tween(TIMING.chipToss, toss).then(() => { toss.finish(); c.userData.flight = null; });
     c.userData.flight = flight; return flight;
   }
-  // Chips for an amount, largest first, dropped one after another on top of the stack.
+  // Chips for an amount, largest first, dropped one after another on top of the stack. A pile that would run past two
+  // columns of 1,000s (never at the house limits; a Lightning bonus on a cheat-mode bet) comes in 5,000s and 10,000s.
   async addAmount(key, amount, source = 'player') {
-    const vals = breakDown(amount, CHIPS);
+    let vals = breakDown(amount, CHIPS); if (vals.length > 2 * PER_COLUMN) vals = breakDown(amount, BIG_CHIPS);
     for (const [i, v] of vals.entries()) {
       const from = source === 'rack' ? V(LAYOUT.rack.x + (this.stackBase(key).x) * .15, 2.5, LAYOUT.rack.z + 3) : null;
       const p = source === 'rack' ? this.flyChip(key, v, from, i === 0) : this.addChip(key, v);

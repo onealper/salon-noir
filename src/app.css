@@ -184,6 +184,16 @@ body[data-mode="result"] .feed:not(.stay) { opacity: 0; transition: opacity var(
 .seat-tag .say { position: absolute; left: 50%; bottom: calc(100% + 6px); translate: -50% 4px; padding: 4px 8px 3px; border-radius: 6px; background: var(--ivory); color: #141416; font: 600 13px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; opacity: 0; transition: opacity var(--duration-quick), translate var(--duration-fast) cubic-bezier(.2, .9, .3, 1.3); }
 .seat-tag .say.show { opacity: 1; translate: -50% 0; }
 .hand-total.seat { font-size: 14px; padding: 4px 7px 3px; min-width: 28px; opacity: .92; }
+/* Cheat mode (blackjack, a setting): the next card over the shoe, the hole card over the dealer's face-down card, each a
+   small card face on the totals' dark glass */
+.peek-tag { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; border-radius: 10px; background: rgba(12, 12, 13, .86); border: 1px solid var(--line-2); box-shadow: 0 4px 14px rgba(0, 0, 0, .35); white-space: nowrap; }
+.peek-tag.next { translate: -50% 0; }   /* (under the point, over the shoe's mouth: above it, the hint line runs on a phone) */
+.peek-tag.hole { translate: -50% -50%; }
+.peek-tag .pc { width: 22px; height: 30px; border-radius: 4px; background: linear-gradient(#fbf7ee, #e9e1cf); color: #131416; display: grid; align-content: center; justify-items: center; gap: 1px; }
+.peek-tag .pc b { font: 800 15px/1 "Barlow Condensed", sans-serif; }
+.peek-tag .pc i { font: 400 11px/1 system-ui, sans-serif; font-style: normal; }
+.peek-tag .pc.red { color: #c4122b; }
+.peek-tag .pw { font: 500 11px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 .offscreen { visibility: hidden; }
 .opt.sub > span { padding-left: 14px; color: var(--muted); font-size: .92em; }
 .credits { margin: 0; padding-left: 18px; display: grid; gap: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
@@ -360,6 +370,7 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .bk-head { display: flex; align-items: baseline; gap: 8px; }
 .bk-head b { font: 500 12px/1.2 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--ivory); }
 .bk-head time { font-size: 11.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.bk-head .bk-cheat { font: 500 11px/1.2 Inter, system-ui, sans-serif; color: var(--dim); }
 .bk-head em { margin-left: auto; font: 800 19px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ivory); }
 .bk.up .bk-head em { color: var(--gold-hi); } .bk.down .bk-head em { color: #e7a197; }
 .bk ul { list-style: none; margin: 5px 0 0; padding: 0; display: grid; gap: 3px; }

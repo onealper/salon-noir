@@ -2,7 +2,7 @@
 // controls. It reads the engine, drives the table view and runs the dock. It shares the salon's top bar, wallet,
 // sound and settings with the roulette room (passed in as `ctx` by app.mjs) and has the same lifecycle: show/hide,
 // toLobby/fromLobby, enter, onKey, setFast/setReduced/setQuality, refresh, busy.
-import { Table, record, total, natural, isTen, LIMITS, CUT_AT, SHOE_CARDS, SPOTS } from '../engine.mjs';
+import { Table, record, total, natural, isTen, LIMITS, HIGH_LIMITS, CUT_AT, SHOE_CARDS, SPOTS } from '../engine.mjs';
 import { SIDE_BETS, PUSH22 } from '../sidebets.mjs';
 import { MODES } from '../core/modes.mjs';
 import { createWorld, LAYOUT, toSeat } from '../scene/world.mjs';
@@ -104,6 +104,13 @@ export function createBlackjack(ctx) {
   // Whether any other player still has a hand the dealer must play against.
   table.othersLive = () => others().some(({ p }) => p.standing);
   function mk(cls) { const e = document.createElement('div'); e.className = cls; e.hidden = true; e.append(document.createElement('span')); overlay.append(e); return e; }
+  // Cheat mode (a setting at this table only): the next card out of the shoe, over the shoe, and the dealer's hole card,
+  // over the card, each as a small card face.
+  const peekEls = { next: mkPeek('next', 'Next', 'The next card out of the shoe'), hole: mkPeek('hole', 'Hole', "The dealer's hole card") };
+  function mkPeek(cls, word, what) {
+    const e = document.createElement('div'); e.className = `peek-tag ${cls}`; e.hidden = true; e.setAttribute('role', 'img'); e.dataset.what = what;
+    e.innerHTML = `<span class="pc"><b></b><i></i></span><span class="pw">${word}</span>`; overlay.append(e); return e;
+  }
   // A hand total rolls to its new value and gives a small bump, so a changed count is noticed.
   function setTotal(el, text) { const v = el.firstChild; if (el.dataset.v === text) return; const first = !el.dataset.v; el.dataset.v = text; ui.morph(v, text); if (!first) ui.bump(v, 1.2); else ui.pop(v, { from: .5 }); }
 
@@ -128,6 +135,28 @@ export function createBlackjack(ctx) {
       el.totals.forEach((t, j) => { const p = toSeat(+k, ...beside(j, view.seatHands(+k), 3)); place(t, p.x, 0, p.z); });
       const n = toSeat(+k, 0, 40); place(el.tag, n.x, 0, n.z);
     }
+    layoutPeek();
+  }
+  function layoutPeek() {
+    if (!peekEls.next.hidden) { const p = view.shoeToTable(world.shoe.frontPose()).pos; place(peekEls.next, p.x, p.y, p.z, 0, 6); }
+    if (!peekEls.hole.hidden) { const a = view.anchor('dealer', 1).pos; place(peekEls.hole, a.x, a.y, a.z); }
+  }
+  // What cheat mode shows: the shoe's front card while one stands there (not while a new shoe goes in), and the hole
+  // card while it lies face down.
+  const RANK_NAME = { A: 'ace', K: 'king', Q: 'queen', J: 'jack' }, SUIT_NAME = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
+  function renderPeek() {
+    const on = settings.cheat;
+    showPeek(peekEls.next, on && (view.front || view.waiting) ? table.nextCard : null);
+    showPeek(peekEls.hole, on ? view.handCards('dealer').find(c => c.hidden)?.card ?? null : null);
+    layoutPeek();
+  }
+  function showPeek(el, card) {
+    el.hidden = !card; if (!card) { delete el.dataset.card; return; }
+    const id = card.rank + card.suit; if (el.dataset.card === id) return;
+    const fresh = !!el.dataset.card; el.dataset.card = id;
+    const pc = el.querySelector('.pc'); pc.querySelector('b').textContent = card.rank; pc.querySelector('i').textContent = card.suit; pc.classList.toggle('red', card.suit === '♥' || card.suit === '♦');
+    el.setAttribute('aria-label', `${el.dataset.what}: the ${RANK_NAME[card.rank] ?? card.rank} of ${SUIT_NAME[card.suit]}`);
+    if (fresh) ui.pop(pc, { from: .7 });   // a new card in the same place: noticed
   }
   // Re-aim the camera only when the table's box really changes size (rotation, window resize), once per frame.
   let framed = '', reframe = 0;
@@ -188,7 +217,7 @@ export function createBlackjack(ctx) {
     });
     const dc = view.handCards('dealer').filter(c => !c.hidden).map(c => c.card);
     totals.dealer.hidden = !dc.length; if (dc.length) setTotal(totals.dealer, handLabel(dc)); totals.dealer.classList.toggle('bust', total(dc).value > 21);
-    layoutTotals();
+    renderPeek(); layoutTotals();
   }
   // The hint line never blinks: clearing waits a moment in case a new line follows at once. Its words morph in the
   // line's own span, so the line keeps its place (see .hint in app.css).
@@ -232,8 +261,8 @@ export function createBlackjack(ctx) {
     if (spot !== 'main' && !settings.sides) return 'Side bets are switched off in settings.';
     const fee = table.mode === 'lightning' && spot === 'main' ? value : 0;
     if (table.cost + value + fee > table.balance) return fee ? `Not enough balance for a ${value} chip and its Lightning fee.` : `Not enough balance for a ${value} chip.`;
-    const [, max] = spot === 'main' ? LIMITS.main : LIMITS.side;
-    if (table.betOn(spot) + value > max) return `${SPOT_NAME[spot]} limit is ${fmt(max)}.`;
+    const [, max] = table.limitOf(spot);
+    if (table.betOn(spot) + value > max) return `${SPOT_NAME[spot]} limit is ${fmt(max)}${spot === 'main' && !settings.cheat ? ` (${fmt(HIGH_LIMITS.main[1])} in cheat mode)` : ''}.`;
     return null;
   }
   function placeChip(spot) {
@@ -269,7 +298,8 @@ export function createBlackjack(ctx) {
   };
   // Why the bets on the felt can't be dealt as they stand, or null.
   const dealRefusal = () => table.belowMinimum ? (table.bet ? 'Side bets ride with a main bet. Put a chip on the main circle.' : 'Place a bet on the main circle to deal.')
-    : table.cost > table.balance ? (table.mode === 'lightning' ? 'Not enough balance for this bet and its Lightning fee.' : 'Not enough balance for this bet.') : null;
+    : table.cost > table.balance ? (table.mode === 'lightning' ? 'Not enough balance for this bet and its Lightning fee.' : 'Not enough balance for this bet.')
+    : !table.withinLimits(table.layout()) ? `The main bet limit is ${fmt(table.limitOf('main')[1])}.` : null;
   // Out of chips with nothing on the felt: no bet is possible, so one tap gives a fresh 1,000 (there is nothing to lose).
   const broke = () => table.phase === 'betting' && !table.bet && table.balance < table.costOf({ main: LIMITS.main[0] });
   // Bets the balance no longer covers come off, with a word why (it moved under them, or this table's fee makes them dearer).
@@ -318,7 +348,7 @@ export function createBlackjack(ctx) {
   function choose(what) { if (!decide) return; const d = decide; decide = null; d(what); }
   for (const b of $$('[data-act]')) b.addEventListener('click', () => choose(b.dataset.act));
 
-  function stageNext(how = 'settle') { view.stageFront(table.cards.at(-1), how); syncShoe(); }
+  function stageNext(how = 'settle') { view.stageFront(table.cards.at(-1), how); syncShoe(); renderPeek(); }
   function syncShoe() { view.syncShoe(Math.max(0, table.remaining - 1), CUT_AT - table.dealt); renderShoe(); }
   let cutOut = false;
   // The first card of every new shoe is burned: dealt face down straight to the discard holder.
@@ -356,8 +386,12 @@ export function createBlackjack(ctx) {
     busy = true; setMode('busy');
     try {
       await othersReady();
-      if (!table.start()) { busy = false; setMode('betting'); hint(dealRefusal() ?? 'The cards could not be dealt. Try again.'); return; }
-      if (table.shuffled) { cutOut = false; changeDealer(); await view.newShoe(SHOE_CARDS - 1, CUT_AT); stageNext(); await burn(); }
+      if (!table.start()) {   // (the balance moved, or cheat mode went off as the cards were about to go out: the bet comes down to the limit)
+        busy = false; setMode('betting'); const why = dealRefusal(), trimmed = toLimits(); if (trimmed) { renderBets(); refreshControls(); }
+        hint(trimmed ? `Your main bet came down to the house limit of ${fmt(LIMITS.main[1])}.` : why ?? 'The cards could not be dealt. Try again.'); return;
+      }
+      cheated = settings.cheat;
+      if (table.shuffled) { cutOut = false; changeDealer(); const shuffle = view.newShoe(SHOE_CARDS - 1, CUT_AT); renderPeek(); await shuffle; stageNext(); await burn(); }
       view.rename('main', 'h0'); resolved = 0; renderBalance(); renderBets(); hint('');
       if (table.board) await lightning.strike(table.board);
       // One card to each player, first base to third, then the dealer's up card; again, with the
@@ -469,7 +503,7 @@ export function createBlackjack(ctx) {
     p.at = 0; seatEls[k].tag.classList.remove('turn');
   }
   async function dealerTurn() {
-    if (view.handCards('dealer').some(c => c.hidden)) { await motion.wait(260); await view.reveal(); }
+    if (view.handCards('dealer').some(c => c.hidden)) { await motion.wait(260); const flip = view.reveal(); renderPeek(); await flip; }
     table.revealHole(); renderTotals(); await settleSides();
     while (!table.dealerDone) { await motion.wait(180); const c = table.dealerHit(); if (!c) break; await dealTo('dealer', table.dealer.length - 1, c); }
     // the dealer calls the hand: blackjack, a bust, or the total they stand on (when anyone was still in)
@@ -481,7 +515,7 @@ export function createBlackjack(ctx) {
   }
   async function finish() {
     const r = table.settle();
-    ledger.add(handEntry(table, r));   // the hand goes in the book (settings, Last hands) in the moment it is paid
+    ledger.add({ ...handEntry(table, r), ...cheated ? { cheat: true } : {} });   // the hand goes in the book (settings, Last hands) in the moment it is paid
     await settleSides();   // Buster
     // main hands: losing stakes go to the rack, wins are paid onto the stake
     const seatResults = others().filter(({ p }) => p.hands.length && p.hands[0].cards.length).flatMap(({ seat, p }) => p.settle(table.dealer, table.board).map((r, i) => ({ seat, p, r, key: handKey(seat, i), el: seatEls[seat].totals[i] })));
@@ -514,7 +548,7 @@ export function createBlackjack(ctx) {
       table.newShoe(); cutOut = false; const d = changeDealer(); dealerSays('new-shoe', { prio: 2 });
       const moves = seating.turnover(settings.players).filter(c => c.joined), who = moves.length ? ` ${moves.map(c => c.left ? `${c.joined.name} takes ${c.left.name}'s seat` : `${c.joined.name} sits down`).join('; ')}.` : '';
       renderSeats(); for (const c of moves) say(c.seat, 'Sits down', 2600); hint((d ? `New shoe. ${d.name} takes over the table.` : 'New shoe. Eight decks, freshly shuffled.') + who);
-      await view.newShoe(table.remaining - 1, CUT_AT); stageNext(); await burn();
+      const shuffle = view.newShoe(table.remaining - 1, CUT_AT); renderPeek(); await shuffle; stageNext(); await burn();
     } else {   // between hands: anyone who can't make their bet gets up, and the table fills to the size you chose
       const ch = [...seating.replaceLeaving(), ...seating.arrange(settings.players)];
       if (ch.length) { renderSeats(); for (const c of ch) if (c.joined) say(c.seat, 'Sits down', 2600); }
@@ -705,9 +739,27 @@ export function createBlackjack(ctx) {
     if (!on && table.lastLayout) for (const b of SIDE_BETS) table.lastLayout[b.id] = 0;   // and Rebet brings back only the main bet
     world.requestRender(); renderBets(); refreshControls();
   });
+  // Cheat mode (Settings, at this table only): the next card and the dealer's hole card shown on the table (renderPeek),
+  // and the main bet up to 10,000. Off again, a bet or a rebet over the house limit comes down to it. A hand dealt with
+  // it on (or turned on mid-hand) is marked so in Last hands.
+  let cheated = false;
+  function setCheat(on, { quiet = false } = {}) {
+    table.limits = on ? HIGH_LIMITS : LIMITS;
+    if (on && table.phase !== 'betting') cheated = true;
+    const trimmed = !on && toLimits();
+    renderRules(); renderBets(); refreshControls(); renderPeek();
+    if (!quiet) hint(on ? `Cheat mode: the next card and the dealer's hole card are shown, and the main bet goes up to ${fmt(HIGH_LIMITS.main[1])}.`
+      : trimmed ? `Cheat mode off. Your main bet came down to the house limit of ${fmt(LIMITS.main[1])}.` : 'Cheat mode off.');
+  }
+  function toLimits() {
+    const fit = l => Object.fromEntries(Object.entries(l).map(([s, v]) => [s, Math.min(v, table.limitOf(s)[1])]));
+    if (table.lastLayout && !table.withinLimits(table.lastLayout)) table.lastLayout = fit(table.lastLayout);
+    if (busy || table.phase !== 'betting' || table.withinLimits(table.layout())) return false;
+    table.applyLayout(fit(table.layout())); serial(syncAllStacks); return true;
+  }
   // A fresh stack and a clean start: no rebet, no Lightning multiplier carried over (app.mjs resetBalance).
   function reset() { misdealQuiet(); table.clear(); wallet.reset(); table.balance = synced = wallet.START; table.pending = null; table.lastLayout = null; renderBalance(); lightning.reset(); renderBets(); refreshControls(); othersBet(); }
-  async function misdealQuiet() { table.abandon(); for (const { p } of others()) p.refund(); renderSeats(); world.setPan(0); decide = null; view.clearCards(); view.clearChips(); hideBanner(); clearFeed(); for (const t of Object.values(totals)) t.hidden = true; busy = false; setMode('betting'); }
+  async function misdealQuiet() { table.abandon(); for (const { p } of others()) p.refund(); renderSeats(); world.setPan(0); decide = null; view.clearCards(); view.clearChips(); renderPeek(); hideBanner(); clearFeed(); for (const t of Object.values(totals)) t.hidden = true; busy = false; setMode('betting'); }
   // ---- Lightning ------------------------------------------------------------------------------------------------------------
   const lightning = createLightningUI({ world, table, view, motion, audio, feel, settings, take, stage, overlay, call: line => dealerSays(line, { prio: 3, fresh: 1500 }), paid: () => ctx.showBalance(table.balance), inView: () => visible && !lobby.isOpen, shown: () => visible, reframe: () => { framed = ''; reframeNow(); } });
   // Made ready, out of sight, for all it will draw (scene/stage.mjs, warm): what is only made in play (a card, a chip, a
@@ -721,6 +773,7 @@ export function createBlackjack(ctx) {
     const m = MODES[table.mode];
     const terms = b => { const t = [...new Set(b.table.map(([l]) => l))].filter(l => TERMS[l]); return t.length || NOTES[b.id] ? `<ul class="terms">${NOTES[b.id] ? `<li>${NOTES[b.id]}</li>` : ''}${t.map(l => `<li><b>${l}</b>: ${TERMS[l]}</li>`).join('')}</ul>` : ''; };
     $('#paytables').innerHTML = slotBets().map(b => `<section id="pt-${b.id}"><h4>${b.name}</h4><p>${b.cards}. Limit ${LIMITS.side[0]}–${LIMITS.side[1]}. House edge ${b.edge.toFixed(1)}%: over time it returns ${(100 - b.edge).toFixed(1)}% of what is bet.</p><table>${b.table.map(([l, p]) => `<tr><td>${l}</td><td>${p}:1</td></tr>`).join('')}</table>${terms(b)}</section>`).join('');
+    const [least, most] = table.limitOf('main'); $('#mainLimit').textContent = `Main bet ${fmt(least)}–${fmt(most)}${settings.cheat ? ' (cheat mode)' : ''}.`;
     $('#modeRulesTitle').hidden = $('#modeRules').hidden = !m.rules.length;
     $('#modeRulesTitle').textContent = `At the ${m.name} table`; $('#modeRules').innerHTML = m.rules.map(r => `<li>${r}</li>`).join('');
   }
@@ -734,6 +787,7 @@ export function createBlackjack(ctx) {
     'Dealer ends on 22': 'the dealer draws to exactly 22 (where every other hand at this table pushes)',
   };
   const NOTES = { buster: 'Wins when the dealer busts; the more cards in the busted hand, the more it pays. With your blackjack as well, the top two lines pay more.' };
+  { let bound = false; ctx.bindToggle('#optCheat', 'cheat', on => setCheat(on, { quiet: !bound })); bound = true; }
 
   // Moving to another table: its printing on the felt, its side bet in the last slot, its rules and name.
   function applyMode(id, { announce = true } = {}) {
@@ -786,6 +840,7 @@ export function createBlackjack(ctx) {
       if (!busy && table.phase === 'betting') { table.balance = wallet.balance; if (table.cost > table.balance) { table.clear(); serial(syncAllStacks); hint('Your bets were cleared: your balance changed at the wheel.'); } }
       applyMode(table.mode, { announce: false }); renderBalance(); renderBets(); refreshControls();   // (applyMode frames the seat)
       lightning.badge();   // the Lightning show sees the room is in sight (applyMode stands aside mid-hand): its storm starts
+      renderPeek();
     },
     hide() { visible = false; world.showcase.stop(0); lightning.preview(false); lightning.badge(); world.pause(true); },   // the hidden table draws nothing while you are at the wheel
     showcase: world.showcase, portal,

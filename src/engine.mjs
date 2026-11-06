@@ -9,8 +9,8 @@ export { CHIP_VALUES, breakDown };   // the salon's chips (core/chips.mjs), the 
 
 export const DECKS = 8, SHOE_CARDS = DECKS * 52, CUT_AT = Math.round(SHOE_CARDS * .75);
 export const SPOTS = ['main', 'lucky', 'pairs', 'top3', 'p213', 'buster', 'dpairs'];
-export const LIMITS = { main: [1, 1000], side: [1, 100] };
-const limitOf = spot => spot === 'main' ? LIMITS.main : LIMITS.side;
+export const LIMITS = { main: [1, 1000], side: [1, 100] };   // the house's
+export const HIGH_LIMITS = { main: [1, 10000], side: [1, 100] };   // cheat mode's (blackjack/controller.mjs): a high roller's main bet
 const sum = a => a.reduce((s, v) => s + v, 0);
 
 export function total(cards) {
@@ -52,7 +52,7 @@ export const bucketOf = (h) => h.kind === 'blackjack' ? 'bj' : h.total <= 17 ? '
 export class Table {
   // mode: 'classic' | 'freebet' | 'lightning' — changed only between rounds.
   constructor({ random = Math.random, cards, balance = 1000, mode = 'classic' } = {}) {
-    this.random = random; this.startBalance = balance; this.mode = mode; this.reset(balance);
+    this.random = random; this.startBalance = balance; this.mode = mode; this.limits = LIMITS; this.reset(balance);
     if (cards) { this.cards = [...cards]; this.dealt = SHOE_CARDS - this.cards.length; }
   }
   reset(balance = this.startBalance) {
@@ -75,8 +75,12 @@ export class Table {
   get stake() { return this.hands.reduce((s, h) => s + h.stake, 0); }
   get cutReached() { return this.dealt >= CUT_AT; }
   get remaining() { return this.cards.length; }
+  // The card the next draw takes (the shoe's front card), or null when the next deal opens a fresh shoe.
+  get nextCard() { return this.cutReached && (this.phase === 'betting' || this.phase === 'result') ? null : this.cards.at(-1) ?? null; }
 
   // ---- betting ------------------------------------------------------------
+  // `limits`: [least, most] on the main bet and on each side bet (LIMITS, or HIGH_LIMITS in cheat mode)
+  limitOf(spot) { return spot === 'main' ? this.limits.main : this.limits.side; }
   betOn(spot) { return sum(this.bets[spot]); }
   get bet() { return SPOTS.reduce((s, k) => s + this.betOn(k), 0); }
   get sideBet() { return this.bet - this.betOn('main'); }
@@ -85,7 +89,7 @@ export class Table {
   get cost() { return this.costOf(this.layout()); }
   canAdd(spot, value) {
     if (this.phase !== 'betting' || !SPOTS.includes(spot)) return false;
-    return this.betOn(spot) + value <= limitOf(spot)[1] && this.cost + value * (this.mode === 'lightning' && spot === 'main' ? 2 : 1) <= this.balance;
+    return this.betOn(spot) + value <= this.limitOf(spot)[1] && this.cost + value * (this.mode === 'lightning' && spot === 'main' ? 2 : 1) <= this.balance;
   }
   addChip(spot, value) { if (!this.canAdd(spot, value)) return false; this.bets[spot].push(value); this.history.push(spot); return true; }
   undo() { if (this.phase !== 'betting' || !this.history.length) return null; const spot = this.history.pop(); return { spot, value: this.bets[spot].pop() }; }
@@ -94,21 +98,22 @@ export class Table {
   applyLayout(layout) {
     if (this.phase !== 'betting' || !layout) return false;
     const need = this.costOf(layout);
-    if (!need || need > this.balance || SPOTS.some(s => layout[s] > limitOf(s)[1])) return false;
+    if (!need || need > this.balance || !this.withinLimits(layout)) return false;
     this.clear();
     for (const s of SPOTS) for (const v of breakDown(layout[s])) { this.bets[s].push(v); this.history.push(s); }
     return true;
   }
-  get canRebet() { return this.phase === 'betting' && !this.bet && !!this.lastLayout && this.costOf(this.lastLayout) <= this.balance; }
+  withinLimits(layout) { return SPOTS.every(s => (layout[s] ?? 0) <= this.limitOf(s)[1]); }
+  get canRebet() { return this.phase === 'betting' && !this.bet && !!this.lastLayout && this.costOf(this.lastLayout) <= this.balance && this.withinLimits(this.lastLayout); }
   rebet() { return this.canRebet && this.applyLayout(this.lastLayout); }
-  get canDoubleBets() { const l = this.layout(); return this.phase === 'betting' && this.bet > 0 && this.cost * 2 <= this.balance && SPOTS.every(s => l[s] * 2 <= limitOf(s)[1]); }
+  get canDoubleBets() { const l = this.layout(); return this.phase === 'betting' && this.bet > 0 && this.cost * 2 <= this.balance && this.withinLimits(Object.fromEntries(SPOTS.map(s => [s, l[s] * 2]))); }
   doubleBets() { if (!this.canDoubleBets) return false; const l = this.layout(); return this.applyLayout(Object.fromEntries(SPOTS.map(s => [s, l[s] * 2]))); }
-  get belowMinimum() { const m = this.betOn('main'); return m < LIMITS.main[0]; }
+  get belowMinimum() { return this.betOn('main') < this.limitOf('main')[0]; }
 
   // ---- the deal -----------------------------------------------------------
   // Side bets ride only with a main bet, as at a real table.
   start() {
-    if (this.phase !== 'betting' || this.belowMinimum || this.cost > this.balance) return false;
+    if (this.phase !== 'betting' || this.belowMinimum || this.cost > this.balance || !this.withinLimits(this.layout())) return false;
     this.shuffled = false; if (this.cutReached) this.newShoe();
     this.lastLayout = this.layout(); this.clearRound();
     for (const s of SPOTS) this.stakes[s] = this.betOn(s);

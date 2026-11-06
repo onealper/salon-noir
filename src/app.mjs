@@ -41,6 +41,7 @@ const settings = {
   tray: store.get('tray', !matchMedia('(pointer: coarse)').matches), players: store.get('players', 4),
   replays: ['mine', 'all', 'off'].includes(store.get('replays')) ? store.get('replays') : 'mine',   // roulette's slow-motion replays
   mode: MODES[store.get('mode', 'classic')] ? store.get('mode', 'classic') : 'classic',
+  cheat: store.get('cheat', false),   // blackjack's cheat mode: the next card and the hole card shown, a higher main bet
   mix: { table: 1, voice: 1, music: .7, ...store.get('mix', {}) },
 };
 const rooms = { blackjack: null, roulette: null };   // each built the first time you go there (see the rooms section)
@@ -187,7 +188,7 @@ function entryHTML(e) {
       + (e.sides ?? []).map(s => line(`${s.name}: ${s.line}`, signed(s.net), 'side')).join('')
       + (e.fee ? line('Lightning fee', signed(-e.fee), 'side') : '') + (e.bonus ? line(`Lightning ×${e.bonus.m} on your fee`, signed(e.bonus.amount), 'side bolt') : '') + (e.earned ? line(`Earned ×${e.earned} for your next win`, null, 'side bolt') : '');
   }
-  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b><time>${when}</time><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
+  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b>${e.cheat ? '<span class="bk-cheat">Cheat mode</span>' : ''}<time>${when}</time><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
 }
 function renderBook() {
   const v = ledger.visit, net = v.rounds ? signed(v.net) : '±0', tone = v.net > 0 ? 'up' : v.net < 0 ? 'down' : '';

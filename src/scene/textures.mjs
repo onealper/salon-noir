@@ -378,6 +378,9 @@ export const CHIP_STYLE = {
   100: { base: '#1a1a1c', spot: ['#f3eee2', '#c9a45c'], text: '#19191b' },
   500: { base: '#5b2a8a', spot: ['#f3eee2', '#e2b53f'], text: '#5a2987' },
   1000: { base: '#d9a62a', spot: ['#1d1d1f', '#f3eee2'], text: '#7c5a0c' },
+  // only for a pile too tall in 1,000s (a Lightning bonus on a cheat-mode bet: scene/view.mjs addAmount)
+  5000: { base: '#6b3a1f', spot: ['#f3eee2', '#d9a62a'], text: '#5e3219' },
+  10000: { base: '#7d1a33', spot: ['#f3eee2', '#e2b53f'], text: '#701730' },
 };
 export const chipStyle = v => CHIP_STYLE[v] ?? { base: '#8a8580', spot: ['#f1ece0', '#4b4844'], text: '#4b4844' };
 const chipLabel = v => v >= 1000 ? `${v / 1000}K` : v < 1 ? '½' : String(v);

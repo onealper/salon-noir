@@ -2,7 +2,7 @@
 // over thousands of seeded rounds (and over hands a page lost mid-play, as the next visit plays them out).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Table, record, playOut, total, natural, shoe, breakDown, SPOTS, SHOE_CARDS, CUT_AT, BUCKETS } from '../src/engine.mjs';
+import { Table, record, playOut, total, natural, shoe, breakDown, SPOTS, SHOE_CARDS, CUT_AT, BUCKETS, LIMITS, HIGH_LIMITS } from '../src/engine.mjs';
 import { basicStrategy } from '../src/players.mjs';
 import { H, C, seeded } from './helpers.mjs';
 
@@ -47,6 +47,38 @@ test('betting: limits, the cost of a Lightning hand, rebet and double', () => {
   assert.deepEqual([r.betOn('main'), r.betOn('lucky')], [50, 10]);
   r.start(); for (const w of DEAL) r.initialCard(w); r.abandon(); assert.equal(r.balance, 1000);
   assert.ok(r.canRebet); r.rebet(); assert.deepEqual([r.betOn('main'), r.betOn('lucky')], [50, 10]);
+});
+
+test('cheat mode\'s limits: the main bet to 10,000, the side bets keep theirs, Double bets and Rebet held to the table\'s', () => {
+  const t = new Table({ balance: 50000 }), fill = (spot, chip, n) => { for (let i = 0; i < n; i++) assert.ok(t.addChip(spot, chip), `${spot} chip ${i + 1}`); };
+  assert.deepEqual(t.limits, LIMITS, 'the house limits unless told otherwise');
+  fill('main', 500, 2); assert.ok(!t.addChip('main', 1), 'the house main bet stops at 1,000'); assert.ok(!t.canDoubleBets);
+  t.limits = HIGH_LIMITS; assert.ok(t.canDoubleBets, '2,000 is within 10,000');
+  fill('main', 500, 18); assert.equal(t.betOn('main'), 10000); assert.ok(!t.addChip('main', 1), 'cheat mode\'s main bet stops at 10,000');
+  fill('lucky', 100, 1); assert.ok(!t.addChip('lucky', 1), 'side bets stay at 100');
+  t.clear(); fill('main', 500, 12); assert.ok(!t.canDoubleBets, '12,000 would be over'); assert.equal(t.doubleBets(), false);
+  t.limits = LIMITS; assert.equal(t.start(), false, 'a bet over the table\'s limits is never dealt'); t.limits = HIGH_LIMITS;
+  t.clear(); fill('main', 500, 10); assert.ok(t.doubleBets()); assert.equal(t.betOn('main'), 10000);
+  assert.ok(t.start()); for (const w of DEAL) t.initialCard(w); t.abandon();
+  assert.ok(t.canRebet && t.rebet(), 'a 10,000 rebet in cheat mode'); t.clear();
+  t.limits = LIMITS; assert.equal(t.canRebet, false, 'not at the house limits'); assert.equal(t.rebet(), false); assert.equal(t.bet, 0);
+  assert.equal(t.applyLayout({ main: 5000 }), false); assert.ok(t.applyLayout({ main: 1000 }));
+  // the limits are the table's state: a hand a page lost is played out under them (plain JSON in the record)
+  t.limits = HIGH_LIMITS; t.clear(); t.applyLayout({ main: 8000 }); t.start(); for (const w of DEAL) t.initialCard(w);
+  const rec = JSON.parse(JSON.stringify(record(t))); assert.deepEqual(rec.limits, HIGH_LIMITS);
+  const done = playOut(rec, seeded(3)); assert.ok(done?.t); assert.equal(done.t.stakes.main, 8000);
+});
+
+test('the next card: the one the next draw takes; between hands once the cut card is out, a fresh shoe\'s (unknown)', () => {
+  const t = new Table({ random: seeded(7) });
+  for (let i = 0; i < 5; i++) { const n = t.nextCard; assert.ok(n); assert.equal(t.draw(), n); }
+  t.addChip('main', 10); assert.ok(t.start());
+  for (const w of DEAL) { const n = t.nextCard; assert.equal(t.initialCard(w), n, `the ${w}'s card`); }
+  t.dealt = CUT_AT;   // the cut card came out in this hand: the hand is still dealt from this shoe
+  assert.equal(t.nextCard, t.cards.at(-1));
+  t.abandon(); assert.equal(t.phase, 'betting'); assert.equal(t.nextCard, null, 'the next deal opens a fresh shoe');
+  t.addChip('main', 10); assert.ok(t.start()); assert.equal(t.dealt, 0, 'it did');
+  const n = t.nextCard; assert.ok(n); assert.equal(t.initialCard('player'), n);
 });
 
 test('the dealer stands on all 17s, soft 17 included, and hits 16', () => {
