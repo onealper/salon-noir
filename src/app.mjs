@@ -114,6 +114,11 @@ function closeSheet() {
   dlg.classList.add('closing'); setTimeout(() => { dlg.classList.remove('closing'); dlg.close(); }, 350);   // (.sheet.closing in app.css)
 }
 $('#settings').onclick = () => { uiSound('open'); dlg.showModal(); };
+// More below: a fade at the sheet's foot while it scrolls on, gone at its end. Its parts change size as they open and
+// close (and as the sheet opens), so each is watched.
+const sheetFoot = () => dlg.classList.toggle('more', dlg.open && dlg.scrollTop + dlg.clientHeight < dlg.scrollHeight - 4);
+dlg.addEventListener('scroll', sheetFoot, { passive: true });
+{ const ro = new ResizeObserver(sheetFoot); for (const part of dlg.children) ro.observe(part); }
 $('#closeSettings').onclick = closeSheet;
 dlg.addEventListener('click', e => { if (e.target === dlg) closeSheet(); });
 dlg.addEventListener('cancel', e => { e.preventDefault(); closeSheet(); });
@@ -178,12 +183,12 @@ for (const d of $$('.sheet details')) kit.accordion(d);
 const TABLE_NAME = { classic: 'Classic', freebet: 'Free Bet', lightning: 'Lightning' }, WHEEL_NAME = { lightning: 'Lightning roulette', mega: 'Mega Lightning roulette' };
 const ENDED = h => h.even ? 'Even money' : h.kind === 'blackjack' ? 'Blackjack' : h.kind === 'win' ? 'Win' : h.kind === 'push' ? 'Push' : h.total > 21 ? 'Bust' : 'Lose';
 function entryHTML(e) {
-  const tone = e.net > 0 ? 'up' : e.net < 0 ? 'down' : 'even', when = new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), line = (a, b, cls = '') => `<li class="${cls}"><span>${esc(a)}</span>${b == null ? '' : `<em>${esc(b)}</em>`}</li>`;
+  const tone = e.net > 0 ? 'up' : e.net < 0 ? 'down' : 'even', when = new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), line = (a, b, cls = '') => `<li class="${cls}"><span>${esc(a)}</span>${b == null ? '' : `<em>${esc(b)}</em>`}</li>`;
   let rows = '';
   if (e.game === 'roulette') {
     rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '') + (e.x ? line(`Lightning ${e.x}× on your straight up`, null, 'side bolt') : '');
   } else {
-    rows = line(`Dealer ${(e.dealer ?? []).join(' ')} · ${e.dealerBJ ? 'blackjack' : e.dealerTotal}`, null)
+    rows = line(`Dealer ${(e.dealer ?? []).join(' ')} · ${e.dealerBJ ? 'Blackjack' : e.dealerTotal}`, null)
       + (e.hands ?? []).map((h, i) => line(`${e.hands.length > 1 ? `Hand ${i + 1}` : 'You'} ${h.cards.join(' ')} · ${h.total} · ${ENDED(h)}`, signed(h.net))).join('')
       + (e.sides ?? []).map(s => line(`${s.name}: ${s.line}`, signed(s.net), 'side')).join('')
       + (e.fee ? line('Lightning fee', signed(-e.fee), 'side') : '') + (e.bonus ? line(`Lightning ×${e.bonus.m} on your fee`, signed(e.bonus.amount), 'side bolt') : '') + (e.earned ? line(`Earned ×${e.earned} for your next win`, null, 'side bolt') : '');

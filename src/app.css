@@ -91,7 +91,7 @@ body.reduced .splash .keylight { animation: none; }
 .gauge { width: 34px; height: 34px; flex: none; }
 .gauge svg { width: 100%; height: 100%; overflow: visible; }
 .gauge circle.g1, .gauge circle.g2 { transform-box: view-box; transform-origin: 50px 50px; stroke-dashoffset: 0; transition: stroke-dasharray 1s ease, transform 1s ease; }
-.gauge circle.gm { fill: #f2c417; stroke: #0c0c0d; stroke-width: 2; }
+.gauge circle.gm { fill: var(--gold-hi); stroke: #0c0c0d; stroke-width: 2; }
 .tools { display: flex; gap: 6px; }
 .icon { position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); border: 1px solid transparent;
   transition: color var(--duration-fast) var(--ease-smooth-out), background var(--duration-fast) var(--ease-smooth-out), border-color var(--duration-fast) var(--ease-smooth-out); }
@@ -284,11 +284,11 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 
 .bet-actions { display: flex; gap: 8px; align-items: center; }
 @media (min-width: 761px) and (min-height: 521px) { .bet-actions .pill:not(.deal) { min-width: 100px; justify-content: center; } }   /* Undo, Clear and Rebet (or ×2) one width, so the row doesn't shuffle as they change (a phone shows them as icons) */
-.pill { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line-2); font: 700 14px/1 Inter, system-ui, sans-serif; letter-spacing: .03em; transition: background var(--duration-quick) var(--ease-smooth-out), border-color var(--duration-quick) var(--ease-smooth-out), color var(--duration-quick) var(--ease-smooth-out), opacity var(--duration-quick) var(--ease-smooth-out); }
+.pill { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line-2); font: 600 14px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; transition: background var(--duration-quick) var(--ease-smooth-out), border-color var(--duration-quick) var(--ease-smooth-out), color var(--duration-quick) var(--ease-smooth-out), opacity var(--duration-quick) var(--ease-smooth-out); }
 .pill svg { width: 17px; height: 17px; }
 .pill .glyph { font: 800 16px/1 "Barlow Condensed", sans-serif; }
-@media (hover: hover) { .pill:hover:not(:disabled) { background: #232327; border-color: #4a4a50; } }
-.pill:disabled { opacity: 1; color: rgba(236, 228, 210, .32); border-color: rgba(255, 255, 255, .07) !important; background: rgba(18, 18, 20, .45) !important; box-shadow: none !important; cursor: default; }
+@media (hover: hover) { .pill:hover:not(:disabled, [aria-disabled="true"]) { background: #232327; border-color: #4a4a50; } }
+.pill:disabled, .pill[aria-disabled="true"] { opacity: 1; color: rgba(236, 228, 210, .32); border-color: rgba(255, 255, 255, .07) !important; background: rgba(18, 18, 20, .45) !important; box-shadow: none !important; cursor: default; }
 .pill.gold:disabled { color: rgba(226, 196, 131, .62); border-color: rgba(201, 164, 92, .5) !important; background: rgba(40, 33, 19, .55) !important; }
 .pill.gold { background: linear-gradient(#d5b36d, #b08a45); border-color: #e2c483; color: #17130b; }
 @media (hover: hover) { .pill.gold:hover:not(:disabled) { background: linear-gradient(#e0c07c, #bb9550); border-color: #f0d69c; } }
@@ -335,8 +335,11 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 /* the side-bet tray slides back down as it closes */
 .tray.open.closing .tiles { animation: tray-out var(--duration-quick) var(--ease-smooth-out) forwards; pointer-events: none; }
 @keyframes tray-out { to { opacity: 0; transform: translateY(8px); } }
+/* more below: a soft fade at the sheet's foot while it scrolls on (app.mjs, sheetFoot), gone at the end */
+.sheet::after { content: ''; position: sticky; bottom: 0; z-index: 2; display: block; height: 44px; margin-top: -44px; pointer-events: none; background: linear-gradient(rgba(20, 20, 22, 0), var(--panel) 85%); opacity: 0; transition: opacity var(--duration-fast) var(--ease-smooth-out); }
+.sheet.more::after { opacity: 1; }
 .sheet > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
-.sheet h2 { margin: 0; font: 700 20px/1 Cinzel, Georgia, serif; letter-spacing: .06em; }
+.sheet h2 { margin: 0; font: 500 21px/1.1 "Bodoni Moda", Georgia, serif; letter-spacing: .01em; }   /* (as the roulette sheets' titles) */
 .opts { display: grid; padding: 8px 20px; }
 .opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
 .opt input[type="checkbox"] { appearance: none; width: 44px; height: 26px; border-radius: 99px; background: #2c2c31; position: relative; cursor: pointer; transition: background var(--duration-quick); margin: 0; }
@@ -356,15 +359,15 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .rules { margin: 0 0 16px; padding-left: 18px; color: #cfc8ba; font-size: 14px; line-height: 1.5; }
 .rules li + li { margin-top: 6px; }
 .paytables { display: grid; gap: 14px; padding-bottom: 16px; }
-.paytables h4 { margin: 0 0 2px; font: 700 16px/1.2 Cinzel, Georgia, serif; letter-spacing: .04em; }
+.paytables h4 { margin: 0 0 4px; font: 600 14px/1.3 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--ivory); }
 .paytables p { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
 .paytables table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .paytables td { padding: 5px 0; border-top: 1px solid var(--line); }
-.paytables td:last-child { text-align: right; font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
+.paytables td:last-child { text-align: right; font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--ivory); font-variant-numeric: tabular-nums; }
 .paytables .terms { margin: 8px 0 0; padding-left: 16px; color: #cfc8ba; font-size: 12.5px; line-height: 1.45; }
 .paytables .terms b { font-weight: 600; color: var(--ivory); }
 /* Last hands: the book of rounds, newest first, each with its lines and its net; this visit's net in the heading */
-.sheet summary .book-net { margin: 0 10px 0 auto; font-size: 11px; letter-spacing: .1em; color: var(--muted); }
+.sheet summary .book-net { margin: 0 10px 0 auto; font-size: 11px; letter-spacing: .01em; color: var(--muted); }
 .book-net b, .wallet .visit output { font-variant-numeric: tabular-nums; }
 .book-net b { margin-left: 4px; font: 800 16px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; color: var(--ivory); }
 .book-net b[data-tone="up"] { color: var(--gold-hi); } .book-net b[data-tone="down"] { color: #e7a197; }
@@ -382,7 +385,8 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .bk li em { flex: none; font: 700 14.5px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted); }
 .bk li.side { font-size: 12.5px; color: var(--muted); } .bk li.bolt span { color: #b9c8ff; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 16px; font-size: 14px; }
-.keys dt { font: 800 14px/1.3 "Barlow Condensed", sans-serif; color: var(--gold-hi); letter-spacing: .04em; }
+.keys dt { display: flex; align-items: center; gap: 4px; font: 500 13px/1.3 Inter, system-ui, sans-serif; color: var(--muted); }
+.keys kbd { display: inline-block; min-width: 20px; text-align: center; font: 600 12px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .02em; color: var(--ivory); padding: 2px 5px; }   /* the dock's keycaps, shown on every device here */
 .keys dd { margin: 0; color: #cfc8ba; }
 .sheet > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 20px; flex-wrap: wrap; }
 .sheet > footer small { color: var(--dim); }
@@ -533,15 +537,14 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), bod
   #deal { justify-self: center; min-width: 170px; }
 }
 
-/* ---- side-bet tray: equal cards with their own icons, one colour per bet ------------------------------- */
+/* ---- side-bet tray: equal cards with their own icons, the colour kept for the bet you make ------------------ */
 .tray.open .tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
-.tile { --c: var(--gold); grid-template-columns: 34px minmax(0, 1fr); column-gap: 9px; row-gap: 3px; min-width: 128px; padding: 6px 12px 6px 6px; border-radius: 12px; }
+.tile { grid-template-columns: 34px minmax(0, 1fr); column-gap: 9px; row-gap: 3px; min-width: 128px; padding: 6px 12px 6px 6px; border-radius: 12px; }
 .tile .ico { grid-row: span 2; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: rgba(236, 228, 210, .72);
   background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); transition: background var(--duration-quick), color var(--duration-quick), border-color var(--duration-quick); }
 .tile .ico svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.tile b { font: 700 12.5px/1.1 Inter, system-ui, sans-serif; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.tile small { font: 600 13px/1 "Barlow Condensed", sans-serif; color: var(--gold); letter-spacing: .02em; font-variant-numeric: tabular-nums; } .tile small i { color: var(--muted); font-weight: 500; }
-.tile small i { color: var(--muted); font-weight: 700; letter-spacing: .06em; }
+.tile b { font: 600 12.5px/1.1 Inter, system-ui, sans-serif; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tile small { font: 600 13px/1 "Barlow Condensed", sans-serif; color: #cfc8ba; letter-spacing: .02em; font-variant-numeric: tabular-nums; } .tile small i { color: var(--muted); font-weight: 500; }
 .tile.on { border-color: rgba(201, 164, 92, .6); background: #1b1a17; }
 .tile.on .ico { background: var(--gold); color: #141416; border-color: var(--gold); }
 @media (hover: hover) { .tile:hover:not(:disabled) { border-color: rgba(255, 255, 255, .2); } }
@@ -567,10 +570,10 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), bod
 body[data-mode="insurance"] .decisions { opacity: 0 !important; visibility: hidden; pointer-events: none; }
 .ins-copy { display: flex; align-items: center; gap: 14px; text-align: left; max-width: 380px; }
 .ins-ace { flex: none; position: relative; width: 40px; height: 56px; border-radius: 6px; background: linear-gradient(#fbf7ee, #e9e1cf); color: #1a1a1c; box-shadow: 0 0 0 2px var(--gold), 0 6px 16px rgba(0, 0, 0, .5); display: grid; place-items: center; }
-.ins-ace b { font: 700 22px/1 Cinzel, Georgia, serif; margin-top: -8px; }
+.ins-ace b { font: 800 25px/1 "Barlow Condensed", sans-serif; margin-top: -8px; }   /* (a card's index, as the cards print it) */
 .ins-ace i { position: absolute; bottom: 6px; font: 400 16px/1 system-ui, sans-serif; font-style: normal; }
 .ins-ace.red { color: #b3262e; }
-.insure h2 { margin: 0 0 4px; font: 700 22px/1.1 Cinzel, Georgia, serif; letter-spacing: .04em; color: var(--gold-hi); }
+.insure h2 { margin: 0 0 4px; font: 500 22px/1.1 "Bodoni Moda", Georgia, serif; letter-spacing: .01em; color: var(--ivory); }
 .insure p { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
 .insure .row { display: flex; gap: 10px; }
 .ins-btn { height: 54px; padding: 0 22px; border-radius: 16px; font-size: 15px; gap: 10px; box-shadow: 0 4px 0 #0a0a0b, 0 10px 18px rgba(0, 0, 0, .35); transition: transform 60ms ease, box-shadow 60ms ease, background var(--duration-quick), border-color var(--duration-quick); }
@@ -686,7 +689,7 @@ body.reduced .tcard.arrive { animation: none; } body.reduced .games-pill { trans
 .t-kick { align-self: center; font: 500 11px/1.2 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--muted); }
 /* a name is never clipped: it gives up size with the card's width (a narrow laptop, an iPad on its side) */
 .tcard b { align-self: center; min-width: 0; font: 500 clamp(22px, 2.3vw, 30px)/1.02 "Bodoni Moda", Georgia, serif; }   /* (beside its icon: the switch above names the game) */
-.t-line { grid-column: 1 / -1; margin-top: 8px; font: 500 13px/1.35 Inter, system-ui, sans-serif; color: rgba(236, 228, 210, .72); }
+.t-line { grid-column: 1 / -1; margin-top: 8px; font: 500 13px/1.35 Inter, system-ui, sans-serif; color: rgba(236, 228, 210, .72); text-wrap: pretty; }   /* (no card ends on a word alone) */
 .t-stat { grid-column: 1 / -1; align-self: end; justify-self: start; margin-top: 12px; font: 500 12px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tcard.soon { cursor: default; opacity: .72; --acc: #7c756a; }
 .tcard.soon b { font-size: clamp(15px, 1.6vw, 22px); color: var(--muted); }
@@ -780,7 +783,7 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 
 .mode-rules-title { margin: 16px 0 8px; font: 500 13px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--ivory); }
 /* a double or split the house pays for carries a small FREE tag */
-.act .free-tag { position: absolute; left: 8px; top: 7px; padding: 2px 6px 1px; border-radius: 99px; background: linear-gradient(#f3d57a, #c99a2e); color: #17130b; font: 800 10px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .1em; }
+.act .free-tag { position: absolute; left: 8px; top: 7px; padding: 2px 6px 1px; border-radius: 99px; background: linear-gradient(#f3d57a, #c99a2e); color: #17130b; font: 600 11px/1.15 "Barlow Condensed", sans-serif; letter-spacing: .02em; }
 .act .free-tag[hidden] { display: none; }
 
 /* ---- Lightning: the marquee, the strike and your multiplier ------------------------------------------------
@@ -797,7 +800,7 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 @keyframes charge { 50% { box-shadow: 0 0 0 3px rgba(8, 8, 9, .85), 0 0 0 4px rgba(170, 190, 255, .7), 0 0 26px rgba(140, 165, 255, .55); } }
 .lb-cell { position: relative; display: grid; justify-items: center; min-width: 46px; padding: 4px 6px 4px; border-radius: 8px; transition: background var(--duration-medium), box-shadow var(--duration-medium); }
 .lb-cell + .lb-cell::before { content: ''; position: absolute; left: -2px; top: 18%; bottom: 18%; width: 1px; background: linear-gradient(transparent, rgba(201, 164, 92, .45), transparent); }
-.lb-cell small { font: 700 9.5px/1.2 Inter, system-ui, sans-serif; letter-spacing: .08em; color: var(--gold); }
+.lb-cell small { font: 600 10.5px/1.2 Inter, system-ui, sans-serif; letter-spacing: .02em; color: var(--gold); }
 .lb-cell b { font: 800 20px/1.05 "Barlow Condensed", sans-serif; color: #55524c; font-variant-numeric: tabular-nums; }
 .lb-cell.struck b { color: #f2f5ff; text-shadow: 0 0 8px rgba(150, 175, 255, .9), 0 0 18px rgba(110, 140, 255, .6); }
 .lb-cell.hot b { color: #fff4c8; text-shadow: 0 0 8px rgba(255, 220, 130, .95), 0 0 22px rgba(255, 190, 80, .7); }
@@ -841,7 +844,7 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
   box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 18px rgba(255, 205, 110, .45), 0 6px 14px rgba(0, 0, 0, .5); white-space: nowrap; animation: badge-hum 2.4s ease-in-out 3; }   /* (a few hums as it arrives, then a steady glow: see the lobby's note on endless animations) */
 .l-badge svg { width: 15px; height: 15px; fill: #ffe28f; filter: drop-shadow(0 0 4px rgba(255, 210, 110, .9)); }
 .l-badge b { font: 800 19px/1 "Barlow Condensed", sans-serif; color: #fff2c4; }
-.l-badge small { font: 700 11px/1 Inter, system-ui, sans-serif; color: var(--muted); }
+.l-badge small { font: 600 11px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 @keyframes badge-hum { 50% { box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 28px rgba(255, 205, 110, .7), 0 6px 14px rgba(0, 0, 0, .5); } }
 .l-badge.arrive { animation: badge-in .7s cubic-bezier(.2, 1.5, .4, 1), badge-hum 2.4s .7s ease-in-out 3; }
 @keyframes badge-in { 0% { scale: 0; opacity: 0; } 50% { scale: 1.35; opacity: 1; } 100% { scale: 1; } }
@@ -923,7 +926,7 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 /* the loupe and the replay tag come in softly (gone at once, as a tooltip goes, when the pointer leaves) */
 @starting-style { .r-loupe, .r-replay { opacity: 0; scale: .96; } }
 .r-loupe, .r-replay { transition: opacity var(--duration-quick) ease-out, scale var(--duration-quick) ease-out; }
-.r-loupe b { font: 700 13.5px/1.1 Inter, system-ui, sans-serif; color: var(--ivory); }
+.r-loupe b { font: 600 13.5px/1.1 Inter, system-ui, sans-serif; color: var(--ivory); }
 .r-loupe span { font: 600 11px/1 Inter, system-ui, sans-serif; color: var(--gold); letter-spacing: .04em; }
 
 /* the number beside the ball */
@@ -966,7 +969,7 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
   .r-win .r-gross { grid-area: g; max-width: 200px; white-space: normal; text-align: left; }
 }
 .r-tag { position: absolute; left: 0; top: 0; translate: -50% -100%; display: flex; gap: 5px; align-items: baseline; padding: 3px 8px; border-radius: 99px; background: rgba(12, 12, 13, .82); white-space: nowrap; animation: tag-up 2.6s var(--ease) forwards; }
-.r-tag b { font: 700 11px/1 Inter, system-ui, sans-serif; color: var(--muted); } .r-tag span { font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
+.r-tag b { font: 600 11px/1 Inter, system-ui, sans-serif; color: var(--muted); } .r-tag span { font: 800 15px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
 @keyframes tag-up { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
 
 /* sheets: the racetrack and the statistics rise over the table */
@@ -1008,14 +1011,15 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
 .st-hc h4 { margin: 0 0 8px; font: 500 12px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--muted); }
 .st-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .st-n { display: grid; justify-items: center; width: 44px; padding: 6px 0 4px; border-radius: 10px; font: 800 19px/1 "Barlow Condensed", sans-serif; font-variant-numeric: tabular-nums; color: #fff; pointer-events: auto; }   /* figures in Barlow, as on the cloth and the strip (Cinzel's 11 reads II) */
-.st-n small { margin-top: 3px; font: 700 10px/1 Inter, system-ui, sans-serif; opacity: .75; }
+.st-n small { margin-top: 3px; font: 600 11px/1 Inter, system-ui, sans-serif; opacity: .75; }
 .st-n.red { background: #a3141f; } .st-n.black { background: #19191c; box-shadow: inset 0 0 0 1px #34343a; } .st-n.green { background: #0d7a45; }
 .st-bar { display: grid; grid-template-columns: 88px 1fr; align-items: center; gap: 10px; margin: 6px 0; font: 600 12px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 .st-bar > div { display: flex; height: 24px; border-radius: 8px; overflow: hidden; gap: 2px; }
 .st-bar i { display: flex; align-items: center; justify-content: center; min-width: max-content; padding: 0 5px; overflow: hidden; }   /* a small share keeps its label whole: the bar is the figure's, the figure is printed */
-.st-bar em { font: 700 11px/1 Inter, system-ui, sans-serif; font-style: normal; color: #fff; white-space: nowrap; }
+.st-bar em { font: 600 11px/1 Inter, system-ui, sans-serif; font-style: normal; color: #fff; white-space: nowrap; }
 .st-bar i.red { background: #a3141f; } .st-bar i.black { background: #232327; } .st-bar i.green { background: #0d7a45; flex-shrink: 0; }   /* the zero's share is small: its label is never cut */
-.st-bar i.a { background: #3a3326; } .st-bar i.b { background: #5a4a2c; } .st-bar i.c { background: #7d6536; }
+.st-bar i.a { background: #2a2a2f; } .st-bar i.b { background: #313137; } .st-bar i.c { background: #38383f; }   /* neutral steps, told apart, not ranked */
+.st-bar i.lead { background: #77602f; } .st-bar i.lead em { color: #fff3d6; }   /* the brass goes to each row's leading share (rgame.mjs, buildStats) */
 
 /* the dock */
 .rdock { display: flex; align-items: center; justify-content: center; gap: 14px 18px; flex-wrap: wrap; }

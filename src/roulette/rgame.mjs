@@ -239,9 +239,12 @@ export async function createRoulette(ctx) {
   // the printed racetrack (scene.pick): 'race:17' bets 17 and its neighbours, as many each side as the Racetrack sheet is
   // set to; 'call:tiers' a section's call bet. Placed by the croupier, as at the sheet.
   const onTrack = id => /^(race|call):/.test(id ?? '');
+  // a number on the track bets it and `nbK` neighbours each side; at 0 it is the number alone, straight up (on a phone,
+  // the track's large numbers are the easy way to bet one)
+  const raceName = (v, k = nbK) => k ? `${v} and ${k} neighbour${k > 1 ? 's' : ''}` : `${v} straight up`;
   function trackBet(id) {
     const [k, v] = id.split(':');
-    if (k === 'race') { const ns = neighbours(+v, nbK); return { nums: ns, units: ns.map(x => [`n${x}`, 1]), name: `${v} and ${nbK} neighbours` }; }
+    if (k === 'race') { const ns = neighbours(+v, nbK); return { nums: ns, units: ns.map(x => [`n${x}`, 1]), name: raceName(v) }; }
     return { nums: callNumbers(v), units: CALLS[v].chips, name: CALLS[v].name };
   }
   function hover(id, xy) {
@@ -249,7 +252,7 @@ export async function createRoulette(ctx) {
     if (!id) { loupe.hidden = true; if (open()) restGlow(); return; }
     if (onTrack(id)) {
       const b = trackBet(id), c = b.units.reduce((a, [, u]) => a + u, 0); S.highlight(b.nums, { level: .26 });
-      loupe.querySelector('b').textContent = b.name; loupe.querySelector('span').textContent = `${c} chips · ${fmt(c * rack.value)}`;
+      loupe.querySelector('b').textContent = b.name; loupe.querySelector('span').textContent = `${c} chip${c > 1 ? 's' : ''} · ${fmt(c * rack.value)}`;
     } else {
       S.highlight(covered(id), { level: .26 });
       const stake = table.on(id); loupe.querySelector('b').textContent = describe(id); loupe.querySelector('span').textContent = stake ? `Your bet ${fmt(stake)}` : `Max ${fmt(SPOTS.get(id).max)}`;
@@ -872,7 +875,9 @@ export async function createRoulette(ctx) {
 
   // ---- the racetrack and the statistics ------------------------------------------------------------------------------------------------
   const raceSheet = $('#rRaceSheet'), statsSheet = $('#rStatsSheet');
-  let nbK = store.get('neighbours', 2), raceAt = 0, raceFit = '';   // raceAt: the number the keyboard is on (one stop on the track for Tab, arrows go round)
+  const nbSaved = +store.get('neighbours', 2);
+  let nbK = Number.isInteger(nbSaved) ? Math.max(0, Math.min(4, nbSaved)) : 2, raceAt = 0, raceFit = '';   // raceAt: the number the keyboard is on (one stop on the track for Tab, arrows go round)
+  const raceHow = () => nbK ? `Tap a number to bet it with <b class="nbk">${nbK}</b> neighbour${nbK > 1 ? 's' : ''} each side;` : 'Tap a number to bet it straight up;';
   // On a phone the sheets take the whole picture under the bar: the track needs the room, and the layout behind it is
   // not what you are betting on while it is up (see .r-sheet in app.css, which this follows).
   const phoneSheet = matchMedia('(max-width: 760px) and (orientation: portrait), (orientation: landscape) and (max-height: 520px)');
@@ -880,7 +885,7 @@ export async function createRoulette(ctx) {
   const CLOSE = '<button class="icon r-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
   function buildRace() {
     raceSheet.innerHTML = `<header><h3>Racetrack</h3><div class="rt-nb" role="group" aria-label="Neighbours each side"><span aria-hidden="true">Neighbours</span><button class="pill" data-nb="-1" aria-label="Fewer neighbours">−</button><output aria-live="polite">${nbK}</output><button class="pill" data-nb="1" aria-label="More neighbours">+</button></div>${CLOSE}</header>
-      <svg class="rt" role="group" aria-label="Racetrack: a number bets it and its neighbours, a section its call bet"></svg><p class="rt-note">Tap a number to bet it with <b class="nbk">${nbK}</b> neighbours each side; tap a section for its call bet. Chips go on at your chip value.</p><p class="r-say" aria-hidden="true" hidden></p>`;
+      <svg class="rt" role="group" aria-label="Racetrack: the numbers in wheel order, and the call bets' sections"></svg><p class="rt-note"><span class="rt-how">${raceHow()}</span> tap a section for its call bet. Chips go on at your chip value.</p><p class="r-say" aria-hidden="true" hidden></p>`;
     // the room the track has: the sheet's height limit (as in app.css) less its own header, note and padding
     const svg = raceSheet.querySelector('.rt'), wasHidden = raceSheet.hidden; raceSheet.hidden = false;
     const maxH = stage.clientHeight - ctx.barCover(stage) - (phoneSheet.matches ? 8 : 70), fit = () => trackShape(svg.getBoundingClientRect().width, Math.max(120, maxH - (raceSheet.offsetHeight - svg.getBoundingClientRect().height)), phoneSheet.matches);
@@ -899,10 +904,10 @@ export async function createRoulette(ctx) {
     // Enter and Space press a number or a section moved to with the keyboard (the salon's key handler leaves them to it);
     // one that was clicked has already had the key taken as Spin, which marks it handled
     const pressed = (e, go) => { if ((e.key === 'Enter' || e.key === ' ') && !e.defaultPrevented) { e.preventDefault(); if (!e.repeat) go(); return true; } return false; };
-    const label = () => { for (const e of raceSheet.querySelectorAll('.rt-num')) e.setAttribute('aria-label', `${e.dataset.n} and ${nbK} neighbours each side: ${2 * nbK + 1} chips`); };
+    const label = () => { for (const e of raceSheet.querySelectorAll('.rt-num')) e.setAttribute('aria-label', nbK ? `${raceName(e.dataset.n)} each side: ${2 * nbK + 1} chips` : `${raceName(e.dataset.n)}: 1 chip`); };
     label();
     for (const e of raceSheet.querySelectorAll('.rt-num')) {
-      const n = +e.dataset.n, bet = () => { placeOn(neighbours(n, nbK).map(k => [`n${k}`, 1]), { name: `${n} and ${nbK} neighbours`, call: true }); nums(neighbours(n, nbK)); };
+      const n = +e.dataset.n, bet = () => { placeOn(neighbours(n, nbK).map(k => [`n${k}`, 1]), { name: raceName(n), call: true }); nums(neighbours(n, nbK)); };
       e.addEventListener('pointerenter', () => nums(neighbours(n, nbK))); e.addEventListener('pointerleave', () => nums([]));
       e.addEventListener('focus', () => nums(neighbours(n, nbK))); e.addEventListener('blur', () => nums([]));
       e.addEventListener('click', bet);
@@ -920,7 +925,13 @@ export async function createRoulette(ctx) {
       e.addEventListener('focus', () => nums(callNumbers(k))); e.addEventListener('blur', () => nums([]));
       e.addEventListener('click', bet); e.addEventListener('keydown', ev => pressed(ev, bet));
     }
-    for (const b of raceSheet.querySelectorAll('[data-nb]')) b.onclick = () => { nbK = Math.max(1, Math.min(4, nbK + +b.dataset.nb)); store.set('neighbours', nbK); raceSheet.querySelector('output').textContent = nbK; raceSheet.querySelector('.nbk').textContent = nbK; label(); uiSound('toggle'); };
+    // the stepper runs 0 to 4; a button at its end is dimmed but keeps the focus (aria-disabled, not disabled)
+    const ends = () => { for (const b of raceSheet.querySelectorAll('[data-nb]')) { const k = nbK + +b.dataset.nb; b.setAttribute('aria-disabled', k < 0 || k > 4); } };
+    for (const b of raceSheet.querySelectorAll('[data-nb]')) b.onclick = () => {
+      const k = Math.max(0, Math.min(4, nbK + +b.dataset.nb)); if (k === nbK) return;
+      nbK = k; store.set('neighbours', nbK); raceSheet.querySelector('output').textContent = nbK; raceSheet.querySelector('.rt-how').innerHTML = raceHow(); label(); ends(); uiSound('toggle');
+    };
+    ends();
     raceSheet.querySelector('.r-close').onclick = closeSheets;
   }
   // a refusal while a sheet is up is said in the sheet as well: the hint line is behind it
@@ -930,7 +941,12 @@ export async function createRoulette(ctx) {
     const N = Math.min(history.length, 100), st = stats(history, 100);
     const chip = x => `<button class="st-n ${colorOf(x.n)}" data-n="${x.n}" aria-label="Bet ${x.n} straight up">${x.n}<small>${x.c}×</small></button>`;
     const z = [st.zero, 'green', '0'];   // every bar has the zero's share in it, as the wheel does: each sums to 100%
-    const bar = (label, parts) => `<div class="st-bar"><span>${label}</span><div>${parts.map(([v, cls, t]) => `<i class="${cls}" style="flex:${Math.max(v, .5)}"><em>${t} ${v}%</em></i>`).join('')}</div></div>`;
+    // a row of shares: its sections in neutral steps, the leading one (or ones, tied) in brass; red, black and the zero
+    // keep their own colours
+    const bar = (label, parts) => {
+      const ranked = cls => /^[abc]$/.test(cls), top = Math.max(0, ...parts.filter(([, cls]) => ranked(cls)).map(([v]) => v));
+      return `<div class="st-bar"><span>${label}</span><div>${parts.map(([v, cls, t]) => `<i class="${cls}${ranked(cls) && top > 0 && v === top ? ' lead' : ''}" style="flex:${Math.max(v, .5)}"><em>${t} ${v}%</em></i>`).join('')}</div></div>`;
+    };
     statsSheet.innerHTML = `<header><h3>Statistics <small>${N ? `last ${N} spin${N > 1 ? 's' : ''}` : 'no spins yet'}</small></h3>${CLOSE}</header><p class="r-say" aria-hidden="true" hidden></p>
       ${N ? `<div class="st-hc"><div><h4>Hot</h4><div class="st-row">${st.hot.map(chip).join('')}</div></div><div><h4>Cold</h4><div class="st-row">${st.cold.map(chip).join('')}</div></div></div>
       ${bar('Colour', [[st.red, 'red', 'Red'], [st.zero, 'green', '0'], [st.black, 'black', 'Black']])}
@@ -953,7 +969,8 @@ export async function createRoulette(ctx) {
   }
   function closeSheets() {
     if (!sheetOpen) return; const back = raceSheet.contains(document.activeElement) ? $('#rRace') : statsSheet.contains(document.activeElement) ? $('#rStats') : null;
-    for (const s of [raceSheet, statsSheet]) ui.leave(s, { y: 12, ms: 300 }); sheetOpen = null;   // (down and out, a little quicker than it came) uiSound('close'); restGlow(); $('#rRace').setAttribute('aria-expanded', false); $('#rStats').setAttribute('aria-expanded', false);
+    for (const s of [raceSheet, statsSheet]) ui.leave(s, { y: 12, ms: 300 }); sheetOpen = null;   // (down and out, a little quicker than it came)
+    uiSound('close'); restGlow(); $('#rRace').setAttribute('aria-expanded', false); $('#rStats').setAttribute('aria-expanded', false);
     back?.focus();
   }
   $('#rRace').onclick = e => openSheet('race', { focus: e.detail === 0 }); $('#rStats').onclick = e => openSheet('stats', { focus: e.detail === 0 });   // (a click from the keyboard has no pointer count)

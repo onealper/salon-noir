@@ -602,15 +602,15 @@ export function createBlackjack(ctx) {
   // The result: each hand's total turns into its outcome, and a compact bar rises at the foot of the
   // table with the headline and the net - the way live tables report a hand - leaving the cards in view.
   function outcomeOf(h, r) {
-    if (h.evenMoney) return ['EVEN MONEY', 'win'];
-    if (h.kind === 'blackjack') return ['BLACKJACK', 'win'];
-    if (h.kind === 'win') return [`${h.total} · WIN`, 'win'];
-    if (h.kind === 'push') return [`${h.total} · PUSH`, 'push'];
-    return [h.total > 21 ? `${h.total} · BUST` : `${h.total} · LOSE`, 'loss'];
+    if (h.evenMoney) return ['Even money', 'win'];
+    if (h.kind === 'blackjack') return ['Blackjack', 'win'];
+    if (h.kind === 'win') return [`${h.total} · Win`, 'win'];
+    if (h.kind === 'push') return [`${h.total} · Push`, 'push'];
+    return [h.total > 21 ? `${h.total} · Bust` : `${h.total} · Lose`, 'loss'];
   }
   function markOutcomes(r) {
     for (const h of r.hands) { const el = totals[h.index]; if (el.hidden) continue; const [text, cls] = outcomeOf(h, r); setTotal(el, text); el.classList.remove('active', 'bust'); el.classList.add(cls); }
-    if (!totals.dealer.hidden && r.dealerTotal > 21) setTotal(totals.dealer, `${r.dealerTotal} · BUST`);
+    if (!totals.dealer.hidden && r.dealerTotal > 21) setTotal(totals.dealer, `${r.dealerTotal} · Bust`);
   }
   function headline(r) {
     if (r.bonus) return `Lightning ×${r.bonus.m}`;
@@ -693,7 +693,7 @@ export function createBlackjack(ctx) {
     const can = { hit: table.canHit, stand: table.canStand, double: table.canDouble, split: table.canSplit };
     for (const [act, free] of [['double', playing && table.canDouble && table.freeDouble], ['split', playing && table.canSplit && table.freeSplit]]) {   // FREE only on a move you can make
       const b = $(`#act-${act}`); let tag = b.querySelector('.free-tag');
-      if (!tag) { tag = document.createElement('span'); tag.className = 'free-tag'; tag.textContent = 'FREE'; b.append(tag); }
+      if (!tag) { tag = document.createElement('span'); tag.className = 'free-tag'; tag.textContent = 'Free'; b.append(tag); }
       tag.hidden = !free;
     }
     for (const act of ['hit', 'stand', 'double', 'split']) {

@@ -198,7 +198,8 @@ export function createPortal(S, { body, floorY, showcase, canvas = S.renderer.do
     cue('portal-open', { gain: .38, rate: 1.12 }); let landed = false;
     await run(IN, t => {
       // the vortex clears as you come to it; the ring, passed, is above you and out of the picture
-      const u = ring.material.uniforms; u.uT.value = clock(); u.uFill.value = 1 - ease.inOut(span(t, 170, 470));   // (full through the salon's crossfade: app.mjs) ring.visible = t < 700;
+      const u = ring.material.uniforms; u.uT.value = clock(); u.uFill.value = 1 - ease.inOut(span(t, 170, 470));   // (full through the salon's crossfade: app.mjs)
+      ring.visible = t < 700;
       // the table falls ahead of you, unwinding the turn it went down with; then the squash, and back
       if (t < LAND) { const s = t / 1000; dy = Math.max(0, drop - .5 * g * s * s); pose(m.foot, dy, -.95 * (1 - ease.out(t / LAND))); }
       else {

@@ -13,14 +13,16 @@ const ICON = {
   lightning: '<svg viewBox="0 0 24 24"><path d="M13.6 2 4.8 13.4h6l-1.4 8.6 8.8-11.4h-6L13.6 2Z"/></svg>',
   roulette: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" class="ring"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v6.3M12 15.2v6.3M2.5 12h6.3M15.2 12h6.3" class="cut"/></svg>',
 };
-// Every table in the salon, as the rail shows them.
+// Every table in the salon, as the rail shows them. Each line fits a desktop card; a phone's card breaks it in two, and
+// a phrase that reads as one (keep) stays together on the second line.
+const keep = s => s.replaceAll(' ', '\u00a0');
 const TABLES = [
-  { game: 'blackjack', mode: 'classic', kicker: 'Blackjack', name: 'Classic', line: 'The house game, with six side bets.', stat: 'Pays 3:2' },
-  { game: 'blackjack', mode: 'freebet', kicker: 'Blackjack', name: 'Free Bet', line: 'Free doubles and splits. A dealer 22 pushes.', stat: 'Free doubles' },
-  { game: 'blackjack', mode: 'lightning', kicker: 'Blackjack', name: 'Lightning', line: 'Multipliers up to 25× on your next win', stat: 'Up to 25×' },
-  { game: 'roulette', mode: 'roulette', kicker: 'Roulette', name: 'European', line: 'Single zero, the racetrack and every call bet.', stat: 'Pays 35:1' },
-  { game: 'roulette', mode: 'roulette-lightning', kicker: 'Roulette', name: 'Lightning', line: 'Lightning strikes up to five numbers at 50× to 500×.', stat: 'Up to 500×', icon: 'lightning' },
-  { game: 'roulette', mode: 'roulette-mega', kicker: 'Roulette', name: 'Mega Lightning', line: 'Chain lightning and a double strike up to 2,000×.', stat: 'Up to 2,000×', icon: 'lightning' },
+  { game: 'blackjack', mode: 'classic', kicker: 'Blackjack', name: 'Classic', line: `The house game, with ${keep('six side bets')}`, stat: 'Pays 3:2' },
+  { game: 'blackjack', mode: 'freebet', kicker: 'Blackjack', name: 'Free Bet', line: `Free doubles and splits; ${keep('dealer 22 pushes')}`, stat: 'Up to four hands' },
+  { game: 'blackjack', mode: 'lightning', kicker: 'Blackjack', name: 'Lightning', line: `Multipliers up to 25× ${keep('on your next win')}`, stat: 'Up to 25×' },
+  { game: 'roulette', mode: 'roulette', kicker: 'Roulette', name: 'European', line: `Single zero, the racetrack ${keep('and every call bet')}`, stat: 'Pays 35:1' },
+  { game: 'roulette', mode: 'roulette-lightning', kicker: 'Roulette', name: 'Lightning', line: `One to five numbers struck ${keep('at 50× to 500×')}`, stat: 'Up to 500×', icon: 'lightning' },
+  { game: 'roulette', mode: 'roulette-mega', kicker: 'Roulette', name: 'Mega Lightning', line: `Chain lightning and ${keep('a double strike')} ${keep('to 2,000×')}`, stat: 'Up to 2,000×', icon: 'lightning' },
 ];
 
 const gameOf = mode => TABLES.find(t => t.mode === mode)?.game ?? 'blackjack';
@@ -106,7 +108,8 @@ export const lobby = {
   },
   close() {
     if (!isOpen) return; isOpen = false; unsub?.(); document.body.classList.remove('in-lobby'); setInert(false); noteText = '';
-    root.classList.add('leaving'); setTimeout(() => { if (!isOpen) { root.hidden = true; root.classList.remove('leaving'); showNote(); } }, 760);   // (the last piece out: app.css, .lobby.leaving) onChange(false);
+    root.classList.add('leaving'); setTimeout(() => { if (!isOpen) { root.hidden = true; root.classList.remove('leaving'); showNote(); } }, 760);   // (760: the last piece out, app.css .lobby.leaving)
+    onChange(false);
   },
   // a line over the rail: what happened while you were away, or why a tap did nothing
   note(text) { noteText = text ?? ''; showNote(); },
