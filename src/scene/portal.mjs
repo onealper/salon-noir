@@ -58,6 +58,11 @@ void main() { vec2 p = vUv * 2.0 - 1.0; float r = length(p);
   float ring = exp(-pow((r - uR) * 7.0, 2.0)) * (1.0 - r);
   gl_FragColor = vec4(vec3(0.62, 0.55, 0.44), ring * uI * 0.55); }`;
 
+// A shake's offset at `t` seconds, for an amplitude of 1: smooth noise, two sines a side at frequencies that never line
+// up (7 to 14 Hz: four frames or more to a swing at 60 a second), so the picture knocks and rings rather than jumping to a new
+// random place each frame, which reads as a buzz. `ph`: four random phases, new for each shake. (As in roulette/rlightning.mjs.)
+const quake = (t, ph) => [Math.sin(t * 47 + ph[0]) * .65 + Math.sin(t * 83 + ph[1]) * .35, Math.sin(t * 53 + ph[2]) * .65 + Math.sin(t * 89 + ph[3]) * .35];
+const phases = () => [0, 1, 2, 3].map(() => Math.random() * Math.PI * 2);
 export function createPortal(S, { body, floorY, showcase, canvas = S.renderer.domElement, audio = null, reduced = () => false }) {
   const { THREE, scene, camera, tickers, requestRender } = S;
   const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z), UP = V(0, 1, 0);
@@ -115,8 +120,8 @@ export function createPortal(S, { body, floorY, showcase, canvas = S.renderer.do
   const lookQ = (q, eye, at, up, raw = false) => { q.setFromRotationMatrix(m4.lookAt(eye, at, up)); return raw ? q : q.multiply(lens()); };
   const place = (eye, q) => { camera.position.copy(eye); camera.quaternion.copy(q); camera.updateMatrixWorld(); };
   function shake(px, ms = 340) {
-    if (reduced()) return; const t0 = performance.now();
-    const f = () => { const k = (performance.now() - t0) / ms; if (k >= 1) { canvas.style.translate = ''; return; } const a = px * (1 - k) ** 2; canvas.style.translate = `${((Math.random() - .5) * 2 * a).toFixed(1)}px ${((Math.random() - .5) * 2 * a).toFixed(1)}px`; requestAnimationFrame(f); };
+    if (reduced()) return; const t0 = performance.now(), ph = phases();
+    const f = () => { const k = (performance.now() - t0) / ms; if (k >= 1) { canvas.style.translate = ''; return; } const a = px * (1 - k) ** 2, [x, y] = quake(k * ms / 1000, ph); canvas.style.translate = `${(x * a).toFixed(1)}px ${(y * a).toFixed(1)}px`; requestAnimationFrame(f); };
     requestAnimationFrame(f);
   }
   // the ring at (x, y, z), its radii across x and z (an ellipse round a long table, a circle when it fills the picture)

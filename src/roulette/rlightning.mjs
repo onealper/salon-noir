@@ -17,6 +17,11 @@
 // Reduce motion, stamp the numbers with no bolts, flashes or shake. Everything here is light or decal: nothing casts a
 // shadow, so its frames redraw no shadow map.
 import { MODES } from './lightning.mjs';
+// A shake's offset at `t` seconds, for an amplitude of 1: smooth noise, two sines a side at frequencies that never line
+// up (7 to 14 Hz: four frames or more to a swing at 60 a second), so the picture knocks and rings rather than jumping to a new
+// random place each frame, which reads as a buzz. `ph`: four random phases, new for each shake. (As in scene/portal.mjs.)
+const quake = (t, ph) => [Math.sin(t * 47 + ph[0]) * .65 + Math.sin(t * 83 + ph[1]) * .35, Math.sin(t * 53 + ph[2]) * .65 + Math.sin(t * 89 + ph[3]) * .35];
+const phases = () => [0, 1, 2, 3].map(() => Math.random() * Math.PI * 2);
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -118,8 +123,8 @@ export function createLightning(S, { audio, settings, stage, canvas, pan = () =>
   }
   let shakeJob = 0;
   function shake(px, ms = 320) {
-    if (quiet() || soft()) return; const id = ++shakeJob;
-    run(ms, k => { if (id !== shakeJob) return; const a = px * (1 - k) ** 2; canvas.style.translate = `${(rnd(-1, 1) * a).toFixed(1)}px ${(rnd(-1, 1) * a).toFixed(1)}px`; }, () => { if (id === shakeJob) canvas.style.translate = ''; });
+    if (quiet() || soft()) return; const id = ++shakeJob, ph = phases();
+    run(ms, k => { if (id !== shakeJob) return; const a = px * (1 - k) ** 2, [x, y] = quake(k * ms / 1000, ph); canvas.style.translate = `${(x * a).toFixed(1)}px ${(y * a).toFixed(1)}px`; }, () => { if (id === shakeJob) canvas.style.translate = ''; });
   }
   const hold = ms => { if (!quiet() && !soft()) S.hold?.(ms); };
   // the strike's own light on the table, in the room only at the Lightning tables (a light at zero still costs a pass)

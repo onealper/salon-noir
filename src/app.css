@@ -128,7 +128,7 @@ body.reduced .splash .keylight { animation: none; }
   background: rgba(12, 12, 13, .9); border: 1px solid var(--line-2); box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
   translate: -50% -100%; transform: translateY(10px); opacity: 0; transition: transform var(--duration-very-slow) var(--spring-pop), opacity var(--duration-quick) ease-out; }
 .banner.show { transform: none; opacity: 1; }
-.banner.leave { transform: translateY(-10px); opacity: 0; transition: transform var(--duration-medium) ease-in, opacity var(--duration-medium) ease-in; }
+.banner.leave { transform: translateY(-10px); opacity: 0; transition: transform var(--duration-medium) var(--ease-smooth-out), opacity var(--duration-quick) var(--ease-smooth-out); }   /* (going as it is waved off: at once, not easing in) */
 .banner .rb-label { font: 500 12px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--muted); }
 .banner em { font: 800 22px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ivory); }
 .banner.up { border-color: rgba(201, 164, 92, .6); } .banner.up em { color: var(--gold-hi); } .banner.up .rb-label { color: var(--gold); }
@@ -330,7 +330,7 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
 .sheet[open] { animation: sheet-in .5s var(--spring-sheet); }
 .sheet[open]::backdrop { animation: fade-in var(--duration-quick, 150ms) ease-out; }
 .sheet.closing { animation: sheet-out var(--duration-medium) var(--ease-smooth-out) forwards; }   /* (app.mjs closes it when this ends) */
-.sheet.closing::backdrop { animation: fade-out var(--duration-medium, 350ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)) forwards; }
+.sheet.closing::backdrop { animation: fade-out var(--duration-medium, 350ms) var(--ease-smooth-out, var(--ease-smooth-out)) forwards; }
 @keyframes sheet-in { from { opacity: 0; transform: translateY(18px) scale(.97); } }
 @keyframes sheet-out { to { opacity: 0; transform: translateY(12px) scale(.98); } }
 @keyframes fade-in { from { opacity: 0; } }
@@ -624,6 +624,8 @@ body.reduced .ins-ace { animation: none; }
 .lobby.leaving .lobby-word { scale: 1.05; }
 .lobby-head > .lobby-word { --out: 40ms; } .lobby-head > .lobby-tag { --out: 90ms; } .lobby-head > .lobby-balance { --out: 60ms; }
 .lobby.leaving .rail > *, .lobby.leaving .tcards > .tcard { opacity: 0; translate: 0 26px; filter: blur(6px); }
+/* a table card: the exit's four, and its own (the lift as it is picked, settling on a spring; its edge and light) */
+.tcards > .tcard { transition: opacity .42s var(--out) cubic-bezier(.55, 0, .8, .3), translate .5s var(--out) cubic-bezier(.55, 0, .8, .3), scale .5s var(--out) cubic-bezier(.55, 0, .8, .3), filter .5s var(--out) cubic-bezier(.55, 0, .8, .3), transform .6s var(--spring-settle), border-color var(--duration-fast) var(--ease-smooth-out), box-shadow var(--duration-fast) var(--ease-smooth-out), background var(--duration-fast) var(--ease-smooth-out); }
 .lobby.leaving .tcards { opacity: 1; translate: none; filter: none; }   /* (the row stays; its cards go one by one) */
 .lobby.leaving .tcard.arrive { animation: none; }   /* (an arrival held at its end would take the exit's values without a tween) */
 .lobby.leaving .lobby-mark { filter: drop-shadow(0 6px 16px rgba(201, 164, 92, .3)) blur(6px); }
@@ -676,7 +678,7 @@ body.reduced .tcard.arrive { animation: none; } body.reduced .games-pill { trans
   min-height: 132px; padding: 16px 16px 14px; border-radius: 18px; color: var(--ivory);
   background: linear-gradient(180deg, rgba(24, 22, 20, .78), rgba(10, 10, 11, .86)); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   border: 1px solid rgba(201, 164, 92, .22); box-shadow: 0 18px 40px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 236, 200, .05);
-  transition: transform .6s var(--spring-settle), border-color var(--duration-fast) var(--ease-smooth-out), box-shadow var(--duration-fast) var(--ease-smooth-out), background var(--duration-fast) var(--ease-smooth-out); cursor: pointer; overflow: hidden; }
+  cursor: pointer; overflow: hidden; }   /* (its transitions are with the lobby's exit, above: that rule outranks this one) */
 @media (hover: hover) and (pointer: fine) { .tcard:hover { transform: translateY(-3px); } }
 .tcard::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--acc), transparent); opacity: .5; transition: opacity var(--duration-medium); }
 @media (hover: hover) and (pointer: fine) { .tcard:hover { border-color: color-mix(in srgb, var(--acc) 45%, transparent); } }
@@ -852,7 +854,7 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 .l-badge small { font: 600 11px/1 Inter, system-ui, sans-serif; color: var(--muted); }
 @keyframes badge-hum { 50% { box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 28px rgba(255, 205, 110, .7), 0 6px 14px rgba(0, 0, 0, .5); } }
 .l-badge.arrive { animation: badge-in .7s cubic-bezier(.2, 1.5, .4, 1), badge-hum 2.4s .7s ease-in-out 3; }
-@keyframes badge-in { 0% { scale: 0; opacity: 0; } 50% { scale: 1.35; opacity: 1; } 100% { scale: 1; } }
+@keyframes badge-in { 0% { scale: .5; opacity: 0; } 50% { scale: 1.35; opacity: 1; } 100% { scale: 1; } }
 /* the payoff gathering on it: the badge crackles, swelling, before the bolt drives in */
 .l-badge.gather { animation: badge-gather .11s steps(2) infinite; scale: 1.18; transition: scale var(--duration-fast); }
 @keyframes badge-gather { 50% { box-shadow: 0 0 0 2px rgba(8, 8, 9, .8), 0 0 34px rgba(255, 225, 150, .95), 0 0 12px rgba(170, 190, 255, .9); filter: brightness(1.5); } }
