@@ -62,6 +62,8 @@ node --test                     # from the repo root, Node 22+; about 6 s, no in
 | `?nosw` | Runs without the service worker and removes it from that browser |
 | `?perf=aa0,pr1.25,shadow0,phys0,env0,fps30,sc0` | Takes one cost out of every frame, to measure it (testing session only; `PERF` in `scene/stage.mjs`): no multisampling, at most n pixels per CSS pixel, no shadow maps, clearcoat and sheen materials drawn plain, no environment light, 30 frames a second, and shader logs unread, as players have it |
 
+A browser check that injects a script of its own (axe-core, a probe's helper) runs into the page's Content-Security-Policy, which refuses inline scripts it doesn't know: in Playwright, open the context with `bypassCSP: true`. `page.evaluate` is not affected.
+
 ## Tech
 
 - **3D:** three.js (vendored in `src/vendor/three.module.min.js`), custom scenes in centimetres
