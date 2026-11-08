@@ -363,6 +363,7 @@ export function createBlackjack(ctx) {
   const choice = () => new Promise(r => { decide = r; refreshControls(); });
   function choose(what) { if (!decide) return; const d = decide; decide = null; d(what); }
   for (const b of $$('[data-act]')) b.addEventListener('click', () => choose(b.dataset.act));
+  $('#nextHand').addEventListener('click', () => { if (mode === 'result') choose('next'); });
 
   function stageNext(how = 'settle') { view.stageFront(table.cards.at(-1), how); syncShoe(); renderPeek(); }
   function syncShoe() { view.syncShoe(Math.max(0, table.remaining - 1), CUT_AT - table.dealt); renderShoe(); }
@@ -663,6 +664,7 @@ export function createBlackjack(ctx) {
     const g = m === 'betting' ? 'bet' : 'play';           // the dock's buttons rise in when its set changes
     if (g !== group) { group = g; ui.enter(g === 'bet' ? [...$$('.betting .tray-toggle, .betting .tile'), ...chipRow.children, ...$$('.bet-actions .pill')] : $$('.decisions .act'), { gap: 28 }); }
     if (m === 'insurance') ui.enter($$('#insurance .ins-copy, #insurance .ins-btn'), { y: 12, gap: 60 });
+    if (m === 'result') ui.enter($$('#resultRow .pill'), { y: 10 });
   }
   function reasonFor(act) {
     if (table.phase !== 'player') return '';
@@ -710,6 +712,7 @@ export function createBlackjack(ctx) {
       const h = table.activeHand, t = total(h.cards), up = table.upCard;
       hint(`${table.isSplit ? `Hand ${table.activeIndex + 1}: ` : ''}${handLabel(h.cards, { bj: false })} against the dealer's ${up.rank === 'A' ? 'ace' : total([up]).value}.`);
     }
+    $('#resultRow').hidden = mode !== 'result';   // (the result's one button: on to the next hand)
     const ins = $('#insurance');
     ins.hidden = mode !== 'insurance';
     if (mode === 'insurance') {

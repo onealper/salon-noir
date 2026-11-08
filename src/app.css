@@ -322,7 +322,7 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 .act:disabled kbd { opacity: .3; }
 body:not([data-mode="player"]) .act .why { visibility: hidden; }
 /* while cards move the buttons dim, but only after a moment, so quick hits do not flicker them */
-body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[data-mode="insurance"] .decisions { opacity: .55; transition: opacity var(--duration-medium) var(--duration-medium); }
+body[data-mode="busy"] .decisions, body[data-mode="insurance"] .decisions { opacity: .55; transition: opacity var(--duration-medium) var(--duration-medium); }
 
 /* ---- settings sheet ------------------------------------------------------------------------------ */
 .sheet { width: min(520px, calc(100vw - 24px)); max-height: min(86vh, 760px); max-height: min(86dvh, 760px); overscroll-behavior: contain; padding: 0; border-radius: 20px; border: 1px solid var(--line-2); background: var(--panel); color: var(--ivory); box-shadow: 0 30px 90px rgba(0, 0, 0, .6); overflow: auto; }
@@ -443,7 +443,7 @@ body[data-mode="busy"] .decisions, body[data-mode="result"] .decisions, body[dat
   .dock { display: flex; flex-direction: column; justify-content: safe center; }
   .dock > * { max-width: 100%; }   /* (centred items take their content's width: never more than the column's) */
   .betting, .decisions { transform: none !important; }
-  body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions { display: none; }
+  body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions, body[data-mode="result"] .decisions { display: none; }
   .tray.open .tiles { position: static; padding: 0; background: none; border: 0; box-shadow: none; animation: none; }
   .top { grid-column: 1 / -1; padding-top: 5px; padding-bottom: 5px; gap: 12px; }
   .brand small, .shoe-words { display: none; }
@@ -571,6 +571,10 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), bod
 
 /* ---- insurance: asked in the dock, where the decisions live, so the table stays in full view ----------- */
 .insure { grid-area: dock; display: flex; align-items: center; justify-content: center; gap: 22px; flex-wrap: wrap; padding: 4px 0; }
+/* the result: one way on, where four buttons stood greyed (the table can be tapped too, or Space pressed) */
+.result-row { grid-area: dock; display: flex; align-items: center; justify-content: center; padding: 4px 0; }
+.next-hand { min-width: 200px; justify-content: center; }
+body[data-mode="result"] .decisions { opacity: 0 !important; visibility: hidden; pointer-events: none; }
 body[data-mode="insurance"] .decisions { opacity: 0 !important; visibility: hidden; pointer-events: none; }
 .ins-copy { display: flex; align-items: center; gap: 14px; text-align: left; max-width: 380px; }
 .ins-ace { flex: none; position: relative; width: 40px; height: 56px; border-radius: 6px; background: linear-gradient(#fbf7ee, #e9e1cf); color: #1a1a1c; box-shadow: 0 0 0 2px var(--gold), 0 6px 16px rgba(0, 0, 0, .5); display: grid; place-items: center; }
