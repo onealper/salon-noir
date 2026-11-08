@@ -230,7 +230,7 @@ for (const t of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) ad
 document.addEventListener('click', e => { const b = e.target.closest('.pill, .icon, .act, .tray-toggle'); if (b && !b.disabled && b.id !== 'settings' && b.id !== 'closeSettings' && b.id !== 'trayToggle' && b.id !== 'sound' && !b.classList.contains('seat')) uiSound('click'); }, true);
 // Every control answers the finger. The Deal button and the four decisions are push buttons with a
 // real bottom edge (CSS); the rest squash on a spring.
-ui.pressable(document, '.pill:not(.deal):not(.hold-btn), .tile, .tray-toggle, .icon'); ui.pressable(document, '.chip', { depth: .88 });
+ui.pressable(document, '.pill:not(.deal):not(.hold-btn), .tile, .tray-toggle, .icon, .game, .st-n'); ui.pressable(document, '.chip', { depth: .88 });   // (on pointerdown: a phone's only answer before the tap lands; iOS gives :active its due through stage.mjs's touchstart listener)
 ui.setReduced(settings.reduced); kit.setReduced(settings.reduced);
 
 // ---- rooms: the blackjack table and the roulette wheel share the salon, its bar, wallet and sound -------------------------------------

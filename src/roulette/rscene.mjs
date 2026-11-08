@@ -825,7 +825,12 @@ export function createRouletteScene(canvas, { quality = detectQuality(), dressin
     framedAs = [w, h, top, bottom]; st.size(w, h);
     const vh = Math.max(1, h - top - bottom); view.w = w; view.h = vh; view.top = top;
     camera.clearViewOffset(); camera.aspect = w / vh;
-    const orient = w / vh < .9 ? 'port' : 'land';
+    // the table seen from its foot, lengthwise ('port'), unless the picture is more than 1.7 times as wide as it is tall:
+    // measured, the foot gives the boxes about twice the room on any screen held upright, even an iPhone in Safari, where
+    // the picture between the bar and the dock comes out wider than tall (390 x 348: 18 x 33 px boxes against 15 x 11 from
+    // the long side; an iPad upright 41 x 77 against 31 x 24); a phone on its side (1.88) and a Mac (2.2 and up) see the
+    // table from its long side
+    const orient = w / vh < 1.7 ? 'port' : 'land';
     if (!L || L.orient !== orient) buildTable(orient);
     computeShots();
     view.h = h; if (top > 0 || bottom > 0) camera.setViewOffset(w, vh, 0, -top, w, h);
