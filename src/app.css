@@ -423,8 +423,9 @@ body[data-mode="busy"] .decisions, body[data-mode="insurance"] .decisions { opac
   /* the tray, the chip row (with head room for the chip in hand) and the action row, over the home indicator */
   :root { --dock-h: calc(178px + max(0px, env(safe-area-inset-bottom) - 12px)); }
   .tray { min-height: 30px; }
-  /* on a phone the tray opens as a sheet over the rail, so the dock keeps its height */
-  .tray.open .tiles { display: grid; grid-template-columns: repeat(3, 1fr); position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); padding: 8px; border-radius: 16px; background: rgba(16, 16, 18, .96); border: 1px solid var(--line-2); box-shadow: 0 -10px 30px rgba(0, 0, 0, .45); animation: sheet .22s var(--ease); }
+  /* on a phone the tray opens over the rail, so the dock keeps its height: held upright, as one row that scrolls
+     sideways just above the dock, clear of the betting circles (a sheet of three rows covered them all) */
+  .tray.open .tiles { display: flex; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); padding: 8px; border-radius: 16px; background: rgba(16, 16, 18, .96); border: 1px solid var(--line-2); box-shadow: 0 -10px 30px rgba(0, 0, 0, .45); animation: sheet .22s var(--ease); }
   @keyframes sheet { from { opacity: 0; transform: translateY(8px); } }
   .tile { min-width: 0; padding: 6px 8px 5px; }
   .tile b { font-size: 12px; white-space: normal; }
@@ -553,10 +554,20 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), bod
 .tile.on .ico { background: var(--gold); color: #141416; border-color: var(--gold); }
 @media (hover: hover) and (pointer: fine) { .tile:hover:not(:disabled) { border-color: rgba(255, 255, 255, .2); } }
 @media (max-width: 760px) {
-  .tray.open .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 10px; }
+  .tray.open .tiles { gap: 6px; }
+  .tray.open .tiles::-webkit-scrollbar { display: none; }
   .tile { min-width: 0; padding: 7px 10px 7px 7px; }
   .tile b { font-size: 13px; white-space: nowrap; }
   .tile small { font-size: 12px; }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .tray.open .tiles { display: flex; }   /* (over the grid the wider screens lay the tiles in) */
+  .tray.open .tile { flex: 0 0 auto; min-width: 140px; scroll-snap-align: start; }   /* (the third shows in part: there is more) */
+}
+@media (max-width: 760px) and (orientation: portrait) and (max-height: 600px) {   /* a short screen (an iPhone SE in Safari): a slimmer row */
+  .tray.open .tiles { padding: 5px; bottom: calc(100% + 4px); }
+  .tray.open .tile { min-width: 112px; grid-template-columns: minmax(0, 1fr); padding: 5px 9px 4px; } .tray.open .tile .ico { display: none; }
+  .tray.open .tile b, .tray.open .tile small { grid-column: 1; }
 }
 @media (orientation: landscape) and (max-height: 520px) {
   .tray.open .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }

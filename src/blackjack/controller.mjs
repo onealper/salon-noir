@@ -265,9 +265,10 @@ export function createBlackjack(ctx) {
     tray.classList.add('closing'); trayClosing = setTimeout(() => tray.classList.remove('open', 'closing'), 190);
   }
   $('#trayToggle').onclick = () => setTray(!settings.tray); setTray(settings.tray);
-  // On an upright phone the tray is a sheet over the rail: a tap anywhere else puts it away.
+  // On an upright phone the tray is a row over the rail: a tap anywhere else puts it away, except on a bet circle or a
+  // chip (it leaves them in view, to bet the main and the sides together).
   const sheetMode = matchMedia('(max-width: 760px) and (orientation: portrait)');
-  addEventListener('pointerdown', e => { if (sheetMode.matches && settings.tray && !e.target.closest('#tray')) setTray(false); }, true);
+  addEventListener('pointerdown', e => { if (sheetMode.matches && settings.tray && !e.target.closest('#tray, .spot, .chips')) setTray(false); }, true);
 
   let busy = false;       // an animation sequence owns the table
   const serial = serialQueue(fail);   // betting gestures run in order
