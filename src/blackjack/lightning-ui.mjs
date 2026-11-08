@@ -58,8 +58,8 @@ export function createLightningUI({ world, table, view, motion, audio, feel, set
     const p = table.pending, on = !!p && table.mode === 'lightning' && inView();   // the current runs only where you can see it
     storm.pull(table.mode === 'lightning' ? p?.m : 0);   // the storm comes as near as the multiplier is big
     badge.hidden = !on; L.charge(on); if (!on) return;   // live current runs round your circle while the multiplier waits
-    badge.querySelector('b').textContent = `×${p.m}`; badge.querySelector('small').textContent = `pays ${fmt(p.fee * p.m)}`;
-    badge.title = `Lightning ×${p.m}: your next win pays ${fmt(p.fee * p.m)} more`;
+    badge.querySelector('b').textContent = `${p.m}×`; badge.querySelector('small').textContent = `pays ${fmt(p.fee * p.m)}`;
+    badge.title = `Lightning ${p.m}×: your next win pays ${fmt(p.fee * p.m)} more`;
     layout(); if (fresh) { badge.classList.remove('arrive'); void badge.offsetWidth; badge.classList.add('arrive'); }
   }
   function layout() { if (!badge.hidden) { const m = LAYOUT.spots.main, q = world.project(m.x, 0, m.z + m.r); badge.style.left = `${Math.round(q.x)}px`; badge.style.top = `${Math.round(q.y)}px`; } }   // left/top, not transform: the arrive and spent animations scale the badge
@@ -185,6 +185,6 @@ export function createLightningUI({ world, table, view, motion, audio, feel, set
       await motion.wait(260);
     }
     renderBadge(!!r.earned);
-    if (r.bonus) { const li = document.createElement('li'); li.className = 'win bolt'; li.innerHTML = '<b>Lightning</b><span></span><em></em>'; li.querySelector('span').textContent = `×${r.bonus.m} on your ${fmt(r.bonus.amount / r.bonus.m)} fee`; li.querySelector('em').textContent = `+${fmt(r.bonus.amount)}`; document.querySelector('#feed').append(li); requestAnimationFrame(() => requestAnimationFrame(() => li.classList.add('show'))); }
+    if (r.bonus) { const li = document.createElement('li'); li.className = 'win bolt'; li.innerHTML = '<b>Lightning</b><span></span><em></em>'; li.querySelector('span').textContent = `${r.bonus.m}× on your ${fmt(r.bonus.amount / r.bonus.m)} fee`; li.querySelector('em').textContent = `+${fmt(r.bonus.amount)}`; document.querySelector('#feed').append(li); requestAnimationFrame(() => requestAnimationFrame(() => li.classList.add('show'))); }
   }
 }

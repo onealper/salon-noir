@@ -29,7 +29,7 @@ export function handSaid(cards, up, label = 'Your hand') {
 export function handEntry(t, r) {
   return { game: 'blackjack', table: t.mode, net: r.net, dealer: t.dealer.map(cardText), dealerTotal: r.dealerTotal, dealerBJ: !!r.dealerBlackjack,
     hands: r.hands.map(h => ({ cards: (t.hands[h.index]?.cards ?? []).map(cardText), total: h.total, kind: h.kind, even: !!h.evenMoney, net: h.net })),
-    sides: r.sides.map(s => ({ name: s.name, line: s.payout > 0 ? `${s.line} · ${s.pays}:1` : s.seen ?? sideLine(s, t), net: s.net })),
+    sides: r.sides.map(s => ({ name: s.name, line: s.payout > 0 ? `${s.line} · ${fmt(s.pays)}:1` : s.seen ?? sideLine(s, t), net: s.net })),
     fee: r.fee || 0, bonus: r.bonus ? { m: r.bonus.m, amount: r.bonus.amount } : null, earned: r.earned?.m ?? 0 };
 }
 

@@ -236,7 +236,7 @@ export class Table {
     this.revealHole();
     const d = total(this.dealer).value, db = natural(this.dealer);
     this.settleSide('buster', db ? null : buster(this.dealer, d, this.playerNatural), db ? 'Dealer blackjack' : d > 21 ? 'No win' : 'Dealer did not bust');
-    if (this.mode === 'freebet') this.settleSide('dpairs', db ? null : push22(d), db ? 'Dealer blackjack' : `Dealer ${d > 21 ? 'bust on' : 'stood on'} ${d}`);
+    if (this.mode === 'freebet') this.settleSide('dpairs', db ? null : push22(d), db ? 'Dealer blackjack' : `Dealer ${d > 21 ? 'busted with' : 'stood on'} ${d}`);
     const push22s = this.mode === 'freebet' && d === 22;
     const hands = this.hands.map((h, index) => {
       const p = total(h.cards).value, pb = !h.fromSplit && natural(h.cards), stake = h.stake;

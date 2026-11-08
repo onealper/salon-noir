@@ -117,7 +117,7 @@ export async function createRoulette(ctx) {
     if (Number.isFinite(s.net)) ctx.record?.({ n: s.n, color: colorName(s.n), staked: s.staked, back: s.back, partage: s.partage, net: s.net, ...(s.table ? { table: s.table, x: s.x } : {}) });   // in Last hands too
     ctx.notice?.(`Your last spin landed on ${s.n} ${colorName(s.n)}: ${s.back > 0 ? `${fmt(s.back)} was paid to your balance` : 'no win'}.`, t => { welcome = t; });
   });
-  let mode = 'betting', dir = store.get('rouletteDir', 1), phi = Math.random() * Math.PI * 2, rotorW = 1, restIdx = null, hurry = 1, active = false;
+  let mode = 'betting', dir = store.get('rouletteDir', 1) === -1 ? -1 : 1, phi = Math.random() * Math.PI * 2, rotorW = 1, restIdx = null, hurry = 1, active = false;
   const reduced = () => settings.reduced, fast = () => settings.fast;
   // chips can still go down: before the spin, and while the ball runs until the croupier calls "No more bets" ('running')
   const open = () => mode === 'betting' || mode === 'running';
@@ -888,7 +888,7 @@ export async function createRoulette(ctx) {
   function showWin(r, n) {
     const c = colorOf(n), net = r.net; winEl.className = `r-win ${net > 0 ? 'up' : net < 0 ? 'down' : 'even'} ${c}${net > 0 && bigWin(r) ? ' gild' : ''}`;
     winEl.querySelector('small').textContent = `${n} ${colorName(n)}`;
-    const head = net > 0 ? (r.x ? `Lightning ${r.x}×` : bigWin(r) ? 'Big win' : 'You win') : !r.back ? 'No win' : !net ? 'Stakes back' : r.partage === r.back ? 'La partage' : 'Some bets won';
+    const head = net > 0 ? (r.x ? `Lightning ${fmt(r.x)}×` : bigWin(r) ? 'Big win' : 'You win') : !r.back ? 'No win' : !net ? 'Stakes back' : r.partage === r.back ? 'La partage' : 'Some bets won';
     winEl.querySelector('b').textContent = head;
     winEl.querySelector('.r-gross').textContent = r.back ? `Staked ${fmt(r.staked)} · paid back ${fmt(r.back)}${r.partage && r.partage < r.back ? `, ${fmt(r.partage)} of it by la partage` : ''}` : '';
     const em = winEl.querySelector('em'), final = net ? signed(net) : 'Even'; em.textContent = net ? (net > 0 ? '+0' : '−0') : final;

@@ -31,8 +31,10 @@ const dev = params.has('test') || (() => { try { return localStorage.getItem('sa
 const random = dev && Number.isFinite(seed) && params.has('seed') ? mulberry(seed) : Math.random;
 
 // ---- settings --------------------------------------------------------------------------------------
+// a level from the store, 0 to 1 (a hand-edited or corrupted one would reach the audio graph as NaN, which throws there)
+const level = (v, d) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d;
 const settings = {
-  sound: store.get('sound', true), volume: store.get('volume', .8),
+  sound: store.get('sound', true), volume: level(store.get('volume', .8), .8),
   reduced: store.get('reduced', matchMedia('(prefers-reduced-motion: reduce)').matches),
   // Lightning's flashes: full, soft (one gentle peak a strike, under 3 a second) or off. Soft for anyone whose
   // device asks for less motion, so the photosensitive guest never sees the full storm by default.
@@ -42,7 +44,7 @@ const settings = {
   replays: ['mine', 'all', 'off'].includes(store.get('replays')) ? store.get('replays') : 'mine',   // roulette's slow-motion replays
   mode: MODES[store.get('mode', 'classic')] ? store.get('mode', 'classic') : 'classic',
   cheat: store.get('cheat', false),   // blackjack's cheat mode: the next card and the hole card shown, a higher main bet
-  mix: { table: 1, voice: 1, music: .7, ...store.get('mix', {}) },
+  mix: (m => ({ table: level(m?.table, 1), voice: level(m?.voice, 1), music: level(m?.music, .7) }))(store.get('mix', {})),
 };
 const rooms = { blackjack: null, roulette: null };   // each built the first time you go there (see the rooms section)
 let room = null;   // which room of the salon you are in
@@ -186,14 +188,14 @@ function entryHTML(e) {
   const tone = e.net > 0 ? 'up' : e.net < 0 ? 'down' : 'even', when = new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), line = (a, b, cls = '') => `<li class="${cls}"><span>${esc(a)}</span>${b == null ? '' : `<em>${esc(b)}</em>`}</li>`;
   let rows = '';
   if (e.game === 'roulette') {
-    rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '') + (e.x ? line(`Lightning ${e.x}× on your straight up`, null, 'side bolt') : '');
+    rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '') + (e.x ? line(`Lightning ${fmt(e.x)}× on your straight up`, null, 'side bolt') : '');
   } else {
     rows = line(`Dealer ${(e.dealer ?? []).join(' ')} · ${e.dealerBJ ? 'Blackjack' : e.dealerTotal}`, null)
       + (e.hands ?? []).map((h, i) => line(`${e.hands.length > 1 ? `Hand ${i + 1}` : 'You'} ${h.cards.join(' ')} · ${h.total} · ${ENDED(h)}`, signed(h.net))).join('')
       + (e.sides ?? []).map(s => line(`${s.name}: ${s.line}`, signed(s.net), 'side')).join('')
-      + (e.fee ? line('Lightning fee', signed(-e.fee), 'side') : '') + (e.bonus ? line(`Lightning ×${e.bonus.m} on your fee`, signed(e.bonus.amount), 'side bolt') : '') + (e.earned ? line(`Earned ×${e.earned} for your next win`, null, 'side bolt') : '');
+      + (e.fee ? line('Lightning fee', signed(-e.fee), 'side') : '') + (e.bonus ? line(`Lightning ${e.bonus.m}× on your fee`, signed(e.bonus.amount), 'side bolt') : '') + (e.earned ? line(`Earned ${e.earned}× for your next win`, null, 'side bolt') : '');
   }
-  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b>${e.cheat ? '<span class="bk-cheat">Cheat mode</span>' : ''}<time>${when}</time><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
+  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b><span class="bk-meta">${e.cheat ? 'Cheat mode · ' : ''}<time>${when}</time></span><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
 }
 function renderBook() {
   const v = ledger.visit, net = v.rounds ? signed(v.net) : '±0', tone = v.net > 0 ? 'up' : v.net < 0 ? 'down' : '';
@@ -201,7 +203,9 @@ function renderBook() {
   $('#bookNet').setAttribute('aria-label', `This visit ${net}`);
   if (!$('#settingsDialog').open) return;   // the list is drawn when the sheet opens
   const list = ledger.rounds;
-  $('#book').innerHTML = list.length ? list.map(entryHTML).join('') : '<li class="none">Your hands and spins at every table are kept here, the newest first.</li>';
+  // (an entry this version can't read, from an older one or a hand-edited store, is left out rather than take the list with it)
+  const html = list.map(e => { try { return entryHTML(e); } catch { return ''; } }).join('');
+  $('#book').innerHTML = html || '<li class="none">Your hands and spins at every table are kept here, the newest first.</li>';
 }
 ledger.subscribe(renderBook); renderBook();
 

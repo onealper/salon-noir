@@ -71,20 +71,23 @@ export function badge(target, text) {
 }
 
 // ---- Kinetics: Accordion Spring -------------------------------------------------------------------------------
-// Sections open on a long soft curve; the chevron overshoots as it turns.
+// Sections open on a long soft curve; the chevron overshoots as it turns. A tap mid-way turns it back from where it
+// stands (the height it has reached), never from the end; with reduced motion it opens and shuts at once, the
+// chevron turned all the same. (The height is the one thing to animate here: the sheet's own content, laid out.)
 export function accordion(details) {
   const summary = details.querySelector('summary'), body = details.querySelector('.acc-body');
+  let anim = null;
   summary.addEventListener('click', e => {
     e.preventDefault();
-    if (reduced) { details.open = !details.open; return; }
-    if (!details.open) {
-      details.open = true; details.classList.add('open');
-      const h = body.scrollHeight; body.animate([{ maxHeight: '0px' }, { maxHeight: `${h}px` }], { duration: 450, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
-    } else {
-      details.classList.remove('open');
-      const h = body.scrollHeight, a = body.animate([{ maxHeight: `${h}px` }, { maxHeight: '0px' }], { duration: 300, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
-      a.onfinish = () => { details.open = false; };
-    }
+    const opening = !details.classList.contains('open');
+    const from = anim ? getComputedStyle(body).maxHeight : null;   // (read before the running one is let go)
+    anim?.cancel(); anim = null;
+    details.classList.toggle('open', opening);
+    if (opening) details.open = true;
+    if (reduced) { details.open = opening; return; }
+    const h = body.scrollHeight, start = from && from !== 'none' ? from : opening ? '0px' : `${h}px`;
+    const a = anim = body.animate([{ maxHeight: start }, { maxHeight: opening ? `${h}px` : '0px' }], { duration: opening ? 450 : 300, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    a.onfinish = () => { if (anim === a) anim = null; if (!opening) details.open = false; };
   });
   if (details.open) details.classList.add('open');
 }

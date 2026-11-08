@@ -113,7 +113,15 @@ export function createBlackjack(ctx) {
   // A hand total rolls to its new value and gives a small bump, so a changed count is noticed.
   function setTotal(el, text) { const v = el.firstChild; if (el.dataset.v === text) return; const first = !el.dataset.v; el.dataset.v = text; ui.morph(v, text); if (!first) ui.bump(v, 1.2); else ui.pop(v, { from: .5 }); }
 
-  function place(el, x, y, z, dx = 0, dy = 0) { const p = world.project(x, y, z); el.style.transform = `translate(${Math.round(p.x + dx)}px, ${Math.round(p.y + dy)}px)`; el.classList.toggle('offscreen', p.behind || p.x < -40 || p.x > stage.clientWidth + 40); return p; }
+  // A player's tag and totals are shown whole or not at all: one at the very edge of the picture slides in rather than
+  // be cut (a full table on an upright phone), one whose seat is off the picture is hidden.
+  function place(el, x, y, z, dx = 0, dy = 0) {
+    const p = world.project(x, y, z), W = stage.clientWidth, whole = el.classList.contains('seat-tag') || el.classList.contains('hand-total');
+    let px = p.x + dx;
+    if (whole && (px < 90 || px > W - 90)) { const half = el.offsetWidth / 2 + 4; if (half < W / 2) px = Math.min(Math.max(px, half), W - half); }
+    el.style.transform = `translate(${Math.round(px)}px, ${Math.round(p.y + dy)}px)`;
+    el.classList.toggle('offscreen', p.behind || (whole ? p.x < 0 || p.x > W : p.x < -40 || p.x > W + 40)); return p;
+  }
   let lightningLayout = () => {};   // set once the Lightning module exists
   function layoutOverlay() {
     for (const id of SPOTS) {
@@ -356,7 +364,7 @@ export function createBlackjack(ctx) {
     const target = k == null || k === YOU ? 0 : (() => { const a = view.anchor(seatKey(k), 1); return world.panFor(a.pos.x, a.pos.z); })();
     const from = world.pan; if (Math.abs(target - from) < .01) return;
     const job = motion.tween(Math.min(900, 380 + Math.abs(target - from) * 900), t => { world.setPan(from + (target - from) * t); layoutOverlay(); }, ease.inOut);
-    panning = job; await job; if (panning === job) panning = null;
+    panning = job; await job; if (panning === job) { panning = null; clearOfSeats(); }   // (the side-bet results keep clear of the tags where they now stand)
   }
 
   // ---- the round ------------------------------------------------------------------------------------------------------
@@ -398,9 +406,33 @@ export function createBlackjack(ctx) {
   function feed(r) {
     const li = document.createElement('li'); li.className = r.payout > 0 ? 'win' : 'loss';
     li.innerHTML = `<b></b><span></span><em></em>`;
-    li.querySelector('b').textContent = r.name; li.querySelector('span').textContent = r.payout > 0 ? `${r.line} · ${r.pays}:1` : (r.seen ??= sideLine(r, table)); li.querySelector('em').textContent = signed(r.net);
+    li.querySelector('b').textContent = r.name; li.querySelector('span').textContent = r.payout > 0 ? `${r.line}\u00a0·\u00a0${fmt(r.pays)}:1` : (r.seen ??= sideLine(r, table)); li.querySelector('em').textContent = signed(r.net); li.dataset.net = r.net;
     $('#feed').append(li); requestAnimationFrame(() => requestAnimationFrame(() => li.classList.add('show')));   // toast overshoot
   }
+  // On a phone the losses stand down while the hand plays (app.css); at the result they come back as one line, all of
+  // them together ("4 side bets lost  −400"), or the one itself, and the wins keep the room. Every line is in Last hands.
+  function sumLosses() {
+    const f = $('#feed'), lost = [...f.children].filter(li => li.classList.contains('loss'));
+    if (lost.length === 1) lost[0].classList.add('keep');
+    if (lost.length < 2) return;
+    const li = document.createElement('li'); li.className = 'lost'; li.innerHTML = '<span></span><em></em>';
+    li.querySelector('span').textContent = `${lost.length} side bets lost`; li.querySelector('em').textContent = signed(lost.reduce((s, x) => s + +x.dataset.net, 0));
+    f.append(li); requestAnimationFrame(() => requestAnimationFrame(() => li.classList.add('show')));
+  }
+  // On a wide screen the results stand at the left of the felt, by first base: at a full table they start under that
+  // player's name and total rather than over them (where there is the room; centred otherwise, as they stand).
+  const feedEl = $('#feed');
+  function clearOfSeats() {
+    feedEl.style.removeProperty('top'); feedEl.style.removeProperty('translate');
+    if (!feedEl.childElementCount || feedEl.parentElement !== stage || matchMedia('(max-width: 760px)').matches) return;
+    const fr = feedEl.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    const over = [...overlay.children].filter(e => !e.hidden && e.matches('.seat-tag:not(.away):not(.offscreen), .hand-total:not(.offscreen)')).map(e => e.getBoundingClientRect())
+      .filter(b => b.width && b.left < fr.right && b.right > fr.left && b.top < fr.bottom + 6 && b.bottom > fr.top - 6);
+    if (!over.length) return;
+    const top = Math.max(...over.map(b => b.bottom)) + 10 - sr.top;
+    if (top + fr.height <= stage.clientHeight - ctx.BLUR_RISE) { feedEl.style.top = `${top}px`; feedEl.style.translate = 'none'; }   // (clear of the dock's blur)
+  }
+  new ResizeObserver(clearOfSeats).observe(feedEl); addEventListener('resize', clearOfSeats);
   function clearFeed() { $('#feed').replaceChildren(); $('#feed').classList.remove('stay'); for (const id of SPOTS) spotEls[id].querySelector('.amount').classList.remove('won'); }
 
   async function round() {   // actions.deal() has claimed the table (busy)
@@ -549,7 +581,7 @@ export function createBlackjack(ctx) {
     ].sort((a, b) => a.x - b.x);
     await Promise.all(jobs.map((j, i) => motion.wait(i * 160).then(j.run)));
     for (const { el, r: sr } of seatResults) { if (el.hidden) continue; const [text, cls] = outcomeOf({ ...sr, index: 0 }, r); el.dataset.out = '1'; setTotal(el, text); el.classList.remove('bust'); el.classList.add(cls); }
-    for (const { seat, p } of others()) if (p.flash) { const f = p.flash; p.flash = null; if (f.bonus) say(seat, `⚡ +${fmt(f.bonus.amount)}`, 2400); else if (f.earned) say(seat, `⚡ ×${f.earned.m}`, 2400); }
+    for (const { seat, p } of others()) if (p.flash) { const f = p.flash; p.flash = null; if (f.bonus) say(seat, `⚡ +${fmt(f.bonus.amount)}`, 2400); else if (f.earned) say(seat, `⚡ ${f.earned.m}×`, 2400); }
     renderSeats();
     renderBalance(r.bonus?.amount ?? 0); renderTotals(); markOutcomes(r);
     if (table.mode === 'lightning') await lightning.settle(r);   // (the multiplier was saved with the balance as the hand settled)
@@ -557,7 +589,7 @@ export function createBlackjack(ctx) {
     celebrate(r);
     showBanner(r);
     // with side bets settled this hand the result (and their lines) waits for your tap or Space; otherwise it moves on
-    const sides = r.sides.length > 0; $('#feed').classList.toggle('stay', sides);
+    const sides = r.sides.length > 0; $('#feed').classList.toggle('stay', sides); if (sides) sumLosses();
     setMode('result');
     await (sides ? choice() : Promise.race([new Promise(r => setTimeout(r, settings.fast ? 1400 : 2100)), choice()])); decide = null;
     await clearUp();
@@ -620,7 +652,7 @@ export function createBlackjack(ctx) {
     if (!totals.dealer.hidden && r.dealerTotal > 21) setTotal(totals.dealer, `${r.dealerTotal} · Bust`);
   }
   function headline(r) {
-    if (r.bonus) return `Lightning ×${r.bonus.m}`;
+    if (r.bonus) return `Lightning ${r.bonus.m}×`;
     if (r.blackjack) return 'Blackjack';
     if (r.dealer22 && r.hands.every(h => h.kind === 'push')) return 'Dealer 22 · Push';
     if (r.hands.length > 1) return r.title.replace(/\.$/, '');
@@ -646,7 +678,7 @@ export function createBlackjack(ctx) {
     b.hidden = false; requestAnimationFrame(() => requestAnimationFrame(() => b.classList.add('show')));
     if (r.net) setTimeout(() => ui.morph(em, final), 160);   // the amount rolls up to the result
     tellHand(`${b.firstChild.textContent}. ${r.net > 0 ? `Up ${fmt(r.net)}` : r.net < 0 ? `Down ${fmt(-r.net)}` : 'Even'}.`);   // (said once, whole: the banner is not a live region, its figure counts up)
-    hint('Tap the table or press Space for the next hand.');
+    hint('');   // (the dock's Next hand button says how on, with its key; a tap on the table does it too)
   }
   function hideBanner() {
     clearTimeout(bannerTimer);

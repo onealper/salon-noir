@@ -29,3 +29,16 @@ test('the service worker precaches every code module', () => {
     assert.deepEqual(m[1].match(/'[^']+'/g).map(s => s.slice(1, -1)).sort(), modules(dir).sort(), `sw.js CODE for src/${dir}`);
   }
 });
+
+test('the page\'s security policy keeps it to its own files, and allows exactly its inline scripts', async () => {
+  const { createHash } = await import('node:crypto');
+  const html = read('index.html'), csp = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1];
+  assert.ok(csp, 'index.html has a Content-Security-Policy meta tag');
+  const rule = name => csp.split(';').map(d => d.trim().split(/\s+/)).find(([n]) => n === name)?.slice(1) ?? [];
+  assert.deepEqual(rule('default-src'), ["'self'"]);
+  for (const d of ['script-src', 'connect-src', 'img-src', 'media-src', 'font-src', 'worker-src']) assert.ok(rule(d).every(v => !/^(https?:|\*|'unsafe-eval')/.test(v)), `${d} reaches outside: ${rule(d)}`);
+  const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`);
+  const allowed = rule('script-src').filter(v => v.startsWith("'sha256-"));
+  assert.deepEqual(allowed.sort(), inline.sort(), 'the hashes in script-src are the inline scripts as they stand: an edited inline script needs its new hash there');
+  assert.equal(/\son[a-z]+="/i.test(html), false, 'no inline event handlers (the policy refuses them)');
+});
