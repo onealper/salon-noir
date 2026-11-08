@@ -15,6 +15,14 @@ export function sideLine(r, t) {
   return r.line;
 }
 export function cardText(c) { return `${c.rank}${c.suit}`; }
+// A card as a screen reader should hear it ("10 of spades", "ace of hearts"), and a hand as a list of them.
+const RANK_WORD = { A: 'ace', J: 'jack', Q: 'queen', K: 'king' }, SUIT_WORD = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
+export const cardWords = c => `${RANK_WORD[c.rank] ?? c.rank} of ${SUIT_WORD[c.suit] ?? c.suit}`;
+export function handWords(cards) { const w = cards.map(cardWords); return w.length > 1 ? `${w.slice(0, -1).join(', ')} and ${w.at(-1)}` : w[0] ?? ''; }
+// What your hand is, said at each of your decisions: "Your hand: 10 of spades and 6 of hearts, 16. Dealer shows 9 of clubs."
+export function handSaid(cards, up, label = 'Your hand') {
+  const t = total(cards); return `${label}: ${handWords(cards)}, ${t.soft && t.value < 21 ? 'soft ' : ''}${t.value}${t.value > 21 ? ', bust' : ''}.${up ? ` Dealer shows ${cardWords(up)}.` : ''}`;
+}
 
 // A hand is written down whole as it is paid: the cards and totals, how each hand of yours ended (up to four after
 // resplits), every side bet with what it saw, the Lightning fee and bonus, and the net.

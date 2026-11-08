@@ -18,7 +18,7 @@ import { fmt, signed } from '../core/format.mjs';
 import { chipRack, hintLine, rebetSlot, goLabel, serialQueue, betKey } from '../core/bet-controls.mjs';
 import { TRAY_ICONS } from './tray-icons.mjs';
 import { createLightningUI } from './lightning-ui.mjs';
-import { handEntry, sideLine } from './book.mjs';
+import { handEntry, sideLine, handSaid } from './book.mjs';
 import * as ui from '../ui-motion.mjs';
 import * as kit from '../ui-kit.mjs';
 
@@ -370,6 +370,11 @@ export function createBlackjack(ctx) {
   // The first card of every new shoe is burned: dealt face down straight to the discard holder.
   async function burn() { const c = table.draw(); await view.burn(c, stageNext); }
   // `more`: another card follows at once (the round's first deal), so the next is drawn while this one goes across
+  // What a screen reader hears of the cards (#bjSay): your hand and the dealer's up card as the deal ends and at each of
+  // your decisions, then the dealer's hand as it stands and the result (said once, whole: the banner's figure counts up and
+  // is not a live region). The same words are not said twice in a round.
+  const bjSay = $('#bjSay'); let told = '';
+  const tellHand = t => { if (t === told) return; told = t; if (bjSay.textContent !== t) { bjSay.textContent = t; return; } bjSay.textContent = ''; setTimeout(() => { bjSay.textContent = t; }, 60); };
   async function dealTo(owner, i, card, { more, ...opts } = {}) {
     const follow = more && table.cards.length > 1 ? table.cards.at(-2) : null;   // the card behind the next
     await view.deal(card, { owner, i, next: stageNext, follow, ...opts });
@@ -399,7 +404,7 @@ export function createBlackjack(ctx) {
   async function round() {   // actions.deal() has claimed the table (busy)
     const why = table.phase === 'betting' ? dealRefusal() : 'The cards are already out.';   // asked again: the balance can move while the chips land
     if (why) { busy = false; setMode('betting'); hint(why); flash(spotEls.main); feel.tap('refuse'); feel.cue('error'); return; }
-    busy = true; setMode('busy');
+    busy = true; setMode('busy'); told = '';
     try {
       await othersReady();
       if (!table.start()) {   // (the balance moved, or cheat mode went off as the cards were about to go out: the bet comes down to the limit)
@@ -421,7 +426,7 @@ export function createBlackjack(ctx) {
         }
         await dealTo('dealer', i, table.initialCard('dealer'), { hidden: i === 1, more: i === 0 });
       }
-      let res = table.finishDeal();
+      let res = table.finishDeal(); tellHand(handSaid(table.hands[0].cards, table.upCard));
       await Promise.all([settleSides(), settleSeatSides(inPlay)]);
       const up = table.upCard;
       if (res === 'insurance') {
@@ -458,7 +463,7 @@ export function createBlackjack(ctx) {
 
   async function playerTurn() {
     while (table.phase === 'player') {
-      const h = table.activeIndex; setMode('player'); renderTotals();
+      const h = table.activeIndex; setMode('player'); renderTotals(); tellHand(handSaid(table.hands[h].cards, table.upCard, table.hands.length > 1 ? `Hand ${h + 1}` : 'Your hand'));
       const act = await choice(); setMode('busy'); hint('');
       if (act === 'hit' && table.canHit) { const card = table.hit(); await dealTo(h, table.hands[h].cards.length - 1, card); }
       else if (act === 'stand' && table.canStand) { table.stand(); }
@@ -523,7 +528,7 @@ export function createBlackjack(ctx) {
     table.revealHole(); renderTotals(); await settleSides();
     while (!table.dealerDone) { await motion.wait(180); const c = table.dealerHit(); if (!c) break; await dealTo('dealer', table.dealer.length - 1, c); }
     // the dealer calls the hand: blackjack, a bust, or the total they stand on (when anyone was still in)
-    const d = total(table.dealer).value;
+    const d = total(table.dealer).value; tellHand(handSaid(table.dealer, null, 'Dealer'));
     if (natural(table.dealer)) dealerSays('dealer-blackjack', { prio: 3 });
     else if (d === 22 && table.mode === 'freebet') dealerSays('push', { prio: 3 });   // 22 pushes at this table
     else if (d > 21) dealerSays('dealer-busts', { prio: 3 });
@@ -638,6 +643,7 @@ export function createBlackjack(ctx) {
     em.textContent = r.net ? (r.net > 0 ? '+0' : '−0') : final;
     b.hidden = false; requestAnimationFrame(() => requestAnimationFrame(() => b.classList.add('show')));
     if (r.net) setTimeout(() => ui.morph(em, final), 160);   // the amount rolls up to the result
+    tellHand(`${b.firstChild.textContent}. ${r.net > 0 ? `Up ${fmt(r.net)}` : r.net < 0 ? `Down ${fmt(-r.net)}` : 'Even'}.`);   // (said once, whole: the banner is not a live region, its figure counts up)
     hint('Tap the table or press Space for the next hand.');
   }
   function hideBanner() {
@@ -788,7 +794,7 @@ export function createBlackjack(ctx) {
   function renderRules() {
     const m = MODES[table.mode];
     const terms = b => { const t = [...new Set(b.table.map(([l]) => l))].filter(l => TERMS[l]); return t.length || NOTES[b.id] ? `<ul class="terms">${NOTES[b.id] ? `<li>${NOTES[b.id]}</li>` : ''}${t.map(l => `<li><b>${l}</b>: ${TERMS[l]}</li>`).join('')}</ul>` : ''; };
-    $('#paytables').innerHTML = slotBets().map(b => `<section id="pt-${b.id}"><h4>${b.name}</h4><p>${b.cards}. Limit ${LIMITS.side[0]}–${LIMITS.side[1]}. House edge ${b.edge.toFixed(1)}%: over time it returns ${(100 - b.edge).toFixed(1)}% of what is bet.</p><table>${b.table.map(([l, p]) => `<tr><td>${l}</td><td>${p}:1</td></tr>`).join('')}</table>${terms(b)}</section>`).join('');
+    $('#paytables').innerHTML = slotBets().map(b => `<section id="pt-${b.id}"><h3>${b.name}</h3><p>${b.cards}. Limit ${LIMITS.side[0]}–${LIMITS.side[1]}. House edge ${b.edge.toFixed(1)}%: over time it returns ${(100 - b.edge).toFixed(1)}% of what is bet.</p><table>${b.table.map(([l, p]) => `<tr><td>${l}</td><td>${p}:1</td></tr>`).join('')}</table>${terms(b)}</section>`).join('');
     const [least, most] = table.limitOf('main'); $('#mainLimit').textContent = `Main bet ${fmt(least)}–${fmt(most)}${settings.cheat ? ' (cheat mode)' : ''}.`;
     $('#modeRulesTitle').hidden = $('#modeRules').hidden = !m.rules.length;
     $('#modeRulesTitle').textContent = `At the ${m.name} table`; $('#modeRules').innerHTML = m.rules.map(r => `<li>${r}</li>`).join('');

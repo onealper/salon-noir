@@ -16,6 +16,7 @@ import { createPortal } from '../scene/portal.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
 import { plan, at, GEO } from './physics.mjs';
 import { replayShot } from './replay.mjs';
+import { spotAt, placeOf, move, edge, speak } from './rkeys.mjs';
 import { createRoller, prepareRoller } from './roller.mjs';
 import { Motion, ease, chipToss } from '../scene/pieces.mjs';
 import { CHIP_H, CHIP_R } from '../scene/textures.mjs';
@@ -62,12 +63,14 @@ export async function createRoulette(ctx) {
       <div class="r-bubble" hidden><b></b><small></small></div>
       <div class="r-replay" hidden>Replay</div>
       <div class="r-slam" aria-hidden="true" hidden><small>Lightning strikes</small><b></b><em></em></div>
-      <div class="r-win" role="status" hidden><small></small><b></b><em></em><span class="r-gross"></span></div>
+      <div class="r-win" hidden><small></small><b></b><em></em><span class="r-gross"></span></div>
       <div class="r-tags"></div>
       <div class="r-sheet" id="rRaceSheet" role="region" hidden aria-label="Racetrack"></div>
       <div class="r-sheet" id="rStatsSheet" role="region" hidden aria-label="Statistics"></div>
     </div>
     <p class="hint r-hint" aria-live="polite"><span></span></p>
+    <div class="r-keys" tabindex="0" role="application" aria-roledescription="betting layout" aria-label="Betting layout" aria-describedby="rKeysHow"><span class="sr-only" id="rKeysHow">Arrow keys move over the boxes, Enter places a chip, Delete takes one off.</span></div>
+    <p class="sr-only" id="rKeysNow" aria-live="polite"></p><p class="sr-only" id="rSaid" aria-live="polite"></p>
     <div class="r-fade" aria-hidden="true"></div>`;
   const dock = document.createElement('footer'); dock.className = 'dock rdock';
   dock.innerHTML = `<div class="dock-blur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
@@ -300,6 +303,37 @@ export async function createRoulette(ctx) {
   function refuse(why, el = $('#rChips')) { clearResult(); hint(why); sheetSay(why); kit.shake(el); audio.cue('ui-click-2', { bus: 'ui', rate: .7, gain: .6 }); feel.tap('refuse'); }
   // (a chip comes off only before the spin: once the ball goes, bets may be added until the call but not taken back)
   function takeOff(id) { if (mode !== 'betting' || !table.takeFrom(id)) return; refresh(); serial(syncYours); hover(null); }
+
+  // ---- the layout for the keyboard (rkeys.mjs) ----------------------------------------------------------------------------------
+  // One stop in the Tab order: the arrow keys move a cursor over the boxes as the layout lies on the screen, lit as a
+  // pointer lights them (hover), with the loupe over the box; Enter or Space places a chip of the value in hand, Delete
+  // takes one off. A screen reader hears each box as the cursor reaches it, and the bet on it as it changes.
+  const keysEl = stage.querySelector('.r-keys'), keysNow = stage.querySelector('#rKeysNow'), said = stage.querySelector('#rSaid');
+  let cursor = placeOf('n17');
+  const tell = (el, text) => { if (el.textContent !== text) { el.textContent = text; return; } el.textContent = ''; setTimeout(() => { el.textContent = text; }, 60); };   // (the same words again: cleared first, so they are said again)
+  const betOn = id => { const v = table.on(id); return v ? `Your bet ${fmt(v)}` : 'No bet'; };
+  function showCursor(words) {
+    const id = spotAt(cursor);
+    if (open() && !sheetOpen) { const p = S.project(S.anchor(id)); hover(id, [p.x, p.y]); } else hover(null);
+    tell(keysNow, words ?? `${speak(id)}. ${betOn(id)}.`);
+  }
+  keysEl.addEventListener('focus', () => showCursor());
+  keysEl.addEventListener('blur', () => { if (!press) hover(null); });
+  keysEl.addEventListener('keydown', e => {
+    const id = spotAt(cursor);
+    if (e.key.startsWith('Arrow')) { e.preventDefault(); cursor = move(cursor, e.key, S.layout.orient); showCursor(); }
+    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); cursor = edge(cursor, e.key === 'End'); showCursor(); }
+    else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); if (e.repeat) return;
+      if (!open()) { tell(keysNow, 'Bets are closed.'); return; }
+      placeOn([[id, 1]]); showCursor(`${betOn(id)} on ${SPOTS.get(id).label}.`);
+    }
+    else if (e.key === 'Delete') {
+      e.preventDefault(); if (!table.on(id)) { tell(keysNow, `No bet on ${SPOTS.get(id).label}.`); return; }
+      if (mode !== 'betting') { tell(keysNow, 'Chips stay on once the ball is spinning.'); return; }
+      takeOff(id); showCursor(`${betOn(id)} on ${SPOTS.get(id).label}.`);
+    }
+  });
   // out of chips with nothing on the layout: the gold button offers a fresh 1,000 (there is nothing left to lose)
   const broke = () => mode === 'betting' && !table.total && wallet.balance < CHIP_VALUES[0] && !!ctx.resetBalance;
   const actions = {
@@ -661,6 +695,7 @@ export async function createRoulette(ctx) {
   function showBubble(n) {
     const c = colorOf(n); bubble.className = `r-bubble ${c}`; bubble.querySelector('b').textContent = n; bubble.querySelector('small').textContent = c === 'green' ? 'Zero' : `${c === 'red' ? 'Red' : 'Black'} · ${n % 2 ? 'Odd' : 'Even'} · ${n <= 18 ? '1–18' : '19–36'}`;
     ui.shown(bubble); bubble.dataset.on = '1'; placeBubble(true); ui.pop(bubble, { from: .4 });
+    tell(said, `${n}, ${c === 'green' ? 'zero' : `${c}, ${n % 2 ? 'odd' : 'even'}, ${n <= 18 ? '1 to 18' : '19 to 36'}`}.`);
   }
   function hideBubble() { ui.leave(bubble, { scale: .85, ms: 160 }); delete bubble.dataset.on; }
   // over the ball, or under it where the bar or the recent numbers would cover it (`measure`: the room is taken again)
@@ -853,11 +888,14 @@ export async function createRoulette(ctx) {
   function showWin(r, n) {
     const c = colorOf(n), net = r.net; winEl.className = `r-win ${net > 0 ? 'up' : net < 0 ? 'down' : 'even'} ${c}${net > 0 && bigWin(r) ? ' gild' : ''}`;
     winEl.querySelector('small').textContent = `${n} ${colorName(n)}`;
-    winEl.querySelector('b').textContent = net > 0 ? (r.x ? `Lightning ${r.x}×` : bigWin(r) ? 'Big win' : 'You win') : !r.back ? 'No win' : !net ? 'Stakes back' : r.partage === r.back ? 'La partage' : 'Some bets won';
+    const head = net > 0 ? (r.x ? `Lightning ${r.x}×` : bigWin(r) ? 'Big win' : 'You win') : !r.back ? 'No win' : !net ? 'Stakes back' : r.partage === r.back ? 'La partage' : 'Some bets won';
+    winEl.querySelector('b').textContent = head;
     winEl.querySelector('.r-gross').textContent = r.back ? `Staked ${fmt(r.staked)} · paid back ${fmt(r.back)}${r.partage && r.partage < r.back ? `, ${fmt(r.partage)} of it by la partage` : ''}` : '';
     const em = winEl.querySelector('em'), final = net ? signed(net) : 'Even'; em.textContent = net ? (net > 0 ? '+0' : '−0') : final;
     winEl.hidden = false; void winEl.offsetWidth; winEl.classList.add('show');   // a reflow, then the transition
     if (net) setTimeout(() => ui.morph(em, final), 380);   // the amount rolls up to the result, once the pill has come in
+    // said once, whole (the pill is not a live region: its figure counts up, and each step would be read out)
+    tell(said, `${head}. ${net > 0 ? `Up ${fmt(net)}` : net < 0 ? `Down ${fmt(-net)}` : 'Even'}.${r.back ? ` Staked ${fmt(r.staked)}, paid back ${fmt(r.back)}.` : ''}`);
   }
   function clearResult() {
     if (lastLit != null) { lastLit = null; if (!hovered && mode === 'betting') S.highlight([]); }
@@ -1015,7 +1053,7 @@ export async function createRoulette(ctx) {
   // (the salon's key handler has already let a control you moved to with the keyboard keep Space and Enter)
   function onKey(e) {
     const k = e.key.toLowerCase(), go = k === ' ' || k === 'enter';
-    if (go && e.target.matches?.('.r-sheet:not([hidden]) :focus-visible')) return false;   // the keyboard is in a sheet (the track opened with T, the numbers with S, or its Close): the press acts there
+    if (go && e.target.matches?.('.r-sheet:not([hidden]) :focus-visible, .r-keys')) return false;   // the keyboard is in a sheet (the track opened with T, the numbers with S, or its Close): the press acts there
     if (k === 'escape' && sheetOpen) { closeSheets(); return true; }
     if (mode !== 'betting' && (go || mode !== 'running')) { if (go) { e.preventDefault(); skip(); return true; } return false; }   // held, it keeps hurrying the ball (while bets are open the other keys still bet)
     if (e.repeat) { if (go) e.preventDefault(); return go; }   // a held key acts once: no rebet-and-spin the moment betting reopens

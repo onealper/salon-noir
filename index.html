@@ -91,7 +91,8 @@
     <div class="lightning" id="lightning" hidden aria-label="Lightning multipliers"><div class="lb-row"></div></div>
     <p class="hint" id="hint" aria-live="polite"><span></span></p>
     <ol class="feed" id="feed" aria-label="Side-bet results"></ol>
-    <div class="banner" id="banner" role="status" hidden></div>
+    <div class="banner" id="banner" hidden></div>
+    <p class="sr-only" id="bjSay" aria-live="polite"></p>
   </section>
 
   <footer class="dock">
@@ -157,7 +158,7 @@
         <li><span id="mainLimit">Main bet 1–1,000.</span> Side bets ride with a main bet and settle as soon as they are decided. While Buster is bet, the dealer always plays the hand out.</li>
         <li>If the page closes or reloads during a hand, the hand is finished for you when you come back, as live tables do for a dropped seat: you stand, insurance is declined and the dealer plays out, from a fresh shuffle of the cards not yet seen.</li>
       </ul>
-      <h4 class="mode-rules-title" id="modeRulesTitle" hidden></h4>
+      <h3 class="mode-rules-title" id="modeRulesTitle" hidden></h3>
       <ul class="rules" id="modeRules" hidden></ul>
     </div></details>
     <details class="bj-only"><summary>Side-bet paytables<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body"><div id="paytables" class="paytables"></div></div></details>
@@ -182,7 +183,7 @@
       </ul>
     </div></details>
     <details><summary>Keys<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
-      <dl class="keys"><dt><kbd>1</kbd>–<kbd>7</kbd></dt><dd>Pick a chip</dd><dt class="bj-only"><kbd>Space</kbd></dt><dd class="bj-only">Deal, then on to the next hand</dd><dt class="rl-only"><kbd>Space</kbd></dt><dd class="rl-only">Spin, then hurry the ball</dd><dt><kbd>U</kbd><kbd>C</kbd><kbd>R</kbd><kbd>X</kbd></dt><dd>Undo, clear, rebet, double bets</dd><dt class="bj-only"><kbd>H</kbd><kbd>S</kbd><kbd>D</kbd><kbd>P</kbd></dt><dd class="bj-only">Hit, stand, double, split</dd><dt class="bj-only"><kbd>Y</kbd><kbd>N</kbd></dt><dd class="bj-only">Insurance, yes or no</dd><dt class="rl-only"><kbd>T</kbd><kbd>S</kbd></dt><dd class="rl-only">Racetrack, statistics</dd><dt><kbd>Esc</kbd></dt><dd>Close these settings</dd><dt>Hold or right-click a bet</dt><dd>Take a chip off it</dd></dl>
+      <dl class="keys"><dt><kbd>1</kbd>–<kbd>7</kbd></dt><dd>Pick a chip</dd><dt class="bj-only"><kbd>Space</kbd></dt><dd class="bj-only">Deal, then on to the next hand</dd><dt class="rl-only"><kbd>Space</kbd></dt><dd class="rl-only">Spin, then hurry the ball</dd><dt><kbd>U</kbd><kbd>C</kbd><kbd>R</kbd><kbd>X</kbd></dt><dd>Undo, clear, rebet, double bets</dd><dt class="bj-only"><kbd>H</kbd><kbd>S</kbd><kbd>D</kbd><kbd>P</kbd></dt><dd class="bj-only">Hit, stand, double, split</dd><dt class="bj-only"><kbd>Y</kbd><kbd>N</kbd></dt><dd class="bj-only">Insurance, yes or no</dd><dt class="rl-only"><kbd>T</kbd><kbd>S</kbd></dt><dd class="rl-only">Racetrack, statistics</dd><dt class="rl-only"><kbd>Tab</kbd><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></dt><dd class="rl-only">Onto the layout, then from box to box; <kbd>Enter</kbd> bets, <kbd>Delete</kbd> takes a chip off</dd><dt><kbd>Esc</kbd></dt><dd>Close these settings</dd><dt>Hold or right-click a bet</dt><dd>Take a chip off it</dd></dl>
     </div></details>
     <details><summary>Credits<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
       <ul class="credits">
