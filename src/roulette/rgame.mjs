@@ -16,7 +16,7 @@ import { createPortal } from '../scene/portal.mjs';
 import { RouletteTable, CHIP_VALUES, SPOTS, describe, draw, colorOf, WHEEL, CALLS, callNumbers, neighbours, SECTIONS, stats, PITCH, WHEEL_INDEX } from './rules.mjs';
 import { plan, at, GEO } from './physics.mjs';
 import { replayShot } from './replay.mjs';
-import { spotAt, placeOf, move, edge, speak } from './rkeys.mjs';
+import { spotAt, placeOf, move, edge, speak, named } from './rkeys.mjs';
 import { createRoller, prepareRoller } from './roller.mjs';
 import { Motion, ease, chipToss } from '../scene/pieces.mjs';
 import { CHIP_H, CHIP_R } from '../scene/textures.mjs';
@@ -69,7 +69,7 @@ export async function createRoulette(ctx) {
       <div class="r-sheet" id="rStatsSheet" role="region" hidden aria-label="Statistics"></div>
     </div>
     <p class="hint r-hint" aria-live="polite"><span></span></p>
-    <div class="r-keys" tabindex="0" role="application" aria-roledescription="betting layout" aria-label="Betting layout" aria-describedby="rKeysHow"><span class="sr-only" id="rKeysHow">Arrow keys move over the boxes, Enter places a chip, Delete takes one off.</span></div>
+    <div class="r-keys" tabindex="0" role="application" aria-roledescription="betting layout" aria-label="Betting layout" aria-describedby="rKeysHow"><span class="sr-only" id="rKeysHow">Arrow keys move over the boxes; with Shift, half a box, onto the splits, corners, streets and lines between them. Enter places a chip, Delete takes one off.</span></div>
     <p class="sr-only" id="rKeysNow" aria-live="polite"></p><p class="sr-only" id="rSaid" aria-live="polite"></p>
     <div class="r-fade" aria-hidden="true"></div>`;
   const dock = document.createElement('footer'); dock.className = 'dock rdock';
@@ -305,8 +305,8 @@ export async function createRoulette(ctx) {
   function takeOff(id) { if (mode !== 'betting' || !table.takeFrom(id)) return; refresh(); serial(syncYours); hover(null); }
 
   // ---- the layout for the keyboard (rkeys.mjs) ----------------------------------------------------------------------------------
-  // One stop in the Tab order: the arrow keys move a cursor over the boxes as the layout lies on the screen, lit as a
-  // pointer lights them (hover), with the loupe over the box; Enter or Space places a chip of the value in hand, Delete
+  // One stop in the Tab order: the arrow keys move a cursor over the boxes as the layout lies on the screen (with Shift,
+  // half a box, onto the inside bets), lit as a pointer lights them (hover), with the loupe over the spot; Enter or Space places a chip of the value in hand, Delete
   // takes one off. A screen reader hears each box as the cursor reaches it, and the bet on it as it changes.
   const keysEl = stage.querySelector('.r-keys'), keysNow = stage.querySelector('#rKeysNow'), said = stage.querySelector('#rSaid');
   let cursor = placeOf('n17');
@@ -321,17 +321,17 @@ export async function createRoulette(ctx) {
   keysEl.addEventListener('blur', () => { if (!press) hover(null); });
   keysEl.addEventListener('keydown', e => {
     const id = spotAt(cursor);
-    if (e.key.startsWith('Arrow')) { e.preventDefault(); cursor = move(cursor, e.key, S.layout.orient); showCursor(); }
+    if (e.key.startsWith('Arrow')) { e.preventDefault(); cursor = move(cursor, e.key, S.layout.orient, e.shiftKey); showCursor(); }   // (with Shift, half a box: the inside bets)
     else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); cursor = edge(cursor, e.key === 'End'); showCursor(); }
     else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault(); if (e.repeat) return;
       if (!open()) { tell(keysNow, 'Bets are closed.'); return; }
-      placeOn([[id, 1]]); showCursor(`${betOn(id)} on ${SPOTS.get(id).label}.`);
+      placeOn([[id, 1]]); showCursor(`${betOn(id)} on ${named(id)}.`);
     }
     else if (e.key === 'Delete') {
-      e.preventDefault(); if (!table.on(id)) { tell(keysNow, `No bet on ${SPOTS.get(id).label}.`); return; }
+      e.preventDefault(); if (!table.on(id)) { tell(keysNow, `No bet on ${named(id)}.`); return; }
       if (mode !== 'betting') { tell(keysNow, 'Chips stay on once the ball is spinning.'); return; }
-      takeOff(id); showCursor(`${betOn(id)} on ${SPOTS.get(id).label}.`);
+      takeOff(id); showCursor(`${betOn(id)} on ${named(id)}.`);
     }
   });
   // out of chips with nothing on the layout: the gold button offers a fresh 1,000 (there is nothing left to lose)
