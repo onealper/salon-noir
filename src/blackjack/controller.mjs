@@ -16,6 +16,7 @@ import { Motion, ease, createCard, createChip, createMarker } from '../scene/pie
 import { TableView, DEALERS, handKey, handX } from '../scene/view.mjs';
 import { fmt, signed } from '../core/format.mjs';
 import { chipRack, hintLine, rebetSlot, goLabel, serialQueue, betKey } from '../core/bet-controls.mjs';
+import { CHIP_VALUES, HIGH_ROLLER_CHIPS } from '../core/chips.mjs';
 import { TRAY_ICONS } from './tray-icons.mjs';
 import { createLightningUI } from './lightning-ui.mjs';
 import { handEntry, sideLine, handSaid } from './book.mjs';
@@ -248,7 +249,7 @@ export function createBlackjack(ctx) {
   const hint = hintLine($('#hint'));
 
   // ---- chips and betting controls --------------------------------------------------------------------------------
-  const chipRow = $('#chips'), rack = chipRack(chipRow, { store, uiSound });
+  const chipRow = $('#chips'), rack = chipRack(chipRow, { store, uiSound, values: settings.cheat ? HIGH_ROLLER_CHIPS : CHIP_VALUES });   // (cheat mode's high roller's rack: 1K and 5K)
 
   // ---- the side-bet tray: names and top payouts you can read on any screen ------------------------------------
   // A tile shows the bet in its slot: on the Free Bet table the Dealer Pairs slot holds Push 22.
@@ -688,7 +689,7 @@ export function createBlackjack(ctx) {
   }
 
   // ---- control state -----------------------------------------------------------------------------------------------------
-  let mode = 'betting', evenMoney = false;
+  let mode = 'betting', evenMoney = false, refocus = false;
   let group = 'bet';
   function setMode(m, even = false) {
     const was = mode; mode = m; evenMoney = even; document.body.dataset.mode = m; refreshControls();
@@ -745,8 +746,16 @@ export function createBlackjack(ctx) {
       const h = table.activeHand, t = total(h.cards), up = table.upCard;
       hint(`${table.isSplit ? `Hand ${table.activeIndex + 1}: ` : ''}${handLabel(h.cards, { bj: false })} against the dealer's ${up.rank === 'A' ? 'ace' : total([up]).value}.`);
     }
-    $('#resultRow').hidden = mode !== 'result';   // (the result's one button: on to the next hand)
-    const ins = $('#insurance');
+    // a row going out of play with the focus on it hands the focus on to the gold button once you are betting again
+    // (else it would fall back to the top of the page, and Tab would start over from the bar)
+    const row = $('#resultRow'), ins = $('#insurance');
+    for (const [el, m] of [[row, 'result'], [ins, 'insurance']]) if (mode !== m && !el.hidden && el.contains(document.activeElement)) refocus = true;
+    if (refocus && mode === 'betting') {   // (the gold button, or the chip in hand while it can't be pressed; tried until the dock has shown it)
+      refocus = false; let tries = 0;
+      const go = () => { const d = $('#deal'), t = d.disabled ? chipRow.querySelector('.chip.selected') ?? d : d; t.focus({ preventScroll: true }); if (document.activeElement !== t && ++tries < 20 && mode === 'betting') setTimeout(go, 50); };
+      requestAnimationFrame(go);
+    }
+    row.hidden = mode !== 'result';   // (the result's one button: on to the next hand)
     ins.hidden = mode !== 'insurance';
     if (mode === 'insurance') {
       ins.querySelector('h2').textContent = evenMoney ? 'Even money?' : 'Insurance?';
@@ -776,7 +785,7 @@ export function createBlackjack(ctx) {
     if (mode === 'insurance') { if (go) e.preventDefault(); if (k === 'y') choose('yes'); if (k === 'n') choose('no'); return; }
     if (mode === 'result' && go) { e.preventDefault(); choose('next'); return; }
     if (mode !== 'betting') { if (go) e.preventDefault(); return; }
-    if (go) { e.preventDefault(); actions.deal(); } else betKey(k, { ...actions, chip: rack.select });
+    if (go) { e.preventDefault(); actions.deal(); } else betKey(k, { ...actions, chip: rack.select, values: rack.values });
   }
 
   // ---- this table's part of the settings (Rules, Side-bet paytables, Dealer and Side bets show only here) -----------------------
@@ -802,11 +811,11 @@ export function createBlackjack(ctx) {
   // it on (or turned on mid-hand) is marked so in Last hands.
   let cheated = false;
   function setCheat(on, { quiet = false } = {}) {
-    table.limits = on ? HIGH_LIMITS : LIMITS;
+    table.limits = on ? HIGH_LIMITS : LIMITS; rack.setValues(on ? HIGH_ROLLER_CHIPS : CHIP_VALUES);
     if (on && table.phase !== 'betting') cheated = true;
     const trimmed = !on && toLimits();
     renderRules(); renderBets(); refreshControls(); renderPeek();
-    if (!quiet) hint(on ? `Cheat mode: the next card and the dealer's hole card are shown, and the main bet goes up to ${fmt(HIGH_LIMITS.main[1])}.`
+    if (!quiet) hint(on ? `Cheat mode: the next card and the dealer's hole card are shown, and the main bet goes up to ${fmt(HIGH_LIMITS.main[1])} (1K and 5K chips in the rack).`
       : trimmed ? `Cheat mode off. Your main bet came down to the house limit of ${fmt(LIMITS.main[1])}.` : 'Cheat mode off.');
   }
   function toLimits() {

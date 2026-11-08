@@ -1060,7 +1060,7 @@ export async function createRoulette(ctx) {
     if (go) { e.preventDefault(); actions.spin(); }
     else if (k === 't') openSheet('race', { focus: true });
     else if (k === 's') openSheet('stats', { focus: true });
-    else return betKey(k, { ...actions, chip: rack.select });   // undo, clear, rebet, ×2 and the chips, as at every table
+    else return betKey(k, { ...actions, chip: rack.select, values: rack.values });   // undo, clear, rebet, ×2 and the chips, as at every table
     return true;
   }
 

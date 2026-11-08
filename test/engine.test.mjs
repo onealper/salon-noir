@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { Table, record, playOut, total, natural, shoe, breakDown, SPOTS, SHOE_CARDS, CUT_AT, BUCKETS, LIMITS, HIGH_LIMITS } from '../src/engine.mjs';
 import { basicStrategy } from '../src/players.mjs';
 import { H, C, seeded } from './helpers.mjs';
+import { CHIP_VALUES, HIGH_ROLLER_CHIPS, nearestChip } from '../src/core/chips.mjs';
 
 const DEAL = ['player', 'dealer', 'player', 'dealer'];   // player up, dealer up, player up, dealer down
 // A table dealing `order` (player, dealer up, player, dealer hole, then every card drawn after), first four out.
@@ -285,4 +286,13 @@ test('a hand a page lost is played out on the next visit (stand, no insurance), 
   assert.ok(['dealing', 'insurance', 'player', 'splitting', 'dealer'].every(p => phases.has(p)), [...phases].join());
   for (const g of [null, {}, { phase: 'player' }, { hands: 'x', rest: [], balance: 1 }, { hands: [], cards: [], balance: 1 }, 42, 'abc']) assert.equal(playOut(g), null);
   assert.ok(n >= 4500);
+});
+
+test('cheat mode\'s rack reaches its 10,000 main bet in two chips, and a chip in hand carries to the rack in play', () => {
+  assert.equal(HIGH_ROLLER_CHIPS.length, CHIP_VALUES.length, 'seven chips either way: the dock keeps its layout');
+  assert.ok(HIGH_ROLLER_CHIPS.includes(HIGH_LIMITS.main[1] / 2) && HIGH_ROLLER_CHIPS.includes(LIMITS.main[0]), 'a 5K chip, and the minimum bet still');
+  assert.equal(nearestChip(CHIP_VALUES, 5000), 500, 'cheat mode off: a 5K in hand comes down to the largest chip below it');
+  assert.equal(nearestChip(HIGH_ROLLER_CHIPS, 50), 25);
+  assert.equal(nearestChip(HIGH_ROLLER_CHIPS, 100), 100);
+  assert.equal(nearestChip(CHIP_VALUES, .5), 1, 'nothing below: the smallest');
 });
