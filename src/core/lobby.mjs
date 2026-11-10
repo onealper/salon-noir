@@ -30,7 +30,7 @@ const gameOf = mode => TABLES.find(t => t.mode === mode)?.game ?? 'blackjack';
 // card has the room to read: three across, never two rows. Each game keeps the table last picked in it.
 const GAMES = [['blackjack', 'Blackjack'], ['roulette', 'Roulette']], last = {};
 const calm = () => document.body.classList.contains('reduced') || matchMedia('(prefers-reduced-motion: reduce)').matches;
-let root, onPlay = () => {}, onChange = () => {}, onPreview = () => {}, onRefuse = () => {}, currentMode = () => 'classic', unsub = null, isOpen = false, picked = 'classic', noteText = '';
+let root, onPlay = () => {}, onChange = () => {}, onPreview = () => {}, onRefuse = () => {}, onFame = null, currentMode = () => 'classic', unsub = null, isOpen = false, picked = 'classic', noteText = '';
 // While the lobby is up, the room behind it (bar, table, dock) is inert: no focus or taps reach the
 // controls you can't see. The wheel's stage and dock join the room later, so new arrivals are caught too.
 const behind = () => [...(root?.parentElement?.children ?? [])].filter(el => el !== root && el.tagName !== 'DIALOG');
@@ -61,8 +61,8 @@ function pick(mode, { preview = true } = {}) {
   if (preview) onPreview(mode);
 }
 export const lobby = {
-  init({ play, change, mode, preview, refuse }) {
-    onPlay = play; if (change) onChange = change; if (mode) currentMode = mode; if (preview) onPreview = preview; if (refuse) onRefuse = refuse; root = document.querySelector('#lobby');
+  init({ play, change, mode, preview, refuse, fame }) {
+    onPlay = play; if (change) onChange = change; if (mode) currentMode = mode; if (preview) onPreview = preview; if (refuse) onRefuse = refuse; if (fame) onFame = fame; root = document.querySelector('#lobby');
     root.innerHTML = `<div class="lobby-shade" aria-hidden="true"></div>
     <div class="lobby-inner">
       <header class="lobby-head">
@@ -70,6 +70,7 @@ export const lobby = {
         <h1 class="lobby-word"><small>Salon</small><span>Noir</span></h1>
         <p class="lobby-tag">Private tables · play chips only</p>
         <div class="lobby-balance wallet big"><span class="coin" aria-hidden="true"></span><div class="w-seg"><span class="k">Your chips</span><output id="lobbyBalance"></output></div></div>
+        ${onFame ? '<button class="lobby-fame" data-fame>Hall of fame<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>' : ''}
       </header>
       <section class="rail" aria-label="Tables">
         <p class="rail-title">Choose your table</p>
@@ -85,6 +86,7 @@ export const lobby = {
     new MutationObserver(() => { if (isOpen) setInert(true); }).observe(root.parentElement, { childList: true });
     new ResizeObserver(() => placePill(false)).observe(root.querySelector('.games'));
     root.addEventListener('click', e => {
+      if (e.target.closest('[data-fame]')) { onFame?.(); return; }
       const c = e.target.closest('.tcard[data-mode]'); if (c) { pick(c.dataset.mode); return; }
       const g = e.target.closest('.game'); if (g) { if (g.dataset.game !== root.dataset.game) pick(last[g.dataset.game] ?? TABLES.find(t => t.game === g.dataset.game && !t.soon).mode); return; }
       const s = e.target.closest('.tcard.soon'); if (s) { this.note('Lightning Roulette is still being built. It opens soon.'); onRefuse(s); return; }
@@ -93,10 +95,10 @@ export const lobby = {
     // arrow keys run along every table, the switch turning to the other game past one game's last; Enter takes the seat.
     // A held key acts once.
     addEventListener('keydown', e => {
-      if (!isOpen) return;
+      if (!isOpen || document.querySelector('dialog[open]')) return;   // (a sheet open over the lobby keeps its own keys)
       if (e.repeat) { if (['Enter', ' ', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault(); return; }
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const live = TABLES.filter(t => !t.soon), i = live.findIndex(t => t.mode === picked), n = live[(i + (e.key === 'ArrowRight' ? 1 : live.length - 1)) % live.length]; pick(n.mode); root.querySelector(`.tcard[data-mode="${n.mode}"]`)?.focus({ preventScroll: true }); e.preventDefault(); }
-      else if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest?.('.tcard')) { e.preventDefault(); e.stopImmediatePropagation(); this.close(); onPlay(gameOf(picked), picked); }
+      else if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest?.('.tcard, [data-fame]')) { e.preventDefault(); e.stopImmediatePropagation(); this.close(); onPlay(gameOf(picked), picked); }
     }, true);
   },
   open() {

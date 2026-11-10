@@ -8,6 +8,7 @@ import { preloadCardArt } from './scene/textures.mjs';
 import { BRAND_TITLE, mark } from './core/brand.mjs';
 import { wallet, inFlight } from './core/wallet.mjs';
 import { ledger } from './core/ledger.mjs';
+import { fame, marks } from './core/fame.mjs';
 import { lobby } from './core/lobby.mjs';
 import { fmt, signed, esc } from './core/format.mjs';
 import { mulberry } from './core/rng.mjs';
@@ -146,10 +147,10 @@ const playersSel = $('#optPlayers'); playersSel.value = String(settings.players)
 const playersNote = () => { const names = (rooms.blackjack ?? rooms.roulette)?.players() ?? []; $('#playersNote').textContent = names.length ? names.join(', ') : 'A private table'; };
 playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); rooms.blackjack?.setPlayers(); rooms.roulette?.setPlayers(); playersNote(); };
 $('#settings').addEventListener('click', playersNote);
-$('#settings').addEventListener('click', () => renderBook());   // Last hands, drawn fresh as the sheet opens
+$('#settings').addEventListener('click', () => { renderBook(); renderFame(); });   // Last hands and the hall of fame, drawn fresh as the sheet opens
 // Open the sheet at one of its sections (the side-bet tray's (i) opens it at the paytables).
 function openSheetAt(details, focus = false) {
-  if (!dlg.open) { uiSound('open'); dlg.showModal(); gfxNote(); playersNote(); renderBook(); }
+  if (!dlg.open) { uiSound('open'); dlg.showModal(); gfxNote(); playersNote(); renderBook(); renderFame(); }
   if (!details.open) { details.open = true; details.classList.add('open'); }
   requestAnimationFrame(() => { details.scrollIntoView({ block: 'start', behavior: settings.reduced ? 'auto' : 'smooth' }); if (focus) details.querySelector('summary').focus({ preventScroll: true }); });
 }
@@ -208,6 +209,57 @@ function renderBook() {
   $('#book').innerHTML = html || '<li class="none">Your hands and spins at every table are kept here, the newest first.</li>';
 }
 ledger.subscribe(renderBook); renderBook();
+
+// ---- the hall of fame (core/fame.mjs): what you have done at the tables, kept for good; in the settings, under Last hands ----
+const AT_TABLE = { blackjack: t => `${TABLE_NAME[t] ?? 'Classic'} blackjack`, roulette: t => WHEEL_NAME[t] ?? 'European roulette' };
+const day = at => { if (!at) return ''; const d = new Date(at); return d.toLocaleDateString([], { day: 'numeric', month: 'short', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
+function renderFame() {
+  const f = fame.state, all = marks(), got = all.filter(m => f.marks[m.id] != null);
+  $('#fameNote').innerHTML = f.rounds ? `Milestones <b>${got.length}/${all.length}</b>` : '';
+  if (!dlg.open) return;   // drawn when the sheet opens
+  const card = (k, v, sub = '', cls = '') => `<div class="fm-card ${cls}"><span class="k">${k}</span><b class="${v.length > 15 ? 'xl' : v.length > 13 ? 'lg' : v.length > 11 ? 'md' : ''}">${v}</b><small>${esc(sub)}</small></div>`;
+  const row = (k, v, sub = '') => `<li><span>${k}${sub ? `<small>${esc(sub)}</small>` : ''}</span><em>${v}</em></li>`;
+  const hit = n => f.numbers.includes(n) ? ' class="hit"' : '';
+  $('#fame').innerHTML = (f.rounds ? `<div class="fm-top">
+      ${card('Biggest win', f.best ? `+${fmt(f.best.net)}` : '–', f.best ? `${AT_TABLE[f.best.game]?.(f.best.table) ?? ''} · ${day(f.best.at)}` : 'Still to come', f.best ? 'best' : '')}
+      ${card('Best run', fmt(f.bestStreak), f.bestStreak === 1 ? 'win' : 'wins in a row')}
+      ${card('Highest balance', fmt(f.peak), 'chips')}
+    </div>
+    <ul class="fm-list">
+      ${row('Rounds played', fmt(f.rounds), `${fmt(f.won)} won · since ${day(f.since)}`)}
+      ${row('Blackjacks', fmt(f.blackjacks))}
+      ${row('Ten-card Charlies', fmt(f.charlies))}
+      ${row('Highest Lightning multiplier paid', f.bolt ? `${fmt(f.bolt.x)}×` : '–', f.bolt ? `${AT_TABLE[f.bolt.game]?.(f.bolt.table) ?? ''} · ${day(f.bolt.at)}` : '')}
+      ${row('Numbers won straight up', `${f.numbers.length} of 37`)}
+    </ul>
+    <div class="fm-nums" role="img" aria-label="${f.numbers.length ? `Won so far: ${f.numbers.join(', ')}` : 'None won yet'}"><span${hit(0)}>0</span><ol>${[3, 2, 1].flatMap(r => Array.from({ length: 12 }, (_, c) => { const n = c * 3 + r; return `<li${hit(n)}>${n}</li>`; })).join('')}</ol></div>`
+    : '<p class="fm-none">Your records start with your first round.</p>')
+    + `<h3 class="fm-h"><span>Milestones</span><em>${got.length} of ${all.length}</em></h3>
+    <ul class="fm-marks">${all.map(m => f.marks[m.id] != null ? `<li class="got"><span>${esc(m.name)}</span><time>${day(f.marks[m.id])}</time></li>` : `<li><span>${esc(m.name)}<small>${esc(m.hint)}</small></span></li>`).join('')}</ul>
+    <p class="fm-foot">Kept in this browser only. Hands played in cheat mode are not counted.</p>`;
+}
+fame.subscribe(renderFame); renderFame();
+// Something new in it is said in a line under the bar, one after another: a milestone always, a record once it is
+// worth the word (the first small wins are each a record).
+const fameToast = $('#fameToast'), fameLine = []; let fameTurn = null;
+function sayFame() {
+  if (fameTurn || !fameLine.length) return;
+  if (lobby.isOpen || dlg.open) { fameLine.length = 0; return; }
+  fameToast.innerHTML = `<span class="k">Hall of fame</span><b>${esc(fameLine.shift())}</b>`;
+  fameToast.style.top = `${Math.round($('.top').getBoundingClientRect().bottom) + 8}px`;
+  fameToast.classList.remove('show'); void fameToast.offsetWidth; fameToast.classList.add('show');
+  fameTurn = setTimeout(() => { fameToast.classList.remove('show'); fameToast.textContent = ''; fameTurn = null; sayFame(); }, 4200);
+}
+fame.listen(news => {
+  const f = fame.state;
+  for (const n of news) {
+    if (n.kind === 'mark') fameLine.push(n.name);
+    else if (n.id === 'best' && f.best.net >= 500 && f.rounds >= 10) fameLine.push(`Your biggest win yet, +${fmt(f.best.net)}`);
+    else if (n.id === 'streak' && f.bestStreak >= 6) fameLine.push(`${f.bestStreak} wins running, your best run`);
+    else if (n.id === 'bolt') fameLine.push(`Lightning ${fmt(f.bolt.x)}×, your highest yet`);
+  }
+  fameLine.splice(3); sayFame();
+});
 
 // ---- keyboard ------------------------------------------------------------------------------------------------------------
 // Space and Enter belong to the table (deal, next hand, spin, hurry the ball) wherever focus is, except on a
@@ -342,6 +394,7 @@ lobby.init({
     } finally { document.body.classList.remove('flying'); }
   },
   refuse: el => { kit.shake(el); feel.tap('refuse'); audio.cue('ui-click-2', { bus: 'ui', rate: .7, gain: .6 }); },
+  fame: () => openSheetAt($('#fameSec'), true),
   change: open => {
     if (audio.unlocked) roomFor(open);
     if (open) { rooms[room].toLobby(); readyOther(); } else { document.body.classList.add('flying'); rooms[room].fromLobby?.(); }

@@ -88,6 +88,7 @@
       <button class="icon" id="settings" aria-label="Settings, rules and paytables"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.6"/><circle cx="15" cy="17" r="2.6"/></svg></button>
     </div>
   </header>
+  <p class="fame-toast" id="fameToast" role="status"></p>
 
   <section class="stage" id="stage" aria-label="Blackjack table">
     <canvas id="table" aria-hidden="true"></canvas>
@@ -152,6 +153,7 @@
       <label class="opt"><span>Flashing effects<small>Lightning strikes and the wheel's ring light: soft keeps them gentle</small></span><select id="optFlash"><option value="full">Full</option><option value="soft">Soft</option><option value="off">Off</option></select></label>
     </div>
     <details class="book-sec"><summary><span>Last hands</span><span class="book-net">This visit <b id="bookNet">±0</b></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body"><ol class="book" id="book" aria-label="Your last hands and spins, newest first"></ol></div></details>
+    <details class="fame-sec" id="fameSec"><summary><span>Hall of fame</span><span class="book-net" id="fameNote"></span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body"><div class="fame" id="fame"></div></div></details>
     <details open class="bj-only"><summary>Rules<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="acc-body">
       <ul class="rules">
         <li>Eight decks. The cut card sits at 75%; the shoe is replaced after the hand it comes out in.</li>

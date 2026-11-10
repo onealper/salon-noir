@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { freshStorage, fresh } from './helpers.mjs';
 
 freshStorage();
-const { tally, raise, blank, MARKS, TABLES } = await import('../src/core/fame.mjs');
+const { tally, raise, blank, MARKS, TABLES, GAMES, marks, tables } = await import('../src/core/fame.mjs');
 const bj = (net, extra = {}) => ({ game: 'blackjack', table: 'classic', net, hands: [{ cards: ['10♠', '9♥'], total: 19, kind: net > 0 ? 'win' : net < 0 ? 'loss' : 'push', net }], ...extra });
 const names = news => news.map(n => `${n.kind}:${n.id}`);
 
@@ -53,9 +53,11 @@ test('roulette: the numbers won straight up, each once; baccarat and the wheel k
 
 test('a seat at every table, a hundred rounds, and the balance held', () => {
   const f = blank();
-  for (const t of TABLES) { const [game, table] = t.split(':'); assert.equal(f.marks.tables, undefined); tally(f, { game, table: game === 'roulette' && table === 'european' ? undefined : table, net: -1, hands: [] }); }
-  assert.ok(f.marks.tables); assert.equal(f.tables.length, 9);
-  for (let i = 0; i < 91; i++) tally(f, bj(-1)); assert.ok(f.marks.rounds100); assert.equal(f.marks.rounds1000, undefined);
+  // (a table of a game still being built is not asked for, nor its milestones)
+  assert.deepEqual(tables(), TABLES.filter(t => GAMES.includes(t.split(':')[0]))); assert.deepEqual(marks(), MARKS.filter(m => !m.game || GAMES.includes(m.game)));
+  for (const t of tables()) { const [game, table] = t.split(':'); assert.equal(f.marks.tables, undefined); tally(f, { game, table: game === 'roulette' && table === 'european' ? undefined : table, net: -1, hands: [] }); }
+  assert.ok(f.marks.tables); assert.equal(f.tables.length, tables().length); assert.equal(TABLES.length, 9);
+  while (f.rounds < 99) tally(f, bj(-1)); assert.equal(f.marks.rounds100, undefined); tally(f, bj(-1)); assert.ok(f.marks.rounds100); assert.equal(f.marks.rounds1000, undefined);
   assert.deepEqual(raise(f, 1000), []); assert.equal(f.peak, 1000); assert.deepEqual(raise(f, 900), []); assert.equal(f.peak, 1000);
   assert.deepEqual(names(raise(f, 12000)), ['mark:balance10000']); assert.deepEqual(names(raise(f, 250000)), ['mark:balance100000']); assert.equal(f.peak, 250000);
   assert.deepEqual(raise(f, NaN), []);
@@ -72,18 +74,19 @@ test('the record in the browser: kept, shared by two windows, fed by the ledger,
   freshStorage({ 'salonnoir.fame': JSON.stringify({ rounds: 'many', best: { net: -5 }, numbers: [3, 3, 99, 'x'], tables: ['nowhere', 'wheel:wheel'], marks: { bolt: 7, made: 1 }, blackjacks: 4 }) });
   const a = await fresh('../src/core/fame.mjs');
   assert.deepEqual([a.fame.state.rounds, a.fame.state.best, a.fame.state.numbers, a.fame.state.tables, a.fame.state.marks, a.fame.state.blackjacks], [0, null, [3], ['wheel:wheel'], { bolt: 7 }, 4]);
-  let told = 0; a.fame.subscribe(() => told++);
-  assert.deepEqual(names(a.fame.add(bj(75))), ['record:best']); assert.equal(told, 1); assert.equal(JSON.parse(localStorage.getItem('salonnoir.fame')).best.net, 75);
+  let told = 0; const heard = []; a.fame.subscribe(() => told++); a.fame.listen(news => heard.push(...names(news)));
+  assert.deepEqual(names(a.fame.add(bj(75), 1075)), ['record:best']); assert.equal(told, 1); assert.deepEqual(heard, ['record:best']); assert.equal(JSON.parse(localStorage.getItem('salonnoir.fame')).best.net, 75);
   // a second window: its round goes on top of the first's, and the first then adds to both
   const b = await fresh('../src/core/fame.mjs'); assert.equal(b.fame.state.rounds, 1);
   b.fame.add(bj(200)); a.fame.add(bj(10)); assert.equal(a.fame.state.rounds, 3); assert.equal(a.fame.state.best.net, 200); assert.equal(a.fame.state.streak, 3);
-  assert.deepEqual(a.fame.balance(500), []); assert.equal(a.fame.state.peak, 500); a.fame.balance(400); assert.equal(JSON.parse(localStorage.getItem('salonnoir.fame')).peak, 500);
-  a.fame.add(bj(9999, { cheat: true })); assert.equal(a.fame.state.rounds, 3);
+  assert.equal(a.fame.state.peak, 1075); a.fame.add(bj(-10), 400); assert.equal(JSON.parse(localStorage.getItem('salonnoir.fame')).peak, 1075, 'the highest balance held, not the last');
+  assert.deepEqual(names(a.fame.add(bj(1), 10001)), ['mark:balance10000']); assert.deepEqual(heard.at(-1), 'mark:balance10000');
+  assert.deepEqual(a.fame.add(bj(9999, { cheat: true }), 99999), []); assert.equal(a.fame.state.rounds, 5); assert.equal(a.fame.state.peak, 10001);
   // every round of the ledger passes through
   const { ledger } = await fresh('../src/core/ledger.mjs');
   const news = ledger.add({ game: 'roulette', n: 5, net: 3500, straight: true });
   assert.ok(names(news).includes('record:best')); assert.deepEqual(ledger.add({ game: 'roulette' }), []);
-  const c = await fresh('../src/core/fame.mjs'); assert.equal(c.fame.state.rounds, 4); assert.deepEqual(c.fame.state.numbers, [3, 5]); assert.equal(c.fame.state.best.table, 'european');
+  const c = await fresh('../src/core/fame.mjs'); assert.equal(c.fame.state.rounds, 6); assert.deepEqual(c.fame.state.numbers, [3, 5]); assert.equal(c.fame.state.best.table, 'european');
   // a store that can't be read or written: the record lives in memory
   globalThis.localStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
   const d = await fresh('../src/core/fame.mjs'); d.fame.add(bj(5)); assert.equal(d.fame.state.rounds, 1);

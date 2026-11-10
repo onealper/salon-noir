@@ -88,7 +88,7 @@ From the call, the numbers you cover light up on the wheel. The croupier rakes i
 </tr>
 <tr>
 <td valign="top"><b>Sound you can place</b><br>Cards and chips heard left or right where they land, music that ducks under the calls, a room that murmurs.</td>
-<td valign="top"><b>Last hands</b><br>Every round at every table, with its cards, side bets and net, and this visit's running total.</td>
+<td valign="top"><b>Last hands and a hall of fame</b><br>Every round at every table, with its cards, side bets and net, and this visit's running total; your biggest win, best run and milestones are kept for good.</td>
 <td valign="top"><b>Rules from real filings</b><br>Blackjack and side bets after Nevada and New Jersey, roulette after New Jersey, Singapore and Monte-Carlo.</td>
 </tr>
 </table>

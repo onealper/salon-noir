@@ -5,7 +5,9 @@
 // milestones. A hand played in cheat mode counts for nothing. `tally` and `raise` are plain data in, plain data out.
 const KEY = 'salonnoir.fame';
 
-// The milestones, in the order shown. `at`: the count that reaches it.
+// The games open in the salon: a milestone or a table of one still being built is not asked for yet.
+export const GAMES = ['blackjack', 'roulette'];
+// The milestones, in the order shown (`game`: of that game alone).
 export const MARKS = [
   { id: 'rounds100', name: 'A hundred rounds', hint: 'Play 100 rounds' },
   { id: 'rounds1000', name: 'A thousand rounds', hint: 'Play 1,000 rounds' },
@@ -19,12 +21,13 @@ export const MARKS = [
   { id: 'bolt', name: 'Struck by lightning', hint: 'Be paid a Lightning multiplier' },
   { id: 'bolt500', name: 'The big strike', hint: 'Be paid a Lightning multiplier of 500× or more' },
   { id: 'numbers', name: 'Every number', hint: 'Win a straight up on each of the 37 numbers' },
-  { id: 'tie', name: 'Égalité', hint: 'Win the Tie at baccarat' },
-  { id: 'forty', name: 'The forty', hint: 'Win on 40 at the money wheel' },
+  { id: 'tie', name: 'Égalité', hint: 'Win the Tie at baccarat', game: 'baccarat' },
+  { id: 'forty', name: 'The forty', hint: 'Win on 40 at the money wheel', game: 'wheel' },
   { id: 'tables', name: 'A seat at every table', hint: 'Play a round at each of the salon\'s tables' },
 ];
 // every table of the salon, as a round names it (game:table)
 export const TABLES = ['blackjack:classic', 'blackjack:freebet', 'blackjack:lightning', 'roulette:european', 'roulette:lightning', 'roulette:mega', 'baccarat:classic', 'baccarat:nocomm', 'wheel:wheel'];
+export const marks = () => MARKS.filter(m => !m.game || GAMES.includes(m.game)), tables = () => TABLES.filter(t => GAMES.includes(t.split(':')[0]));
 export const blank = () => ({ v: 1, since: 0, rounds: 0, won: 0, best: null, streak: 0, bestStreak: 0, peak: 0, blackjacks: 0, charlies: 0, bolt: null, numbers: [], ties: 0, pairs: 0, naturals: 0, forties: 0, spun: 0, tables: [], marks: {} });
 // what was read from the store, made whole: a field missing, of the wrong kind or hand-edited is as blank
 function whole(f) {
@@ -69,7 +72,7 @@ export function tally(f, e) {
   if (f.rounds >= 100) mark(f, 'rounds100', at, news); if (f.rounds >= 1000) mark(f, 'rounds1000', at, news);
   if (f.streak >= 5) mark(f, 'streak5', at, news); if (f.streak >= 10) mark(f, 'streak10', at, news);
   if (e.net >= 1000) mark(f, 'win1000', at, news); if (e.net >= 10000) mark(f, 'win10000', at, news);
-  if (f.tables.length === TABLES.length) mark(f, 'tables', at, news);
+  if (tables().every(x => f.tables.includes(x))) mark(f, 'tables', at, news);
   return news;
 }
 // The balance as it stands, for the highest held: returns what is new, as tally does.
@@ -83,14 +86,18 @@ export function raise(f, balance, at = Date.now()) {
 // ---- the record in this browser ------------------------------------------------------------------------------------
 const read = () => { try { return whole(JSON.parse(localStorage.getItem(KEY))); } catch { return blank(); } };
 const write = f => { try { localStorage.setItem(KEY, JSON.stringify(f)); } catch { /* storage unavailable: the record lives in memory */ } };
-let state = read(); const subs = new Set(), tell = () => { for (const s of subs) s(); };
+let state = read(); const subs = new Set(), ears = new Set(), tell = () => { for (const s of subs) s(); };
+const say = news => { if (news.length) for (const f of ears) f(news); return news; };
 // another window may have written since: its record is taken up before this page adds to it, when storage can be read
 const fresh = () => { try { const v = localStorage.getItem(KEY); if (v != null) state = whole(JSON.parse(v)); } catch { /* keep what this page has */ } return state; };
 export const fame = {
   get state() { return state; },
-  add(entry) { const f = fresh(), news = tally(f, entry); if (!entry?.cheat && Number.isFinite(entry?.net)) { write(f); tell(); } return news; },
-  // (the balance moves at every chip: only a new high is written)
-  balance(v) { if (!(v > state.peak)) return []; const f = fresh(), was = f.peak, news = raise(f, v); if (f.peak !== was) { write(f); tell(); } return news; },
-  subscribe(f) { subs.add(f); return () => subs.delete(f); },
+  // a round, and the balance it left: returns what is new (and tells whoever listens)
+  add(entry, balance) {
+    if (entry?.cheat || !Number.isFinite(entry?.net)) return [];
+    const f = fresh(), news = [...tally(f, entry), ...raise(f, balance, entry.at)]; write(f); tell(); return say(news);
+  },
+  subscribe(f) { subs.add(f); return () => subs.delete(f); },   // the record changed
+  listen(f) { ears.add(f); return () => ears.delete(f); },      // something new in it: f(news)
 };
 globalThis.addEventListener?.('storage', e => { if (e.key !== KEY && e.key !== null) return; state = read(); tell(); });

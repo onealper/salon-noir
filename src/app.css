@@ -353,7 +353,7 @@ body[data-mode="busy"] .decisions, body[data-mode="insurance"] .decisions { opac
 .opt span small { display: block; font: 600 12px/1.3 Inter, system-ui, sans-serif; color: var(--dim); margin-top: 2px; }
 .opt select { font: 600 14px Inter, system-ui, sans-serif; color: var(--ivory); background: #232327; border: 1px solid var(--line-2); border-radius: 10px; padding: 7px 10px; }
 @media (pointer: coarse) { .opt select { font-size: 16px; } }   /* (iOS zooms into a field under 16px when it is tapped, and stays zoomed) */
-.sheet details { padding: 0 20px; border-bottom: 1px solid var(--line); }
+.sheet details { padding: 0 20px; border-bottom: 1px solid var(--line); scroll-margin-top: 62px; }   /* (a section the sheet is opened at lands under its fixed header, not behind it) */
 .sheet summary { display: flex; align-items: center; justify-content: space-between; list-style: none; padding: 14px 0; cursor: pointer; font: 500 14px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--ivory); }
 .sheet summary::-webkit-details-marker { display: none; }
 /* Kinetics: Accordion Spring - long soft open, chevron overshoots as it turns */
@@ -392,6 +392,50 @@ body[data-mode="busy"] .decisions, body[data-mode="insurance"] .decisions { opac
 .bk li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; line-height: 1.35; color: #cfc8ba; }
 .bk li em { flex: none; font: 700 14.5px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted); }
 .bk li.side { font-size: 12.5px; color: var(--muted); } .bk li.bolt span { color: #b9c8ff; }
+/* The hall of fame (app.mjs, renderFame): three figures across, the counts, the numbers won laid out as the cloth has them, the milestones.
+   Neutral steps like the rest of the chrome; gold leaf on the one figure that is money landed. */
+.fame { margin: 0 0 16px; display: grid; gap: 12px; }
+.fm-top { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fm-card { display: grid; gap: 4px; align-content: start; min-width: 0; padding: 10px 11px 9px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.fm-card .k { font: 500 11.5px/1.2 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--muted); }
+.fm-card b { font: 800 26px/1.05 "Barlow Condensed", sans-serif; letter-spacing: .01em; font-variant-numeric: tabular-nums; color: var(--ivory); overflow-wrap: anywhere; }
+.fm-card b.md { font-size: 22px; } .fm-card b.lg { font-size: 19px; } .fm-card b.xl { font-size: 16px; }   /* a long figure is set smaller, never cut */
+.fm-card.best b { background: linear-gradient(100deg, #b8914b 0%, #f1dfae 34%, #fffaf0 46%, #e2c483 58%, #c39a52 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.fm-card small { font: 500 11.5px/1.3 Inter, system-ui, sans-serif; color: var(--dim); overflow-wrap: anywhere; }
+.fm-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.fm-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; line-height: 1.35; color: #cfc8ba; }
+.fm-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.fm-list li span small { display: block; margin-top: 1px; font-size: 11.5px; color: var(--dim); }
+.fm-list em { flex: none; font: 700 17px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ivory); }
+.fm-nums { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 3px; margin-top: -4px; }
+.fm-nums ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; }
+.fm-nums li, .fm-nums > span { display: grid; place-items: center; height: 22px; border-radius: 4px; border: 1px solid var(--line); font: 700 12px/1 "Barlow Condensed", sans-serif; font-variant-numeric: tabular-nums; color: var(--dim); }
+.fm-nums > span { height: auto; border-radius: 8px 4px 4px 8px; }
+.fm-nums .hit { color: var(--ivory); background: #2c2c31; border-color: var(--line-2); }
+.fm-h { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 0 -4px; font: 500 13px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--ivory); }
+.fm-h em { font: 700 14.5px/1 "Barlow Condensed", sans-serif; font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted); }
+.fm-marks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.fm-marks li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 13px; line-height: 1.3; color: var(--muted); }
+.fm-marks li small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--dim); }
+.fm-marks li.got { background: var(--panel-2); border-color: var(--line-2); color: var(--ivory); }
+.fm-marks li.got span::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--gold); }
+.fm-marks time { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fm-foot, .fm-none { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--dim); }
+/* a phone: the three figures one under another, each a row with its figure at the right */
+@media (max-width: 480px) {
+  .fm-top { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .fm-card { grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: center; padding: 9px 11px 8px; }
+  .fm-card .k { grid-area: 1 / 1; } .fm-card small { grid-area: 2 / 1; } .fm-card b, .fm-card b.md { grid-area: 1 / 2 / 3 / 3; font-size: 24px; } .fm-card b.lg { font-size: 21px; } .fm-card b.xl { font-size: 18px; }
+  .fm-marks { grid-template-columns: minmax(0, 1fr); }
+  .fm-nums { grid-template-columns: 22px minmax(0, 1fr); gap: 2px; } .fm-nums ol { gap: 2px; } .fm-nums li, .fm-nums > span { font-size: 11px; }
+}
+/* Something new in the hall of fame, said in a line under the bar for a few seconds (app.mjs, sayFame): once, then gone */
+.fame-toast { position: absolute; z-index: 6; left: max(16px, env(safe-area-inset-left, 0px)); margin: 0; display: flex; align-items: baseline; gap: 8px; max-width: calc(100% - 32px); padding: 8px 13px; border-radius: 12px; background: rgba(12, 12, 13, .88); border: 1px solid rgba(201, 164, 92, .34); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); pointer-events: none; font: 500 13px/1.3 Inter, system-ui, sans-serif; color: var(--ivory); opacity: 0; }   /* (always there, so a screen reader hears the line as it is written in) */
+.fame-toast .k { flex: none; font-size: 12px; color: var(--muted); } .fame-toast b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fame-toast.show { animation: fame-say 4.2s cubic-bezier(.2, .9, .25, 1) both; }
+@keyframes fame-say { 0% { opacity: 0; translate: 0 -8px; } 7%, 90% { opacity: 1; translate: 0 0; } 100% { opacity: 0; translate: 0 -6px; } }
+body.reduced .fame-toast.show { animation: none; opacity: 1; }
+@media (max-width: 760px) { .fame-toast { left: 50%; transform: translateX(-50%); margin-top: 36px; } }   /* a phone: centred, under the table's own line */
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 16px; font-size: 14px; }
 .keys dt { display: flex; align-items: center; gap: 4px; font: 500 13px/1.3 Inter, system-ui, sans-serif; color: var(--muted); }
 .keys kbd { display: inline-block; min-width: 20px; text-align: center; font: 600 12px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .02em; color: var(--ivory); padding: 2px 5px; }   /* the dock's keycaps, shown on every device here */
@@ -671,6 +715,13 @@ body.reduced .ins-ace { animation: none; }
 @keyframes gilt { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0 0; } }
 .lobby-tag { grid-column: 2; margin: -6px 0 0; justify-self: center; font: 400 13px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: rgba(236, 228, 210, .66); }
 .lobby-head .lobby-balance { grid-column: 3; grid-row: 1; justify-self: end; }
+/* the way to the hall of fame (the settings sheet, opened at it): a quiet line under the chips */
+.lobby-fame { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; display: inline-flex; align-items: center; gap: 2px; height: 32px; margin: 62px -6px 0 0; padding: 0 6px 0 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; font: 500 13px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: rgba(236, 228, 210, .72); }
+.lobby-fame svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) and (pointer: fine) { .lobby-fame:hover { color: var(--ivory); } }
+.lobby-fame:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
+@media (pointer: coarse) { .lobby-fame { height: 44px; margin-top: 56px; } }
+.lobby-head > .lobby-fame { --out: 80ms; }
 
 .rail { grid-row: 3; align-self: end; display: grid; gap: 14px; justify-items: center; }
 .rail-title { margin: 0; display: flex; align-items: center; gap: 14px; font: 500 13px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: rgba(236, 228, 210, .66); }
@@ -756,6 +807,7 @@ body:is(.in-lobby, .flying) :is(.top-blur, .dock-blur) i { transition-duration: 
   .lobby-word span { font-size: 46px; padding: 0; }
   .lobby-tag { display: none; }
   .lobby-head .lobby-balance { grid-column: 3; height: 40px; padding: 4px 12px 4px 4px; gap: 8px; }
+  .lobby-head { align-items: start; } .lobby-head > .lobby-mark, .lobby-head > .lobby-word { align-self: center; } .lobby-fame { margin-top: 40px; font-size: 12.5px; }
   .lobby-head .lobby-balance .coin { width: 30px; height: 30px; } .lobby-head .lobby-balance output { font-size: 19px; } .lobby-head .lobby-balance .k { font-size: 8px; }
   .rail-title { font-size: 10px; } .rail-title::before, .rail-title::after { width: 36px; }
   .tcards { display: flex; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; gap: 10px; padding: 12px 16px 6px; margin: 0 -16px; width: calc(100% + 32px); scrollbar-width: none; }

@@ -114,7 +114,7 @@ export async function createRoulette(ctx) {
   await inFlight.take('spin', s => {
     if (!Number.isInteger(s?.n) || s.n < 0 || s.n > 36) return;
     if (!s.seen) { history.unshift(s.n); history = history.slice(0, 500); store.set('rouletteHistory', history); }   // (seen: called before the page went, so already written down)
-    if (Number.isFinite(s.net)) ctx.record?.({ n: s.n, color: colorName(s.n), staked: s.staked, back: s.back, partage: s.partage, net: s.net, ...(s.table ? { table: s.table, x: s.x } : {}) });   // in Last hands too
+    if (Number.isFinite(s.net)) ctx.record?.({ n: s.n, color: colorName(s.n), staked: s.staked, back: s.back, partage: s.partage, net: s.net, ...(s.straight ? { straight: true } : {}), ...(s.table ? { table: s.table, x: s.x } : {}) });   // in Last hands too
     ctx.notice?.(`Your last spin landed on ${s.n} ${colorName(s.n)}: ${s.back > 0 ? `${fmt(s.back)} was paid to your balance` : 'no win'}.`, t => { welcome = t; });
   });
   let mode = 'betting', dir = store.get('rouletteDir', 1) === -1 ? -1 : 1, phi = Math.random() * Math.PI * 2, rotorW = 1, restIdx = null, hurry = 1, active = false;
@@ -462,7 +462,7 @@ export async function createRoulette(ctx) {
     if (table.close()) {
       S.wheel.mark(coverage());   // what you have riding, lit on the wheel's numbers for the last rounds and the drop
       held = wallet.balance;
-      const r = ctl.r = table.settle(n, struck && multipliers(struck)); r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage, ...(struck ? { table: kind, x: r.x } : {}) }; inFlight.set('spin', r.rec);
+      const r = ctl.r = table.settle(n, struck && multipliers(struck)); r.rec = { n, back: r.back, net: r.net, staked: r.staked, partage: r.partage, ...(r.straight ? { straight: true } : {}), ...(struck ? { table: kind, x: r.x } : {}) }; inFlight.set('spin', r.rec);
     } else {
       ctl.r = { n, staked: 0, back: 0, net: 0, partage: 0, wins: [], losses: [], void: true };
       table.clear(); serial(syncYours);
@@ -505,7 +505,7 @@ export async function createRoulette(ctx) {
   // screen catch up (they hold until now, as your stack grows only when the croupier pushes the chips)
   function paid(r) {
     landed(r); if (r.paid) return; r.paid = true;
-    if (r.rec && !inFlight.lost('spin')) ctx.record?.({ n: r.n, color: colorName(r.n), staked: r.staked, back: r.back, partage: r.partage, net: r.net, ...(r.rec.table ? { table: r.rec.table, x: r.rec.x } : {}) });   // the salon's book of last rounds (a window that took this spin over wrote it already)
+    if (r.rec && !inFlight.lost('spin')) ctx.record?.({ n: r.n, color: colorName(r.n), staked: r.staked, back: r.back, partage: r.partage, net: r.net, ...(r.rec.straight ? { straight: true } : {}), ...(r.rec.table ? { table: r.rec.table, x: r.rec.x } : {}) });   // the salon's book of last rounds (a window that took this spin over wrote it already)
     inFlight.set('spin', null); held = null; ctx.showBalance(); refresh();
   }
   let hushed = false; const hush = on => { if (hushed !== on) { hushed = on; audio.hold?.(on); } };
