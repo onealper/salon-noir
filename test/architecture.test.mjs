@@ -9,14 +9,14 @@ const code = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$
 const modules = dir => fs.readdirSync(new URL(`src/${dir}`, root)).filter(f => f.endsWith('.mjs')).map(f => f.slice(0, -4));
 
 test('the rules engines and the helpers they share have no DOM: no document, window, storage or browser timing in them', () => {
-  for (const f of ['engine', 'sidebets', 'players', 'roulette/rules', 'roulette/physics', 'roulette/lightning', 'roulette/rkeys', 'core/modes', 'core/chips', 'core/format', 'core/rng', 'blackjack/book']) {
+  for (const f of ['engine', 'sidebets', 'players', 'roulette/rules', 'roulette/physics', 'roulette/lightning', 'roulette/rkeys', 'baccarat/rules', 'wheel/rules', 'wheel/physics', 'core/modes', 'core/chips', 'core/format', 'core/rng', 'blackjack/book']) {
     const hits = code(read(`src/${f}.mjs`)).match(/\b(document|window|localStorage|sessionStorage|navigator|location|requestAnimationFrame|addEventListener|fetch)\b/g);
     assert.equal(hits, null, `${f}.mjs uses ${hits}`);
   }
 });
 
 test('everything is self-hosted: every import is a relative path', () => {
-  for (const dir of ['', 'core/', 'scene/', 'blackjack/', 'roulette/']) for (const f of modules(dir)) {
+  for (const dir of ['', 'core/', 'scene/', 'blackjack/', 'roulette/', 'baccarat/', 'wheel/']) for (const f of modules(dir)) {
     for (const [, spec] of code(read(`src/${dir}${f}.mjs`)).matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)['"`]([^'"`]+)['"`]/g)) assert.match(spec, /^\.{1,2}\//, `${dir}${f}.mjs imports ${spec}`);
   }
   assert.doesNotMatch(read('index.html').replace(/<a [^>]*>/g, ''), /<(script|link)[^>]+(src|href)="(https?:)?\/\//, 'index.html loads nothing from elsewhere');
@@ -24,7 +24,7 @@ test('everything is self-hosted: every import is a relative path', () => {
 
 test('the service worker precaches every code module', () => {
   const sw = read('sw.js');
-  for (const dir of ['', 'core/', 'scene/', 'blackjack/', 'roulette/']) {
+  for (const dir of ['', 'core/', 'scene/', 'blackjack/', 'roulette/', 'baccarat/', 'wheel/']) {
     const m = sw.match(new RegExp(`\\[([^\\[\\]]*)\\]\\.map\\(f => \`src/${dir}\\$\\{f\\}\\.mjs\`\\)`)); assert.ok(m, `sw.js lists src/${dir}`);
     assert.deepEqual(m[1].match(/'[^']+'/g).map(s => s.slice(1, -1)).sort(), modules(dir).sort(), `sw.js CODE for src/${dir}`);
   }

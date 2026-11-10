@@ -16,10 +16,12 @@ const SHELL = `salon-noir-shell-${VERSION}`, MEDIA = `salon-noir-media-${VERSION
 const n = (name, ...takes) => takes.map(t => `${name}-${t}`), to = k => Array.from({ length: k }, (_, i) => i + 1);
 const CODE = ['./', 'manifest.webmanifest', 'src/app.css', 'src/fonts.css',
   ...['app', 'engine', 'sidebets', 'players', 'sound', 'ui-kit', 'ui-motion'].map(f => `src/${f}.mjs`),
-  ...['bet-controls', 'brand', 'chips', 'feel', 'format', 'ledger', 'lobby', 'modes', 'rng', 'wallet'].map(f => `src/core/${f}.mjs`),
+  ...['bet-controls', 'brand', 'chips', 'fame', 'feel', 'format', 'ledger', 'lobby', 'modes', 'rng', 'wallet'].map(f => `src/core/${f}.mjs`),
   ...['stage', 'world', 'view', 'pieces', 'textures', 'glass', 'lightning3d', 'portal'].map(f => `src/scene/${f}.mjs`),
   ...['controller', 'book', 'lightning-ui', 'storm', 'tray-icons'].map(f => `src/blackjack/${f}.mjs`),
   ...['rgame', 'rkeys', 'rules', 'lightning', 'physics', 'replay', 'rscene', 'rlightning', 'wheel3d', 'roller'].map(f => `src/roulette/${f}.mjs`),
+  ...['rules'].map(f => `src/baccarat/${f}.mjs`),
+  ...['rules', 'physics'].map(f => `src/wheel/${f}.mjs`),
   ...['three.module.min.js', 'RoomEnvironment.js', 'anime.mjs', 'confetti.mjs', 'torph.mjs', 'web-haptics.mjs', 'cuelume/index.js', 'cuelume/audio/engine.js',
     'cuelume/interactions/bind.js', ...['bubble', 'context', 'mech', 'press', 'recipes', 'themes'].map(f => `cuelume/sounds/${f}.js`)].map(f => `src/vendor/${f}`)];
 const BJ = ['place-bets', 'insurance', 'even-money', 'lightning', 'dealer-ace', 'blackjack', 'dealer-blackjack', ...n('dealer', 17, 18, 19, 20, 21), 'dealer-busts', 'push', 'nicely-played', 'new-shoe'];
