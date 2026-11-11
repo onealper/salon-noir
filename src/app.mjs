@@ -1,14 +1,14 @@
-// The salon: the shell both rooms share. Settings, the sound of the room, the settings sheet, the top bar's
+// The salon: the shell every room shares. Settings, the sound of the room, the settings sheet, the top bar's
 // readouts, the lobby and the move between rooms, and one key handler. The rooms are the blackjack table
-// (blackjack/controller.mjs) and the roulette wheel (roulette/rgame.mjs); each is loaded and built the first time
-// you go to it, so a visit that is all roulette never builds the blackjack table, and the other way round.
+// (blackjack/controller.mjs), the roulette wheel (roulette/rgame.mjs) and the baccarat table (baccarat/bgame.mjs);
+// each is loaded and built the first time you go to it, so a visit that is all roulette never builds a card table.
 import { MODES } from './core/modes.mjs';
 import { QUALITY, detectQuality } from './scene/stage.mjs';
 import { preloadCardArt } from './scene/textures.mjs';
 import { BRAND_TITLE, mark } from './core/brand.mjs';
 import { wallet, inFlight } from './core/wallet.mjs';
 import { ledger } from './core/ledger.mjs';
-import { fame, marks } from './core/fame.mjs';
+import { fame, marks, GAMES } from './core/fame.mjs';
 import { lobby } from './core/lobby.mjs';
 import { fmt, signed, esc } from './core/format.mjs';
 import { mulberry } from './core/rng.mjs';
@@ -45,9 +45,10 @@ const settings = {
   replays: ['mine', 'all', 'off'].includes(store.get('replays')) ? store.get('replays') : 'mine',   // roulette's slow-motion replays
   mode: MODES[store.get('mode', 'classic')] ? store.get('mode', 'classic') : 'classic',
   cheat: store.get('cheat', false),   // blackjack's cheat mode: the next card and the hole card shown, a higher main bet
+  squeeze: store.get('squeeze', true),   // baccarat: you turn your side's cards yourself
   mix: (m => ({ table: level(m?.table, 1), voice: level(m?.voice, 1), music: level(m?.music, .7) }))(store.get('mix', {})),
 };
-const rooms = { blackjack: null, roulette: null };   // each built the first time you go there (see the rooms section)
+const rooms = { blackjack: null, roulette: null, baccarat: null };   // each built the first time you go there (see the rooms section)
 let room = null;   // which room of the salon you are in
 const gfxProfile = g => g === 'auto' ? detectQuality() : QUALITY[g] ?? detectQuality();
 
@@ -141,11 +142,12 @@ document.body.dataset.gfx = gfxProfile(settings.gfx).name;   // (the battery sav
 gfxSel.onchange = () => { settings.gfx = gfxSel.value; store.set('gfx', settings.gfx); document.body.dataset.gfx = gfxProfile(settings.gfx).name; each(r => r.setQuality(gfxProfile(settings.gfx))); gfxNote(); };
 $('#settings').addEventListener('click', gfxNote);
 bindToggle('#optFast', 'fast', on => each(r => r.setFast(on)));
-// How many others sit with you. Changes take effect between hands. The note names the blackjack table's players
-// (once it is built; before that, the wheel's).
+bindToggle('#optSqueeze', 'squeeze', on => rooms.baccarat?.setSqueeze(on));   // baccarat: your side's cards come to you to turn
+// How many others sit with you. Changes take effect between hands. The note names the players at the table you are at
+// (each table has its own company).
 const playersSel = $('#optPlayers'); playersSel.value = String(settings.players);
-const playersNote = () => { const names = (rooms.blackjack ?? rooms.roulette)?.players() ?? []; $('#playersNote').textContent = names.length ? names.join(', ') : 'A private table'; };
-playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); rooms.blackjack?.setPlayers(); rooms.roulette?.setPlayers(); playersNote(); };
+const playersNote = () => { const names = rooms[room]?.players() ?? []; $('#playersNote').textContent = names.length ? names.join(', ') : 'A private table'; };
+playersSel.onchange = () => { settings.players = +playersSel.value; store.set('players', settings.players); each(r => r.setPlayers()); playersNote(); };
 $('#settings').addEventListener('click', playersNote);
 $('#settings').addEventListener('click', () => { renderBook(); renderFame(); });   // Last hands and the hall of fame, drawn fresh as the sheet opens
 // Open the sheet at one of its sections (the side-bet tray's (i) opens it at the paytables).
@@ -157,7 +159,7 @@ function openSheetAt(details, focus = false) {
 for (const [id, k] of [['#mixTable', 'table'], ['#mixVoice', 'voice'], ['#mixMusic', 'music']]) {
   const el = $(id); el.value = settings.mix[k];
   el.oninput = () => { settings.mix[k] = +el.value; store.set('mix', settings.mix); audio.setLevels(settings.mix); };
-  if (k === 'voice') el.onchange = () => (rooms.blackjack ?? rooms.roulette)?.callBets();   // hear the level you set
+  if (k === 'voice') el.onchange = () => rooms[room]?.callBets();   // hear the level you set
 }
 $('#volume').value = settings.volume; $('#volume').oninput = e => { settings.volume = +e.target.value; store.set('volume', settings.volume); audio.setVolume(settings.volume); };
 $('#sound').onclick = () => { $('#optSound').checked = !settings.sound; $('#optSound').onchange(); if (settings.sound) { audio.unlock(); uiSound('toggle'); } };
@@ -175,7 +177,7 @@ kit.holdToConfirm($('#resetBalance'), async () => {   // hold, so a stray tap ca
 async function resetBalance() {
   const why = await holdUp(); if (why) { rooms[room].hint(`${why}.`); feel.tap('refuse'); return; }
   if (rooms.blackjack) rooms.blackjack.reset(); else { wallet.reset(); store.set('lightningPending', null); carried.lastLayout = null; showBalance(); }   // (the table's reset shows its own)
-  rooms.roulette?.refresh();
+  for (const r of Object.values(rooms)) if (r && r !== rooms.blackjack) r.refresh();
   rooms[room].hint(`Balance reset to ${fmt(wallet.START)}.`); feel.tap('press');
 }
 for (const d of $$('.sheet details')) kit.accordion(d);
@@ -184,19 +186,25 @@ for (const d of $$('.sheet details')) kit.accordion(d);
 // A blackjack hand is written down whole as it is paid (blackjack/book.mjs): the cards and totals, how each hand of
 // yours ended (up to four after resplits), every side bet with what it saw, the Lightning fee and bonus, and the net.
 const TABLE_NAME = { classic: 'Classic', freebet: 'Free Bet', lightning: 'Lightning' }, WHEEL_NAME = { lightning: 'Lightning roulette', mega: 'Mega Lightning roulette' };
+const BACCARAT_NAME = { classic: 'Classic baccarat', nocomm: 'No commission baccarat' }, BET_NAME = { player: 'Player', banker: 'Banker', tie: 'Tie', ppair: 'Player pair', bpair: 'Banker pair' };
+const titleOf = e => e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : e.game === 'baccarat' ? BACCARAT_NAME[e.table] ?? 'Baccarat' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`;
 const ENDED = h => h.even ? 'Even money' : h.kind === 'blackjack' ? 'Blackjack' : h.kind === 'win' ? 'Win' : h.kind === 'push' ? 'Push' : h.total > 21 ? 'Bust' : 'Lose';
 function entryHTML(e) {
   const tone = e.net > 0 ? 'up' : e.net < 0 ? 'down' : 'even', when = new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), line = (a, b, cls = '') => `<li class="${cls}"><span>${esc(a)}</span>${b == null ? '' : `<em>${esc(b)}</em>`}</li>`;
   let rows = '';
   if (e.game === 'roulette') {
     rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '') + (e.x ? line(`Lightning ${fmt(e.x)}× on your straight up`, null, 'side bolt') : '');
+  } else if (e.game === 'baccarat') {
+    rows = line(`Player ${(e.player ?? []).join(' ')} · ${e.p}${e.winner === 'player' ? ' · wins' : ''}`, null) + line(`Banker ${(e.banker ?? []).join(' ')} · ${e.b}${e.winner === 'banker' ? ' · wins' : ''}${e.winner === 'tie' ? ' · a tie' : ''}`, null)
+      + (e.wins ?? []).map(w => line(`${BET_NAME[w.id] ?? w.id} ${fmt(w.stake)} · won`, signed(w.pay), 'side')).join('') + (e.pushes ?? []).map(w => line(`${BET_NAME[w.id] ?? w.id} ${fmt(w.stake)} · push`, '±0', 'side')).join('')
+      + (e.losses ?? []).map(w => line(`${BET_NAME[w.id] ?? w.id} ${fmt(w.stake)} · lost`, signed(-w.stake), 'side')).join('') + (e.commission ? line('Commission on the Banker, in its payout', fmt(e.commission), 'side') : '');
   } else {
     rows = line(`Dealer ${(e.dealer ?? []).join(' ')} · ${e.dealerBJ ? 'Blackjack' : e.dealerTotal}`, null)
       + (e.hands ?? []).map((h, i) => line(`${e.hands.length > 1 ? `Hand ${i + 1}` : 'You'} ${h.cards.join(' ')} · ${h.total} · ${ENDED(h)}`, signed(h.net))).join('')
       + (e.sides ?? []).map(s => line(`${s.name}: ${s.line}`, signed(s.net), 'side')).join('')
       + (e.fee ? line('Lightning fee', signed(-e.fee), 'side') : '') + (e.bonus ? line(`Lightning ${e.bonus.m}× on your fee`, signed(e.bonus.amount), 'side bolt') : '') + (e.earned ? line(`Earned ${e.earned}× for your next win`, null, 'side bolt') : '');
   }
-  return `<li class="bk ${tone}"><div class="bk-head"><b>${e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`}</b><span class="bk-meta">${e.cheat ? 'Cheat mode · ' : ''}<time>${when}</time></span><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
+  return `<li class="bk ${tone}"><div class="bk-head"><b>${titleOf(e)}</b><span class="bk-meta">${e.cheat ? 'Cheat mode · ' : ''}<time>${when}</time></span><em>${e.net ? signed(e.net) : 'Even'}</em></div><ul>${rows}</ul></li>`;
 }
 function renderBook() {
   const v = ledger.visit, net = v.rounds ? signed(v.net) : '±0', tone = v.net > 0 ? 'up' : v.net < 0 ? 'down' : '';
@@ -211,7 +219,7 @@ function renderBook() {
 ledger.subscribe(renderBook); renderBook();
 
 // ---- the hall of fame (core/fame.mjs): what you have done at the tables, kept for good; in the settings, under Last hands ----
-const AT_TABLE = { blackjack: t => `${TABLE_NAME[t] ?? 'Classic'} blackjack`, roulette: t => WHEEL_NAME[t] ?? 'European roulette' };
+const AT_TABLE = { blackjack: t => `${TABLE_NAME[t] ?? 'Classic'} blackjack`, roulette: t => WHEEL_NAME[t] ?? 'European roulette', baccarat: t => BACCARAT_NAME[t] ?? 'Baccarat' };
 const day = at => { if (!at) return ''; const d = new Date(at); return d.toLocaleDateString([], { day: 'numeric', month: 'short', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
 function renderFame() {
   const f = fame.state, all = marks(), got = all.filter(m => f.marks[m.id] != null);
@@ -230,6 +238,7 @@ function renderFame() {
       ${row('Blackjacks', fmt(f.blackjacks))}
       ${row('Ten-card Charlies', fmt(f.charlies))}
       ${row('Highest Lightning multiplier paid', f.bolt ? `${fmt(f.bolt.x)}×` : '–', f.bolt ? `${AT_TABLE[f.bolt.game]?.(f.bolt.table) ?? ''} · ${day(f.bolt.at)}` : '')}
+      ${GAMES.includes('baccarat') ? row('Baccarat', `${fmt(f.naturals)} · ${fmt(f.ties)} · ${fmt(f.pairs)}`, 'Wins on a natural · ties won · pairs won') : ''}
       ${row('Numbers won straight up', `${f.numbers.length} of 37`)}
     </ul>
     <div class="fm-nums" role="img" aria-label="${f.numbers.length ? `Won so far: ${f.numbers.join(', ')}` : 'None won yet'}"><span${hit(0)}>0</span><ol>${[3, 2, 1].flatMap(r => Array.from({ length: 12 }, (_, c) => { const n = c * 3 + r; return `<li${hit(n)}>${n}</li>`; })).join('')}</ol></div>`
@@ -299,15 +308,16 @@ const ctx = {
   quality: () => gfxProfile(settings.gfx), resetBalance, notice, record: e => ledger.add({ game: 'roulette', ...e }),
   showBalance, showInPlay, title, barCover, dockCover, BLUR_RISE, openSheetAt, bindToggle,
 };
-const ROOMS = { blackjack: () => import('./blackjack/controller.mjs').then(m => m.createBlackjack(ctx)), roulette: () => import('./roulette/rgame.mjs').then(m => m.createRoulette(ctx)) };
+const ROOMS = { blackjack: () => import('./blackjack/controller.mjs').then(m => m.createBlackjack(ctx)), roulette: () => import('./roulette/rgame.mjs').then(m => m.createRoulette(ctx)),
+  baccarat: () => import('./baccarat/bgame.mjs').then(m => m.createBaccarat(ctx)) };
 const loading = {};
 const load = r => loading[r] ??= ROOMS[r]().then(x => (rooms[r] = x));   // a failure is kept: the browser keeps a module that failed to load failed until the page reloads
 function setRoom(r) {
   if (r === room) return; const was = rooms[room]; room = r; store.set('room', r); document.body.dataset.room = r;
   was?.hide(); rooms[r].show();   // the hidden room draws nothing while you are in the other
 }
-{ let first = store.get('room', 'blackjack') === 'roulette' ? 'roulette' : 'blackjack';
-  if (first === 'roulette') { try { await load('roulette'); } catch (err) { console.error('roulette failed to load', err); first = 'blackjack'; } }
+{ let first = ROOMS[store.get('room', 'blackjack')] ? store.get('room', 'blackjack') : 'blackjack';   // the room you were last in
+  if (first !== 'blackjack') { try { await load(first); } catch (err) { console.error(`${first} failed to load`, err); first = 'blackjack'; } }
   if (first === 'blackjack') await load('blackjack');
   setRoom(first); }
 document.body.classList.add('ready');
@@ -316,11 +326,13 @@ if (welcome && params.has('table')) rooms[room].hint(welcome);
 // The lobby: the casino's front room, over the table at every visit; the brand in the bar returns to it.
 $('#brandMark').innerHTML = mark();
 let previewTurn = 0, previewing = Promise.resolve();
-// the lobby's roulette tables, and the roulette room's own names for them (rgame.mjs, TABLES)
-const WHEELS = { roulette: 'european', 'roulette-lightning': 'lightning', 'roulette-mega': 'mega' }, wheelMode = k => Object.keys(WHEELS).find(m => WHEELS[m] === k) ?? 'roulette';
+// The lobby's cards (core/lobby.mjs), and for each its room and that room's own name for the table (rgame.mjs and
+// bgame.mjs, TABLES; a blackjack card is the mode itself).
+const TABLE_OF = { roulette: ['roulette', 'european'], 'roulette-lightning': ['roulette', 'lightning'], 'roulette-mega': ['roulette', 'mega'], baccarat: ['baccarat', 'classic'], 'baccarat-nocomm': ['baccarat', 'nocomm'] };
+const gameOf = m => TABLE_OF[m]?.[0] ?? 'blackjack', kindOf = m => TABLE_OF[m]?.[1] ?? m, cardOf = (game, kind) => Object.keys(TABLE_OF).find(m => TABLE_OF[m][0] === game && TABLE_OF[m][1] === kind) ?? game;
 const couldNotLoad = game => lobby.note(`The ${game} table could not be loaded. Check the connection, then reload the page.`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-// From one game to the other in the lobby: the table you are looking at goes down through the floor and you after it,
+// From one game to another in the lobby: the table you are looking at goes down through the floor and you after it,
 // and you come down out of the air in the other room, its table falling ahead of you (each room's portal). The room
 // coming in is shown at once, out of sight behind this one (body[data-coming]), dressed for the table picked and its
 // shaders built, while this table goes down. The two rooms meet inside the vortex, which fills the picture alike in
@@ -330,7 +342,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fadeIn = (el, ms) => new Promise(done => { const t0 = performance.now(); const f = () => { const k = Math.min(1, (performance.now() - t0) / ms); el.style.opacity = k < 1 ? k.toFixed(3) : ''; if (k < 1) requestAnimationFrame(f); else done(); }; el.style.opacity = '0'; requestAnimationFrame(f); });
 async function crossRooms(game, tableMode) {
   const from = rooms[room], to = rooms[game];
-  if (game === 'roulette') await to.preview(WHEELS[tableMode], { sweep: false });
+  if (game !== 'blackjack') await to.preview(kindOf(tableMode), { sweep: false });
   if (settings.reduced || !from?.portal || !to.portal) {
     setRoom(game); to.showcase.start(settings.reduced); if (game === 'blackjack') to.preview(tableMode, { sweep: false });
     return;
@@ -350,12 +362,14 @@ async function crossRooms(game, tableMode) {
   await landing;
   st.style.zIndex = ''; delete b.going; from.hide();   // (its buffers let go once you have landed: done mid-flight, it would hold a frame)
 }
-// While you look over the tables, the other room is built and made ready out of sight (it warms itself: scene/stage.mjs),
-// so the portal finds it ready to drop in rather than building it in the middle of the crossing; not on the battery saver.
+// While you look over the tables, the other of the salon's two first rooms is built and made ready out of sight (it
+// warms itself: scene/stage.mjs), so the portal finds it ready to drop in rather than building it in the middle of the
+// crossing; not on the battery saver. The later rooms are built when you turn to them (each room is a 3D context of its
+// own, and a phone has only so many to give).
 let otherTimer = 0;
 function readyOther() {
-  const other = room === 'roulette' ? 'blackjack' : 'roulette';
-  if (rooms[other] || loading[other] || gfxProfile(settings.gfx).name === 'saver') return;
+  const other = { blackjack: 'roulette', roulette: 'blackjack' }[room];
+  if (!other || rooms[other] || loading[other] || gfxProfile(settings.gfx).name === 'saver') return;
   clearTimeout(otherTimer);
   otherTimer = setTimeout(() => {
     if (!lobby.isOpen || rooms[other] || loading[other]) return;
@@ -367,17 +381,16 @@ function readyOther() {
 // shown one after another, and only the latest waiting counts: a pick made while a table is changing, or a room still
 // loading, is passed over if another has come since (or you have sat down).
 async function showTable(tableMode, turn) {
-  const game = WHEELS[tableMode] ? 'roulette' : 'blackjack', live = () => turn === previewTurn && lobby.isOpen;
+  const game = gameOf(tableMode), live = () => turn === previewTurn && lobby.isOpen;
   if (!rooms[game]) {
     try { await load(game); } catch (err) { console.error(`${game} failed to load`, err); if (turn === previewTurn) couldNotLoad(game); return; }
     if (!live()) return;
   }
   if (game !== room) await crossRooms(game, tableMode);
-  else if (game === 'roulette') await rooms.roulette.preview(WHEELS[tableMode]);
-  else await rooms.blackjack.preview(tableMode);
+  else await rooms[game].preview(kindOf(tableMode));
 }
 lobby.init({
-  mode: () => room === 'roulette' ? wheelMode(rooms.roulette?.kind) : settings.mode,
+  mode: () => room === 'blackjack' ? settings.mode : cardOf(room, rooms[room]?.kind),
   preview: tableMode => {
     const turn = ++previewTurn; uiSound('select');
     previewing = previewing.then(() => turn === previewTurn && lobby.isOpen ? showTable(tableMode, turn) : null).catch(err => console.error('could not show the table', err));
@@ -386,9 +399,9 @@ lobby.init({
     previewTurn++; audio.unlock(); await previewing; audio.cue('whoosh', { bus: 'ui', gain: .6 });   // (a table on its way through the portal arrives first)
     try {
       await load(game); const r = rooms[game];
-      if (game === 'roulette') { if (room !== 'roulette') setRoom('roulette'); roomFor(false); }
-      else { if (room !== 'blackjack') { setRoom('blackjack'); r.showcase.start(true); } roomFor(false); }
-      await r.enter(settings.reduced ? 0 : 1400, { tableMode: WHEELS[tableMode] ?? tableMode });   // the camera flies down into your chair
+      if (room !== game) { setRoom(game); if (game !== 'roulette') r.showcase.start(true); }
+      roomFor(false);
+      await r.enter(settings.reduced ? 0 : 1400, { tableMode: kindOf(tableMode) });   // the camera flies down into your chair
     } catch (err) {   // the table could not be reached (a module that failed to load on a poor connection): back to the lobby, with a word
       console.error('could not take the seat', err); lobby.open(); lobby.note('That table could not be opened. Check the connection, then reload the page.');
     } finally { document.body.classList.remove('flying'); }
@@ -413,7 +426,7 @@ addEventListener('salonnoir:gpulost', () => {
 addEventListener('salonnoir:gpurestored', () => $('#gpuLost')?.remove());
 // Test hooks for the browser checks (see the testing aids above): the salon's, and the blackjack table's once it is built.
 if (dev) {
-  const hooks = { get roulette() { return rooms.roulette; }, get blackjack() { return rooms.blackjack; }, feel, settings, audio, loadRoulette: () => load('roulette'), load, setRoom: r => rooms[r] ? setRoom(r) : load(r).then(() => setRoom(r)) };
+  const hooks = { get roulette() { return rooms.roulette; }, get blackjack() { return rooms.blackjack; }, get baccarat() { return rooms.baccarat; }, feel, settings, audio, loadRoulette: () => load('roulette'), load, setRoom: r => rooms[r] ? setRoom(r) : load(r).then(() => setRoom(r)) };
   for (const k of ['table', 'view', 'motion', 'world', 'choose', 'seating', 'lightning', 'mode', 'busy', 'rig']) Object.defineProperty(hooks, k, { get: () => rooms.blackjack?.test[k], enumerable: true });
   window.__spader = hooks;
 }

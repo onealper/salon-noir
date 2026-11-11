@@ -21,13 +21,14 @@ export function headingOf(q) { const d = LONG.clone().applyQuaternion(q); return
 
 // ---- cards ---------------------------------------------------------------------------------
 // A card is two faces a card's thickness apart, each a fine grid cut to the rounded corners (each corner cell's square
-// drawn onto its quarter circle), so that it can bend.
-let cardGeo;
-function roundedCard() {
-  if (cardGeo) return cardGeo;
+// drawn onto its quarter circle), so that it can bend. `fine`: a grid close enough to fold tightly over on itself, as
+// a card squeezed at baccarat does (a square of it under 2 mm).
+let cardGeo, fineGeo;
+function roundedCard(fine = false) {
+  if (fine ? fineGeo : cardGeo) return fine ? fineGeo : cardGeo;
   const w = CARD_W / 2, h = CARD_H / 2, r = CARD_R, C = 3;   // C: steps across a corner
   const steps = (half, n) => [...Array.from({ length: C }, (_, k) => -half + r * k / C), ...Array.from({ length: n + 1 }, (_, k) => -half + r + (2 * (half - r)) * k / n), ...Array.from({ length: C }, (_, k) => half - r + r * (k + 1) / C)];
-  const xs = steps(w, 20), ys = steps(h, 14), pos = [], uv = [], idx = [];
+  const xs = steps(w, fine ? 32 : 20), ys = steps(h, fine ? 46 : 14), pos = [], uv = [], idx = [];
   for (const y of ys) for (const x of xs) {
     let px = x, py = y; const a = Math.abs(x) - (w - r), b = Math.abs(y) - (h - r);
     if (a > 0 && b > 0) { const m = Math.max(a, b) / Math.hypot(a, b); px = Math.sign(x) * (w - r + a * m); py = Math.sign(y) * (h - r + b * m); }
@@ -37,17 +38,18 @@ function roundedCard() {
   for (let j = 0; j < ys.length - 1; j++) for (let i = 0; i < nx - 1; i++) { const k = j * nx + i; idx.push(k, k + 1, k + nx + 1, k, k + nx + 1, k + nx); }
   const g = new THREE.BufferGeometry(); g.setIndex(idx);
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals();
-  return cardGeo = g;
+  return fine ? (fineGeo = g) : (cardGeo = g);
 }
 const faceMats = new Map(); let backMat;
-export function createCard(card) {
-  const k = card.rank + card.suit;
-  if (!faceMats.has(k)) faceMats.set(k, new THREE.MeshStandardMaterial({ map: faceTexture(card), roughness: .38, metalness: 0 }));
+// `style`: how its face is printed (textures.mjs: '' the jumbo index, 'pips' a squeeze card); `fine`: the close grid.
+export function createCard(card, { style = '', fine = false } = {}) {
+  const k = style + card.rank + card.suit;
+  if (!faceMats.has(k)) faceMats.set(k, new THREE.MeshStandardMaterial({ map: faceTexture(card, style), roughness: .38, metalness: 0 }));
   backMat ??= new THREE.MeshStandardMaterial({ map: backTexture(), roughness: .38, metalness: 0 });
-  const g = new THREE.Group(), face = new THREE.Mesh(roundedCard(), faceMats.get(k)), back = new THREE.Mesh(roundedCard(), backMat);
+  const geo = roundedCard(fine), g = new THREE.Group(), face = new THREE.Mesh(geo, faceMats.get(k)), back = new THREE.Mesh(geo, backMat);
   face.position.z = CARD_T / 2; back.position.z = -CARD_T / 2; back.rotation.y = Math.PI;
   face.castShadow = back.castShadow = true; face.receiveShadow = back.receiveShadow = true;
-  g.add(face, back); g.userData.card = card; return g;
+  g.add(face, back); g.userData.card = card; g.userData.flat = geo; return g;
 }
 // A card bent as paper bends, without stretching: flat up to a fold line, then wrapped round a cylinder for a length
 // `L` (an arc of k·L radians), then straight on along the last tangent. In the card's own frame (x across the short
@@ -57,7 +59,7 @@ export function createCard(card) {
 // Each card bent gets geometry of its own while it is bent, given back when it lies flat.
 const _m = new THREE.Matrix4(), _i = new THREE.Matrix4(), _v = new THREE.Vector3();
 export function bendCard(card, bend) {
-  const flat = !bend || Math.abs(bend.k) < 1e-5 || bend.L <= 0;
+  const flat = !bend || Math.abs(bend.k) < 1e-5 || bend.L <= 0, cardGeo = card.userData.flat;   // (its own flat shape: the usual grid or the fine one)
   for (const mesh of card.children) {
     if (flat) { if (mesh.geometry !== cardGeo) { mesh.geometry.dispose(); mesh.geometry = cardGeo; } continue; }
     if (mesh.geometry === cardGeo) { mesh.geometry = cardGeo.clone(); mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), CARD_H); }
@@ -82,6 +84,7 @@ export function bendCard(card, bend) {
 // z, out)` puts the point x, y, z of the flat card (its own frame, as above) where it goes, in the card's own frame too.
 // The card keeps geometry of its own until bendCard(card, null) lays it flat again.
 export function shapeCard(card, place) {
+  const cardGeo = card.userData.flat;
   for (const mesh of card.children) {
     if (mesh.geometry === cardGeo) { mesh.geometry = cardGeo.clone(); mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 40); }
     mesh.updateMatrix(); _m.copy(mesh.matrix); _i.copy(_m).invert();

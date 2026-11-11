@@ -12,6 +12,8 @@ const ICON = {
   freebet: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="6.2" class="cut"/><path d="M10.2 9h4M10.2 9v6M10.2 12h3.2" class="cut"/></svg>',
   lightning: '<svg viewBox="0 0 24 24"><path d="M13.6 2 4.8 13.4h6l-1.4 8.6 8.8-11.4h-6L13.6 2Z"/></svg>',
   roulette: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" class="ring"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v6.3M12 15.2v6.3M2.5 12h6.3M15.2 12h6.3" class="cut"/></svg>',
+  // baccarat: two cards, one lying over the other's corner
+  baccarat: '<svg viewBox="0 0 24 24"><rect x="3.2" y="5.2" width="10.4" height="14.6" rx="1.8" transform="rotate(-9 8.4 12.5)"/><rect x="10.6" y="4.4" width="10.4" height="14.6" rx="1.8" transform="rotate(9 15.8 11.7)" class="ring"/></svg>',
 };
 // Every table in the salon, as the rail shows them. Each line fits a desktop card; a phone's card breaks it in two, and
 // a phrase that reads as one (keep) stays together on the second line.
@@ -23,12 +25,14 @@ const TABLES = [
   { game: 'roulette', mode: 'roulette', kicker: 'Roulette', name: 'European', line: `Single zero, the racetrack ${keep('and every call bet')}`, stat: 'Pays 35:1' },
   { game: 'roulette', mode: 'roulette-lightning', kicker: 'Roulette', name: 'Lightning', line: `One to five numbers struck ${keep('at 50× to 500×')}`, stat: 'Up to 500×', icon: 'lightning' },
   { game: 'roulette', mode: 'roulette-mega', kicker: 'Roulette', name: 'Mega Lightning', line: `Chain lightning and ${keep('a double strike')} ${keep('to 2,000×')}`, stat: 'Up to 2,000×', icon: 'lightning' },
+  { game: 'baccarat', mode: 'baccarat', kicker: 'Baccarat', name: 'Classic', line: `Punto banco from the shoe; ${keep('you squeeze your cards')}`, stat: 'Banker pays 19:20', icon: 'baccarat' },
+  { game: 'baccarat', mode: 'baccarat-nocomm', kicker: 'Baccarat', name: 'No commission', line: `Banker pays even money; ${keep('a winning six pays half')}`, stat: 'Banker pays 1:1', icon: 'baccarat' },
 ];
 
 const gameOf = mode => TABLES.find(t => t.mode === mode)?.game ?? 'blackjack';
-// The rail shows one game's tables at a time under a Blackjack | Roulette switch (the casino lobby's game tabs), so each
-// card has the room to read: three across, never two rows. Each game keeps the table last picked in it.
-const GAMES = [['blackjack', 'Blackjack'], ['roulette', 'Roulette']], last = {};
+// The rail shows one game's tables at a time under a switch of the games (the casino lobby's game tabs), so each
+// card has the room to read: up to three across, never two rows. Each game keeps the table last picked in it.
+const GAMES = [['blackjack', 'Blackjack'], ['roulette', 'Roulette'], ['baccarat', 'Baccarat']], last = {};
 const calm = () => document.body.classList.contains('reduced') || matchMedia('(prefers-reduced-motion: reduce)').matches;
 let root, onPlay = () => {}, onChange = () => {}, onPreview = () => {}, onRefuse = () => {}, onFame = null, currentMode = () => 'classic', unsub = null, isOpen = false, picked = 'classic', noteText = '';
 // While the lobby is up, the room behind it (bar, table, dock) is inert: no focus or taps reach the
@@ -77,7 +81,7 @@ export const lobby = {
         <div class="games" role="tablist" aria-label="Games"><span class="games-pill" aria-hidden="true"></span>${GAMES.map(([g, name]) => `<button class="game" role="tab" data-game="${g}" aria-selected="false">${name}</button>`).join('')}</div>
         <div class="tcards" role="radiogroup" aria-label="Tables">${TABLES.map(t => t.soon
           ? `<div class="tcard soon" aria-disabled="true"><span class="t-ico">${ICON.lightning}</span><span class="t-kick">${t.kicker}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="rope" aria-hidden="true"></span></div>`
-          : `<button class="tcard" role="radio" data-mode="${t.mode}" data-game="${t.game}" aria-checked="false"><span class="t-ico">${ICON[t.icon ?? (t.game === 'roulette' ? 'roulette' : t.mode)]}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>
+          : `<button class="tcard" role="radio" data-mode="${t.mode}" data-game="${t.game}" aria-checked="false"><span class="t-ico">${ICON[t.icon ?? (t.game === 'blackjack' ? t.mode : t.game)]}</span><b>${t.name}</b><span class="t-line">${t.line}</span><span class="t-stat">${t.stat}</span></button>`).join('')}</div>
         <p class="lobby-note" role="status" hidden></p>
         <button class="pill gold seat" data-play><span class="label">Take a seat</span><span class="which"></span></button>
       </section>

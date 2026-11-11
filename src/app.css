@@ -728,7 +728,7 @@ body.reduced .ins-ace { animation: none; }
 .rail-title::before, .rail-title::after { content: ''; width: 60px; height: 1px; background: linear-gradient(90deg, transparent, rgba(201, 164, 92, .8)); }
 .rail-title::after { transform: scaleX(-1); }
 @supports (-moz-appearance: none) { .games, .tcard { -webkit-backdrop-filter: none; backdrop-filter: none; } .games { background: rgba(12, 12, 13, .84); } .tcard:not([aria-checked="true"]) { background: linear-gradient(180deg, rgba(24, 22, 20, .9), rgba(10, 10, 11, .95)); } .sheet::backdrop { backdrop-filter: none; background: rgba(0, 0, 0, .68); } }   /* (Firefox: no blur, see the top bar's band) */
-/* the Blackjack | Roulette switch over the rail: a dark glass bar, its gold pill sliding to the game shown */
+/* the switch of the games over the rail: a dark glass bar, its gold pill sliding to the game shown */
 .games { position: relative; display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(12, 12, 13, .62); border: 1px solid rgba(201, 164, 92, .26);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
 .game { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 20px; border: 0; border-radius: 10px; background: none; cursor: pointer;
@@ -739,7 +739,8 @@ body.reduced .ins-ace { animation: none; }
 .games-pill { position: absolute; z-index: 0; top: 4px; left: 0; height: 38px; width: 0; border-radius: 10px; pointer-events: none;
   background: linear-gradient(180deg, #ecd197, #c9a45c); box-shadow: 0 4px 16px rgba(201, 164, 92, .35), inset 0 1px 0 rgba(255, 246, 220, .6);
   transition: transform var(--duration-fast) var(--ease-smooth-out), width var(--duration-fast) var(--ease-smooth-out); will-change: transform; }   /* (its width too: a small box out of the flow, laid out alone) */
-.lobby[data-game="blackjack"] .tcard[data-game="roulette"], .lobby[data-game="roulette"] .tcard[data-game="blackjack"] { display: none; }
+.lobby:not([data-game="blackjack"]) .tcard[data-game="blackjack"], .lobby:not([data-game="roulette"]) .tcard[data-game="roulette"], .lobby:not([data-game="baccarat"]) .tcard[data-game="baccarat"] { display: none; }
+@media (min-width: 761px) { .lobby[data-game="baccarat"] .tcards { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(100%, 650px); } }   /* (a game of two tables: its cards as wide as the others', side by side in the middle) */
 .tcard.arrive { animation: card-in .5s var(--ease-smooth-out) calc(var(--i) * 60ms) both; }
 @keyframes card-in { from { opacity: 0; translate: 0 14px; filter: blur(3px); } }
 body.reduced .tcard.arrive { animation: none; } body.reduced .games-pill { transition: none; }
@@ -950,17 +951,18 @@ body[data-flash="off"] .lb-cell.flash, body[data-flash="off"] .lightning.chargin
 
 
 /* ==== roulette ======================================================================================== */
-/* Two rooms share the top bar: the blackjack stage and dock, or the roulette ones. */
-body[data-room="roulette"] #stage, body[data-room="roulette"] .dock:not(.rdock) { display: none !important; }
+/* The rooms share the top bar: the blackjack stage and dock (the page's own), or another room's (built by it). */
+body:is([data-room="roulette"], [data-room="baccarat"]) #stage, body:is([data-room="roulette"], [data-room="baccarat"]) .dock:not(.rdock):not(.tdock) { display: none !important; }
 body:not([data-room="roulette"]) .rstage, body:not([data-room="roulette"]) .rdock { display: none !important; }
-body[data-room="roulette"] .shoe-meter { display: none; }
+body:not([data-room="baccarat"]) .bstage, body:not([data-room="baccarat"]) .bdock { display: none !important; }
+body:is([data-room="roulette"], [data-room="baccarat"]) .shoe-meter { display: none; }
 body.in-lobby .rdock, body.in-lobby .r-overlay, body.in-lobby .r-hint, body.flying .rdock, body.flying .r-overlay, body.flying .r-hint { opacity: 0; pointer-events: none; }
 .rdock, .r-overlay, .r-hint { transition: opacity .5s var(--ease); }
 /* the portal between the rooms (scene/portal.mjs, crossRooms in app.mjs): the room coming in is laid out and drawn in the
    same place as the one going, out of sight, until the flash; the flash is the portal's light filling the picture as its
    ring snaps shut (under the lobby's menu, which stays as it was) */
-body[data-coming="roulette"] .rstage, body[data-coming="blackjack"] #stage { display: block !important; visibility: hidden; }
-body[data-going="roulette"] .rstage, body[data-going="blackjack"] #stage { display: block !important; }   /* (the room left, under the one coming in, until you have landed: app.mjs, crossRooms) */
+body[data-coming="roulette"] .rstage, body[data-coming="blackjack"] #stage, body[data-coming="baccarat"] .bstage { display: block !important; visibility: hidden; }
+body[data-going="roulette"] .rstage, body[data-going="blackjack"] #stage, body[data-going="baccarat"] .bstage { display: block !important; }   /* (the room left, under the one coming in, until you have landed: app.mjs, crossRooms) */
 .rcanvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; touch-action: none; }
 .r-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* the room falls away into the dark round the table, as under its pendants */
@@ -1134,8 +1136,11 @@ body[data-rmode="spin"] .r-hint { top: auto; bottom: 6px; padding: 4px 11px; fon
   #rUndo, #rClear, #rRebet, #rX2 { width: 44px; padding: 0; justify-content: center; }
 }
 body.reduced .r-replay::before { animation: none; }
-body[data-room="roulette"] .bj-only { display: none !important; }
+body:is([data-room="roulette"], [data-room="baccarat"]) .bj-only { display: none !important; }
 body:not([data-room="roulette"]) .rl-only { display: none !important; }
+body:not([data-room="baccarat"]) .bc-only { display: none !important; }
+body[data-room="roulette"] .cards-only { display: none !important; }   /* (what the card tables share: the dealer) */
+body:not([data-btable="nocomm"]) .nc-only, body[data-btable="nocomm"] .cl-only { display: none !important; }
 body:not([data-rtable="lightning"]):not([data-rtable="mega"]) .lit-only, body:not([data-rtable="lightning"]) .lt-only, body:not([data-rtable="mega"]) .mega-only { display: none !important; }
 
 @media (max-width: 760px) {
@@ -1145,3 +1150,85 @@ body:not([data-rtable="lightning"]):not([data-rtable="mega"]) .lit-only, body:no
   .rdock .pill.deal { min-width: 118px; padding: 0 14px; letter-spacing: .05em; font-size: 14px; }
   .rdock .bet-actions, .rdock .r-tools { flex: none; }
 }
+
+
+/* ==== baccarat ========================================================================================= */
+/* The room's stage and dock (baccarat/bgame.mjs). The dock is laid out as the wheel's (.tdock: a table's own dock, its
+   buttons named by class), and keeps its height through a coup, so the table under it is framed once. */
+.bcanvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% + var(--under, 0px)); display: block; touch-action: none; }
+.b-overlay, .b-road, .b-win { transition: opacity .45s var(--ease); }
+body:is(.in-lobby, .flying) :is(.b-overlay, .b-road, .b-roads, .b-win) { opacity: 0; pointer-events: none; }
+.tdock { display: flex; align-items: center; justify-content: center; gap: 14px 18px; flex-wrap: wrap; }
+.tdock .bet-actions { grid-template-areas: 'u c s d'; }
+.t-undo { grid-area: u; } .t-clear { grid-area: c; } .t-rebet, .t-x2 { grid-area: s; justify-self: stretch; justify-content: center; } .t-go { grid-area: d; }
+@media (max-width: 760px) {
+  .tdock { gap: 8px 6px; }
+  .tdock .chips { order: -1; width: 100%; justify-content: center; }
+  .tdock :is(.t-undo, .t-clear, .t-rebet, .t-x2) .label { display: none; }
+  .tdock :is(.t-undo, .t-clear, .t-rebet, .t-x2) { width: 40px; padding: 0; justify-content: center; }
+  .tdock .bet-actions { gap: 6px; flex: none; }
+  .tdock .pill.deal { min-width: 132px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .tdock { flex-direction: column; flex-wrap: nowrap; }
+  .tdock .chips { flex-wrap: wrap; justify-content: center; }
+  .tdock .bet-actions { grid-template-areas: 'u c s' 'd d d'; grid-template-columns: auto auto auto; }
+  .tdock .t-go { justify-self: center; min-width: 170px; }
+  .tdock :is(.t-undo, .t-clear, .t-rebet, .t-x2) .label { display: none; }
+  .tdock :is(.t-undo, .t-clear, .t-rebet, .t-x2) { width: 44px; padding: 0; justify-content: center; }
+}
+/* the squeeze: the chips make way for one button, in the same space */
+.b-turn { position: absolute; inset: 0; display: none; place-items: center; }
+.b-turn .pill { min-width: 200px; justify-content: center; }
+.bdock[data-mode="squeeze"] .b-turn { display: grid; }
+.bdock[data-mode="squeeze"] > :is(.chips, .bet-actions) { visibility: hidden; }
+/* your spots on the cloth: the boxes are long, the circles round */
+.b-spot.b-box { border-radius: 99px; }
+@media (hover: hover) and (pointer: fine) { .bstage[data-mode="bet"] .spot:not(:disabled):hover { box-shadow: 0 0 0 2px rgba(226, 196, 131, .55); background: rgba(226, 196, 131, .05); } }
+.b-spot .amount.won { color: #17130b; background: var(--gold-hi); border-color: var(--gold-hi); }
+.b-total.win { border-color: var(--gold); color: var(--gold-hi); box-shadow: 0 0 0 3px rgba(201, 164, 92, .18); }
+.b-total.loss { color: var(--muted); }
+/* while you squeeze, the picture is yours and the cards': the room falls back and the tags stand aside */
+.b-vignette { position: absolute; inset: 0 0 calc(-1 * var(--under, 0px)); pointer-events: none; opacity: 0; background: radial-gradient(95% 72% at 50% 50%, transparent 36%, rgba(4, 3, 2, .46) 76%, rgba(4, 3, 2, .74) 100%); transition: opacity .6s var(--ease); }
+.bstage.b-close .b-vignette { opacity: 1; }
+.bstage.b-close :is(.b-overlay, .b-road) { opacity: 0; pointer-events: none; }
+.b-hint { top: calc(var(--top-h, 0px) + var(--strip, 0px) + 8px); }
+/* this shoe's coups: a bead each (P ivory, B red, T brass; a corner dot for a pair), the newest at the right */
+/* a neighbour: a coin with their initial; the name and chips come out of it toward the middle of the table while they act, under the pointer or at a tap */
+.b-seat { translate: -14px -50%; gap: 0; padding: 3px; pointer-events: auto; cursor: default; }
+.b-seat.rhs { translate: calc(-100% + 14px) -50%; flex-direction: row-reverse; }
+.b-seat .who { display: flex; gap: 6px; max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; transition: max-width .3s var(--ease), opacity .2s var(--ease), margin .3s var(--ease); }
+.b-seat.open .who { max-width: 150px; opacity: 1; margin: 0 6px; }
+@media (hover: hover) and (pointer: fine) { .b-seat:hover .who { max-width: 150px; opacity: 1; margin: 0 6px; } }
+.b-seat .say { left: 14px; } .b-seat.rhs .say { left: auto; right: 14px; translate: 50% 4px; } .b-seat.rhs .say.show { translate: 50% 0; }
+.b-road { position: absolute; z-index: 3; left: 50%; top: calc(var(--top-h, 0px) + 8px); translate: -50% 0; margin: 0; padding: 5px 8px; border-radius: 12px; background: rgba(10, 10, 11, .58); border: 1px solid rgba(255, 255, 255, .06); cursor: pointer; pointer-events: auto; }
+.b-road ol { display: flex; gap: 4px; min-height: 22px; margin: 0; padding: 0; list-style: none; }
+.b-road.empty { visibility: hidden; }   /* (no coup yet this shoe: its place is kept, so the hint under it and the table's framing stay where they are) */
+.b-road li { position: relative; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; font: 800 12.5px/1 "Barlow Condensed", sans-serif; }
+.b-road li.player { color: #141416; background: var(--ivory); } .b-road li.banker { color: #fff; background: #a3141f; } .b-road li.tie { color: #141416; background: var(--gold); }
+.b-road li.bp::before, .b-road li.pp::after { content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; border: 1px solid #0c0c0d; }
+.b-road li.bp::before { left: -2px; top: -2px; background: #d8353f; } .b-road li.pp::after { right: -2px; bottom: -2px; background: var(--ivory); }
+.b-road li.latest { box-shadow: 0 0 0 2px var(--gold-hi); }
+.b-road li:nth-last-child(n+9) { opacity: .72; }
+.b-road:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
+.b-road[aria-expanded="true"] { border-color: var(--gold-lo); }
+/* behind the beads, the big road: a column a run, six deep, a stroke for a tie */
+.b-roads { position: absolute; z-index: 5; left: 50%; top: calc(var(--top-h, 0px) + 50px); translate: -50% 0; width: min(430px, calc(100% - 24px)); padding: 12px 14px 13px; border-radius: 16px; background: rgba(16, 16, 18, .95); border: 1px solid var(--line-2); box-shadow: 0 18px 50px rgba(0, 0, 0, .55); }
+.b-roads header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 9px; }
+.b-roads h3 { margin: 0; font: 500 17px/1.1 "Bodoni Moda", Georgia, serif; letter-spacing: .01em; color: var(--ivory); }
+.b-roads header p { margin: 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.br-scroll { overflow-x: auto; overscroll-behavior: contain; scrollbar-width: thin; border-radius: 8px; background: #101012; border: 1px solid var(--line); }
+.br-grid { display: grid; grid-template-columns: repeat(var(--cols), 18px); grid-template-rows: repeat(6, 18px); width: max-content; min-width: 100%; background-image: linear-gradient(#1f1f23 1px, transparent 1px), linear-gradient(90deg, #1f1f23 1px, transparent 1px); background-size: 18px 18px; }
+.br-grid i { position: relative; margin: 3px; border-radius: 50%; border: 2px solid var(--ivory); }
+.br-grid i.banker { border-color: #d8353f; } .br-grid i.nat::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; background: currentColor; opacity: .55; }
+.br-grid i.player { color: var(--ivory); } .br-grid i.banker { color: #d8353f; }
+.br-grid i b { position: absolute; inset: -3px; display: grid; place-items: center; font: 800 9px/1 "Barlow Condensed", sans-serif; color: var(--gold-hi); }
+.br-grid i b::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1.5px; margin-top: -.75px; background: var(--gold); rotate: -45deg; }
+.br-tally { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; }
+.br-tally div { display: flex; gap: 6px; align-items: baseline; } .br-tally dt { font-size: 12px; color: var(--muted); } .br-tally dd { margin: 0; font: 700 16px/1 "Barlow Condensed", sans-serif; font-variant-numeric: tabular-nums; color: var(--ivory); }
+.br-tally .banker dt { color: #ec8a8f; } .br-tally .tie dt { color: var(--gold-hi); }
+/* the call, over the table (the wheel's card, in this table's colours) */
+.b-win b[hidden] { display: none; }
+.b-win.banker small { color: #ec8a8f; } .b-win.tie small { color: var(--gold-hi); } .b-win.player small { color: var(--ivory); }
+.bstage:has(.b-win.show) :is(.b-road, .b-hint) { opacity: 0; }
+@media (max-width: 760px) { .b-road li { width: 19px; height: 19px; font-size: 11.5px; } .b-road ol { gap: 3px; min-height: 19px; } .b-road { padding: 4px 6px; } }

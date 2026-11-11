@@ -37,7 +37,11 @@ export function toSeat(k, x, z) {
   return { x: x * c + zr * s, z: -x * s + zr * c + EDGE_Z };
 }
 
-export function createWorld(canvas, { specs, quality = detectQuality(), mode }) {
+// `game`: another game played at this table (baccarat: baccarat/bscene.mjs), which brings its own cloth and tells the
+// seat camera what to hold: { felt(px, mode, into), see(portrait, compact), gauge: [zNear, zFar], clear: z, camera }.
+// Without it the table is laid for blackjack.
+export function createWorld(canvas, { specs = [], quality = detectQuality(), mode, game = null }) {
+  const paint = game?.felt ?? paintFelt, CAM = game?.camera ?? CAMERA;
   // the renderer, its loop and frame watcher, the scene and the camera (stage.mjs: the same for the wheel)
   const st = createStage(canvas, { quality, background: '#0c0c0d', environment: .42, fov: 42, far: 900, lights: () => [key], restored: () => reflect() });
   const { renderer, scene, camera, view, tickers, requestRender, maxTex, aniso } = st;
@@ -76,7 +80,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
 
   // ---- the table ------------------------------------------------------------------
   const table = new THREE.Group(); scene.add(table);
-  const feltTex = paintFelt(Math.min(maxTex, quality.felt), mode); feltTex.anisotropy = aniso;
+  const feltTex = paint(Math.min(maxTex, quality.felt), mode); feltTex.anisotropy = aniso;
   const felt = new THREE.Mesh(new THREE.CircleGeometry(R, 160, Math.PI, Math.PI), new THREE.MeshStandardMaterial({ map: feltTex, roughness: .96, metalness: 0 }));
   felt.geometry.rotateX(-Math.PI / 2); felt.geometry.translate(0, 0, EDGE_Z); remapFeltUV(felt.geometry);
   felt.receiveShadow = true; table.add(felt);
@@ -111,14 +115,14 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // ---- betting positions: the main circle printed on the cloth; the six side bets as raised
   // medallions set in a recessed band that hugs it ---------------------------------------------
   const spots = {}, mainSpot = LAYOUT.spots.main;
-  {
+  if (!game) {
     const t = paintSpot({ main: true }); t.anisotropy = aniso;
     const m = new THREE.Mesh(new THREE.CircleGeometry(mainSpot.r, 64), new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -2 }));
     m.rotation.x = -Math.PI / 2; m.position.set(mainSpot.x, .02, mainSpot.z); m.receiveShadow = true; table.add(m); spots.main = m;
   }
   // the other four seats: a main circle each, no side bets
   spots.seats = [];
-  {
+  if (!game) {
     const t = paintSpot({ main: true }); t.anisotropy = aniso;
     const mat = new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -2 });
     const pairsTex = paintSpot({ short: 'PP' }), p213Tex = paintSpot({ short: '21+3' }); pairsTex.anisotropy = p213Tex.anisotropy = aniso;
@@ -133,13 +137,16 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       }
     }
   }
+  let band = null;
+  if (!game) {
   const B = { w: 37, h: 23.5, cx: 18.5, cy: 17.4, r0: 7.6, r1: 16.4 };
   const bandTex = paintBand(B); bandTex.anisotropy = aniso;
-  const band = new THREE.Mesh(new THREE.PlaneGeometry(B.w, B.h), new THREE.MeshStandardMaterial({ map: bandTex, transparent: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
+  band = new THREE.Mesh(new THREE.PlaneGeometry(B.w, B.h), new THREE.MeshStandardMaterial({ map: bandTex, transparent: true, roughness: .95, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
   band.rotation.x = -Math.PI / 2; band.position.set(mainSpot.x, .012, mainSpot.z - B.cy + B.h / 2); band.receiveShadow = true; table.add(band);
+  }
   const medalSide = new THREE.MeshStandardMaterial({ color: '#8a6d34', metalness: .85, roughness: .32 });
   const medals = new Map(), medallion = spec => { if (!medals.has(spec.id)) { const t = medallionTexture(spec); t.anisotropy = aniso; medals.set(spec.id, t); } return medals.get(spec.id); };   // one per bet: a table change swaps, never repaints
-  for (const spec of specs) {
+  for (const spec of game ? [] : specs) {
     const s = LAYOUT.spots[spec.id]; if (!s) continue;
     const g = new THREE.Group(); g.position.set(s.x, 0, s.z);
     const body = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r + .08, s.lift, 64, 1, true), medalSide); body.position.y = s.lift / 2; body.castShadow = body.receiveShadow = true;
@@ -198,9 +205,10 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // ---- camera: your seat --------------------------------------------------------------
   // Keep the essentials in frame: your main circle and the side-bet arc, the dealer's edge, and
   // (on wide screens) the whole shoe and discard holder; upright, the shoe's mouth.
-  const scratch = new THREE.Vector3();
+  const scratch = new THREE.Vector3(), gauge = game?.gauge ?? [LAYOUT.player.z, LAYOUT.dealer.z];   // gauge: the two depths whose size on screen the seat is chosen by
   let head = .94;   // how high in the frame (NDC) the essentials may reach: upright, below the hint's line under the bar
   function mustSee(portrait, compact) {
+    if (game) return game.see(portrait, compact).concat(extraSee);
     const sp = LAYOUT.spots, m = sp.main;
     return [[m.x, 0, m.z + m.r + 1], [sp.buster.x - sp.buster.r - 1, 0, sp.buster.z + sp.buster.r], [sp.dpairs.x + sp.dpairs.r + 1, 0, sp.dpairs.z + sp.dpairs.r], [0, 3, EDGE_Z - 3], [-24, 3, EDGE_Z - 2]]
       .concat(portrait || compact ? [[LAYOUT.shoe.x + 7, SHOE.topAt(7) + .2, LAYOUT.shoe.z - 3]].concat(compact ? [[LAYOUT.discard.x + 5, 4, LAYOUT.discard.z]] : []) : [[LAYOUT.shoe.x + 30, SHOE.hgt + .2, LAYOUT.shoe.z - 9], [LAYOUT.discard.x - 7, 8, LAYOUT.discard.z]]).concat(extraSee);
@@ -218,7 +226,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   const pxOf = (a, b) => { scratch.set(...a).project(camera); const x0 = scratch.x, y0 = scratch.y; scratch.set(...b).project(camera); return Math.hypot((scratch.x - x0) * view.w, (scratch.y - y0) * view.h) / 2; };
   // The padded rail must not hide the near edge of your main circle (checked in the centre plane).
   function clearsRail(eye) {
-    const m = LAYOUT.spots.main, pz = m.z + m.r + .5, cy = 2.4, cz = EDGE_Z + R + 5.4, rr = 5.6 + .6;
+    const m = LAYOUT.spots.main, pz = game ? game.clear : m.z + m.r + .5, cy = 2.4, cz = EDGE_Z + R + 5.4, rr = 5.6 + .6;
     const dz = eye.z - pz, dy = eye.y, len = Math.hypot(dz, dy);
     return Math.abs(dy * (cz - pz) - dz * (cy - 0)) / len > rr || cz < pz;
   }
@@ -230,7 +238,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
     st.size(w, h);
     const vh = Math.max(1, h - top - bottom); view.w = w; view.h = vh;
     camera.clearViewOffset(); camera.aspect = w / vh;
-    const portrait = w / vh < .9, compact = !portrait && vh < 460, cfg = portrait ? CAMERA.port : CAMERA.land, must = mustSee(portrait, compact);   // compact: a phone on its side
+    const portrait = w / vh < .9, compact = !portrait && vh < 460, cfg = portrait ? CAM.port : CAM.land, must = mustSee(portrait, compact);   // compact: a phone on its side
     head = portrait ? .94 - Math.min(.2, 2 * 40 / vh) : .94;   // (the hint is about 35 px from the top: on a short phone the dealer's rack sat under it)
     // Search seat height and distance for the view where the cards read largest - yours and the
     // dealer's, taken together - with a mild cost for a wide lens.
@@ -239,7 +247,8 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
       const eye = new THREE.Vector3(x, y, z);
       if (!clearsRail(eye)) continue;                               // see over the rail to the near edge of your circle
       const fov = aim(eye, must); if (fov == null) continue;
-      const score = Math.sqrt(pxOf([-3, 0, LAYOUT.player.z], [3, 0, LAYOUT.player.z]) * pxOf([-3, 0, LAYOUT.dealer.z], [3, 0, LAYOUT.dealer.z])) * (1 - Math.max(0, fov - 38) * .008) - Math.abs(x) * .4;
+      let score = Math.sqrt(pxOf([-3, 0, gauge[0]], [3, 0, gauge[0]]) * pxOf([-3, 0, gauge[1]], [3, 0, gauge[1]])) * (1 - Math.max(0, fov - 38) * .008) - Math.abs(x) * .4;
+      if (portrait && game?.upright) score *= (pxOf([0, 0, gauge[0] - 3], [0, 0, gauge[0] + 3]) / pxOf([-3, 0, gauge[0]], [3, 0, gauge[0]])) ** game.upright;   // a wide layout on a narrow screen: the seat that lays it least flat (it fills the screen's height)
       if (!best || score > best.score) best = { eye, score };
     }
     aim(best ? best.eye : new THREE.Vector3(0, 51, 108), must);
@@ -334,7 +343,7 @@ export function createWorld(canvas, { specs, quality = detectQuality(), mode }) 
   // is repainted only when the table really changes (it is the largest picture in the room).
   let slot = specs.find(s => s.id === 'dpairs') ?? null;
   function paintMode(m) {
-    mode = m; const was = felt.material.map, t = paintFelt(Math.min(maxTex, quality.felt), m, was); t.anisotropy = aniso;
+    mode = m; const was = felt.material.map, t = paint(Math.min(maxTex, quality.felt), m, was); t.anisotropy = aniso;
     if (t !== was) { was.dispose(); was.image.width = 0; felt.material.map = t; }   // (a new size: width 0 frees the old canvas's pixels now, not at the next collection)
     requestRender();
   }

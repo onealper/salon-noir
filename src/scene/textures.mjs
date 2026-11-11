@@ -68,15 +68,17 @@ function drawIndex(ctx, rank, suit, color) {
   ctx.save(); ctx.translate(66, 150); if (rank === '10') { ctx.scale(.74, 1); ctx.letterSpacing = '-6px'; } ctx.fillText(rank, 0, 0); ctx.restore();
   drawSuit(ctx, suit, 66, 205, 78, color);
 }
-export function paintFace(card) { return texture(drawFace(canvas(1, 1), card)); }
-// Paints a face onto `c` (sized here, at faceK), so a cached texture can be repainted in place.
-function drawFace(c, card) {
+export function paintFace(card, style = '') { return texture(drawFace(canvas(1, 1), card, style)); }
+// Paints a face onto `c` (sized here, at faceK), so a cached texture can be repainted in place. `style` 'pips': a
+// squeeze card, as baccarat is dealt with: no index in the corners and the pips set out to the edges, so a card
+// peeled up from any side shows its pips one row or column at a time and nothing tells its rank at once.
+function drawFace(c, card, style = '') {
+  const bare = style === 'pips';
   c.width = Math.round(CW * faceK); c.height = Math.round(CH * faceK);
   const ctx = c.getContext('2d'), color = RED_SUITS.has(card.suit) ? INK.red : INK.black; ctx.scale(faceK, faceK);
   roundRect(ctx, 0, 0, CW, CH, CR); ctx.fillStyle = '#fbfaf6'; ctx.fill(); ctx.save(); ctx.clip();
   ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.lineWidth = 3; roundRect(ctx, 1.5, 1.5, CW - 3, CH - 3, CR); ctx.stroke();
-  drawIndex(ctx, card.rank, card.suit, color);
-  ctx.save(); ctx.translate(CW, CH); ctx.rotate(Math.PI); drawIndex(ctx, card.rank, card.suit, color); ctx.restore();
+  if (!bare) { drawIndex(ctx, card.rank, card.suit, color); ctx.save(); ctx.translate(CW, CH); ctx.rotate(Math.PI); drawIndex(ctx, card.rank, card.suit, color); ctx.restore(); }
   const court = { J: 'jack', Q: 'queen', K: 'king' }[card.rank];
   const panel = court && art.get(`panel:${court}_of_${SUIT_NAME[card.suit]}`);
   const ace = card.rank === 'A' && card.suit === '♠' && art.get('ace');
@@ -85,27 +87,27 @@ function drawFace(c, card) {
   if (panel) {
     // A double-headed panel (two halves turned about the waist, joined under a belt: the court-belt/
     // art) inside a thin suit-colour frame.
-    const w = 272, h = Math.round(w * panel.height / panel.width), x = (CW - w) / 2, y = (CH - h) / 2;
+    const w = bare ? 344 : 272, h = Math.round(w * panel.height / panel.width), x = (CW - w) / 2, y = (CH - h) / 2;
     ctx.drawImage(panel, x, y, w, h);
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color === INK.red ? 'rgba(179,18,46,.7)' : 'rgba(23,23,26,.72)'; ctx.lineWidth = 2.5;
     ctx.strokeRect(x, y, w, h);
   } else if (img && court) {
     // The classic (fallback) portrait inside its printed frame; the art's own small indices stay hidden.
-    const sx = 44, sy = 44, sw = 246, sh = 399, w = 270, h = w * sh / sw, x = (CW - w) / 2, y = (CH - h) / 2;
+    const sx = 44, sy = 44, sw = 246, sh = 399, w = bare ? 340 : 270, h = w * sh / sw, x = (CW - w) / 2, y = (CH - h) / 2;
     ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
     ctx.strokeStyle = color === INK.red ? 'rgba(196,18,43,.55)' : 'rgba(19,20,22,.6)'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
   } else if (ace) {
-    const w = 320, h = w * ace.height / ace.width; ctx.drawImage(ace, (CW - w) / 2, (CH - h) / 2, w, h);
+    const w = bare ? 360 : 320, h = w * ace.height / ace.width; ctx.drawImage(ace, (CW - w) / 2, (CH - h) / 2, w, h);
   } else if (card.rank === 'A') {
-    drawSuit(ctx, card.suit, CW / 2, CH / 2, 190, color);
+    drawSuit(ctx, card.suit, CW / 2, CH / 2, bare ? 216 : 190, color);
   } else if (court) {
     // its art is still on the way (or failed): a printed frame round the suit, until it arrives
-    const w = 270, h = 438, x = (CW - w) / 2, y = (CH - h) / 2;
+    const w = bare ? 344 : 270, h = bare ? 642 : 438, x = (CW - w) / 2, y = (CH - h) / 2;
     ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = color; ctx.globalAlpha = .6; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h); ctx.globalAlpha = 1;
     drawSuit(ctx, card.suit, CW / 2, CH / 2, 150, color);
   } else {
-    const box = { x: 168, y: 132, w: 176, h: 452 }, size = card.rank === '10' ? 60 : 66;
+    const box = bare ? { x: 122, y: 112, w: 268, h: 493 } : { x: 168, y: 132, w: 176, h: 452 }, size = bare ? (card.rank === '10' ? 90 : 98) : card.rank === '10' ? 60 : 66;
     for (const [px, py] of PIPS[card.rank]) drawSuit(ctx, card.suit, box.x + px * box.w, box.y + py * box.h, size, color, py > .5 ? Math.PI : 0);
   }
   ctx.globalCompositeOperation = 'source-over'; ctx.restore(); return c;
@@ -148,12 +150,12 @@ function drawBack(c) {
   drawSuit(ctx, '♠', CW / 2, CH / 2 - 4, 92, INK.brass);
   return c;
 }
-const faceCache = new Map();
+const faceCache = new Map();   // style + rank + suit → { t, card, style }
 const needsArt = card => !courtDone && (card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' || (card.rank === 'A' && card.suit === '♠'));
-export function faceTexture(card) {
-  const k = card.rank + card.suit; if (faceCache.has(k)) return faceCache.get(k);
-  const t = paintFace(card); faceCache.set(k, t);
-  if (needsArt(card)) courtReady.then(() => { drawFace(t.image, card); t.needsUpdate = true; artLanded(); });   // same size: an in-place upload
+export function faceTexture(card, style = '') {
+  const k = style + card.rank + card.suit, kept = faceCache.get(k); if (kept) return kept.t;
+  const t = paintFace(card, style); faceCache.set(k, { t, card: { rank: card.rank, suit: card.suit }, style });
+  if (needsArt(card)) courtReady.then(() => { drawFace(t.image, card, style); t.needsUpdate = true; artLanded(); });   // same size: an in-place upload
   return t;
 }
 let backTex; export const backTexture = () => backTex ??= paintBack();
@@ -163,7 +165,7 @@ let artLanded = () => {}; export const onArtLanded = f => { artLanded = f; };
 // that changes size must be freed first (its storage is fixed); the materials keep the same objects.
 export function setFaceDetail(k = 1) {
   if (k === faceK) return; faceK = k;
-  for (const [key, t] of faceCache) { t.dispose(); drawFace(t.image, { rank: key.slice(0, -1), suit: key.slice(-1) }); t.needsUpdate = true; }
+  for (const { t, card, style } of faceCache.values()) { t.dispose(); drawFace(t.image, card, style); t.needsUpdate = true; }
   if (backTex) { backTex.dispose(); drawBack(backTex.image); backTex.needsUpdate = true; }
 }
 // Card edges seen in a stack: paper-white with a fine line per card. Standing cards (the shoe)
@@ -193,7 +195,9 @@ export function stackEdgeTexture() {
 export const FELT = { w: 200, d: 100, zTop: -40 };
 // `into`: a felt painted before, at this size, to paint again in place (its canvas and its texture kept: a new pair at
 // 4096 px is a big allocation, and a new texture on the GPU)
-export function paintFelt(px = 2048, mode = MODES.classic, into = null) {
+// The cloth both card tables are printed on: the canvas (one kept before, at this size, is painted over), with where a
+// point of the table lies on it (X, Y; k pixels to the centimetre; cx, cy the middle of the dealer's edge).
+function feltCloth(px, into) {
   const W = px, H = px / 2, k = W / FELT.w, c = into?.image?.width === W ? into.image : canvas(W, H), ctx = c.getContext('2d');
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.letterSpacing = '0px'; ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = INK.felt; ctx.fillRect(0, 0, W, H);
@@ -211,7 +215,32 @@ export function paintFelt(px = 2048, mode = MODES.classic, into = null) {
     }
     ctx.putImageData(img, 0, 0);
   }
-  const X = x => (x + FELT.w / 2) * k, Y = z => (z - FELT.zTop) * k, cx = X(0), cy = Y(FELT.zTop);
+  const X = x => (x + FELT.w / 2) * k, Y = z => (z - FELT.zTop) * k;
+  return { c, ctx, k, X, Y, cx: X(0), cy: Y(FELT.zTop) };
+}
+const feltDone = (c, into) => { if (into?.image === c) { into.needsUpdate = true; return into; } return texture(c, { aniso: 16 }); };
+// the Salon Noir mark, a brass spade with a lit keyhole (`size` px across, its top-left at x, y)
+function feltMark(ctx, x, y, size) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(size / 100, size / 100);
+  const g = ctx.createLinearGradient(0, 0, 0, 100); g.addColorStop(0, 'rgba(243,222,166,.95)'); g.addColorStop(.45, 'rgba(201,164,92,.95)'); g.addColorStop(1, 'rgba(141,106,48,.95)');
+  ctx.fillStyle = g; ctx.fill(new Path2D(SPADE));
+  ctx.strokeStyle = 'rgba(12,11,10,.4)'; ctx.lineWidth = 1.2; ctx.stroke(new Path2D(INLAY));
+  ctx.fillStyle = '#16140f'; ctx.fill(new Path2D(KEYHOLE));
+  const l = ctx.createRadialGradient(50, 47, 0, 50, 50, 14); l.addColorStop(0, 'rgba(255,240,200,.95)'); l.addColorStop(.5, 'rgba(255,190,90,.9)'); l.addColorStop(1, 'rgba(170,90,25,.85)');
+  ctx.fillStyle = l; ctx.fill(new Path2D(KEYLIGHT));
+  ctx.restore();
+}
+// the wordmark in Bodoni, centred on x with its baseline at y (`size` px)
+function feltWord(ctx, x, y, size) {
+  ctx.save(); ctx.fillStyle = 'rgba(236,228,210,.92)'; ctx.textBaseline = 'alphabetic';
+  const a = `500 ${size}px "Bodoni Moda", Georgia, serif`, b = `italic 600 ${size}px "Bodoni Moda", Georgia, serif`;
+  ctx.font = a; const wa = ctx.measureText('Salon ').width; ctx.font = b; const wb = ctx.measureText('Noir').width;
+  const x0 = x - (wa + wb) / 2;
+  ctx.textAlign = 'left'; ctx.font = a; ctx.fillText('Salon ', x0, y); ctx.font = b; ctx.fillStyle = 'rgba(226,196,131,.95)'; ctx.fillText('Noir', x0 + wa, y);
+  ctx.restore();
+}
+export function paintFelt(px = 2048, mode = MODES.classic, into = null) {
+  const { c, ctx, k, X, Y, cx, cy } = feltCloth(px, into);
   const arcLine = (r, width, color, a0 = .16, a1 = .84) => { ctx.beginPath(); ctx.arc(cx, cy, r * k, Math.PI * a0, Math.PI * a1); ctx.strokeStyle = color; ctx.lineWidth = width * k; ctx.stroke(); };
   arcLine(52.5, .25, 'rgba(236,228,210,.8)'); arcLine(61, .25, 'rgba(236,228,210,.8)');
   // the table's own printing: its payout line, its rule line, and the line on the insurance arc
@@ -220,28 +249,57 @@ export function paintFelt(px = 2048, mode = MODES.classic, into = null) {
   arcText(ctx, lineB, cx, cy, 49.3 * k, `700 ${lineB.length > 48 ? 1.45 * k : 1.75 * k}px Inter, system-ui, sans-serif`, (lineB.length > 48 ? .26 : .38) * k, 'rgba(236,228,210,.82)');
   arcText(ctx, lineC, cx, cy, 58.2 * k, `700 ${2.3 * k}px Inter, system-ui, sans-serif`, .6 * k, 'rgba(236,228,210,.88)');
   // Wordmark between the dealer's cards and the printing.
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(201,164,92,.9)';
-  { // the Salon Noir mark: a brass spade with a lit keyhole, and the wordmark in Bodoni
-    const size = 6.4 * k, x = X(0) - size / 2, y = Y(-21.4);
-    ctx.save(); ctx.translate(x, y); ctx.scale(size / 100, size / 100);
-    const g = ctx.createLinearGradient(0, 0, 0, 100); g.addColorStop(0, 'rgba(243,222,166,.95)'); g.addColorStop(.45, 'rgba(201,164,92,.95)'); g.addColorStop(1, 'rgba(141,106,48,.95)');
-    ctx.fillStyle = g; ctx.fill(new Path2D(SPADE));
-    ctx.strokeStyle = 'rgba(12,11,10,.4)'; ctx.lineWidth = 1.2; ctx.stroke(new Path2D(INLAY));
-    ctx.fillStyle = '#16140f'; ctx.fill(new Path2D(KEYHOLE));
-    const l = ctx.createRadialGradient(50, 47, 0, 50, 50, 14); l.addColorStop(0, 'rgba(255,240,200,.95)'); l.addColorStop(.5, 'rgba(255,190,90,.9)'); l.addColorStop(1, 'rgba(170,90,25,.85)');
-    ctx.fillStyle = l; ctx.fill(new Path2D(KEYLIGHT));
-    ctx.restore();
-    ctx.fillStyle = 'rgba(236,228,210,.92)'; ctx.textBaseline = 'alphabetic';
-    const a = `500 ${4.6 * k}px "Bodoni Moda", Georgia, serif`, b = `italic 600 ${4.6 * k}px "Bodoni Moda", Georgia, serif`;
-    ctx.font = a; const wa = ctx.measureText('Salon ').width; ctx.font = b; const wb = ctx.measureText('Noir').width;
-    const x0 = X(0) - (wa + wb) / 2, yb = Y(-9.2);
-    ctx.textAlign = 'left'; ctx.font = a; ctx.fillText('Salon ', x0, yb); ctx.font = b; ctx.fillStyle = 'rgba(226,196,131,.95)'; ctx.fillText('Noir', x0 + wa, yb);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  }
+  feltMark(ctx, X(0) - 3.2 * k, Y(-21.4), 6.4 * k); feltWord(ctx, X(0), Y(-9.2), 4.6 * k);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `700 ${1.4 * k}px Inter, system-ui, sans-serif`; ctx.letterSpacing = `${.8 * k}px`; ctx.fillStyle = mode.id === 'classic' ? 'rgba(236,228,210,.62)' : 'rgba(226,196,131,.85)'; ctx.fillText(mode.title, X(0) + .4 * k, Y(-5.6));
   ctx.letterSpacing = '0px';
-  if (into?.image === c) { into.needsUpdate = true; return into; }
-  const t = texture(c, { aniso: 16 }); return t;
+  return feltDone(c, into);
+}
+// The baccarat table's cloth (baccarat/bscene.mjs gives the layout `L`, in centimetres, and the table's own lines):
+// the two hands' places before the dealer, PLAYER in ivory at your left and BANKER in red at your right, the mark
+// between them; the wordmark and the table's name; its payouts on two arcs; and for every seat (turned to face it:
+// `angles`) a PLAYER and a BANKER box and three circles, P PAIR, TIE and B PAIR.
+export const BACCARAT_INK = { player: 'rgba(236,228,210,.94)', banker: 'rgba(226,84,88,.96)', tie: 'rgba(226,196,131,.96)' };
+export function paintBaccaratFelt(px, table, L, into = null) {
+  const { c, ctx, k, X, Y, cx, cy } = feltCloth(px, into), brass = 'rgba(201,164,92,.95)', ivory = 'rgba(236,228,210,.8)';
+  const label = (text, x, y, font, color, spacing = 0) => { ctx.save(); ctx.font = font; ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = `${spacing}px`; ctx.fillText(text, x + spacing / 2, y); ctx.restore(); };
+  // the hands' places: a fine ivory frame each, its name set into the frame's foot (the line parts for it)
+  for (const side of ['player', 'banker']) {
+    const b = L.box[side], x = X(b.x - b.w / 2), y = Y(b.z - b.h / 2), w = b.w * k, h = b.h * k, r = 1.2 * k, name = side.toUpperCase(), font = `700 ${2.5 * k}px Cinzel, Georgia, serif`, gap = .85 * k;
+    roundRect(ctx, x, y, w, h, r); ctx.fillStyle = 'rgba(12,12,13,.2)'; ctx.fill();
+    ctx.font = font; ctx.letterSpacing = '0px'; const half = (ctx.measureText(name).width + gap * (name.length - 1)) / 2 + 1.5 * k, mid = X(b.x);
+    ctx.beginPath(); ctx.moveTo(mid + half, y + h); ctx.lineTo(x + w - r, y + h); ctx.arcTo(x + w, y + h, x + w, y + h - r, r); ctx.lineTo(x + w, y + r); ctx.arcTo(x + w, y, x + w - r, y, r);
+    ctx.lineTo(x + r, y); ctx.arcTo(x, y, x, y + r, r); ctx.lineTo(x, y + h - r); ctx.arcTo(x, y + h, x + r, y + h, r); ctx.lineTo(mid - half, y + h);
+    ctx.strokeStyle = ivory; ctx.lineWidth = .22 * k; ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
+    label(name, mid, y + h + .12 * k, font, BACCARAT_INK[side], gap);
+  }
+  feltWord(ctx, X(0), Y(L.word), 4.3 * k);
+  label(table.word ?? table.title, X(0), Y(L.word + 3), `700 ${1.4 * k}px Inter, system-ui, sans-serif`, table.id === 'classic' ? 'rgba(236,228,210,.62)' : 'rgba(226,196,131,.85)', .8 * k);
+  // the payouts, on two arcs over a fine line (short: the neighbours' names stand at its ends); a long line is set smaller
+  const [first, second] = table.felt, fine = second.length > 44;
+  arcText(ctx, first, cx, cy, L.arcs[0] * k, `700 ${2.3 * k}px Cinzel, Georgia, serif`, .46 * k, brass);
+  arcText(ctx, second, cx, cy, L.arcs[1] * k, `700 ${(fine ? 1.5 : 1.75) * k}px Inter, system-ui, sans-serif`, (fine ? .33 : .42) * k, 'rgba(236,228,210,.84)');
+  ctx.beginPath(); ctx.arc(cx, cy, L.arcs[2] * k, Math.PI * .35, Math.PI * .65); ctx.strokeStyle = ivory; ctx.lineWidth = .25 * k; ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt';
+  // every seat's spots, drawn in its own frame (x across, z out from the dealer's edge), turned about that edge's middle
+  const S = L.seat;
+  for (const a of L.angles) {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(-a);
+    for (const side of ['player', 'banker']) {
+      const b = S[side], x = (b.x - b.w / 2) * k, y = (b.z - FELT.zTop - b.h / 2) * k, w = b.w * k, h = b.h * k;
+      roundRect(ctx, x, y, w, h, h / 2); ctx.fillStyle = 'rgba(12,12,13,.22)'; ctx.fill(); ctx.strokeStyle = brass; ctx.lineWidth = .17 * k; ctx.stroke();
+      const i = .52 * k; roundRect(ctx, x + i, y + i, w - 2 * i, h - 2 * i, h / 2 - i); ctx.strokeStyle = 'rgba(201,164,92,.6)'; ctx.lineWidth = .07 * k; ctx.stroke();
+      label(side.toUpperCase(), b.x * k, (b.z - FELT.zTop) * k + .1 * k, `700 ${2.55 * k}px Cinzel, Georgia, serif`, BACCARAT_INK[side], .7 * k);
+    }
+    for (const [id, text, color] of [['tie', 'TIE', BACCARAT_INK.tie], ['ppair', 'P PAIR', BACCARAT_INK.player], ['bpair', 'B PAIR', BACCARAT_INK.banker]]) {
+      const b = S[id], x = b.x * k, y = (b.z - FELT.zTop) * k, r = b.r * k;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(12,12,13,.34)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r * .965, 0, Math.PI * 2); ctx.strokeStyle = ivory; ctx.lineWidth = .15 * k; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, r * .82, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(201,164,92,.6)'; ctx.lineWidth = .06 * k; ctx.stroke();
+      label(text, x, y + .08 * k, `800 ${(id === 'tie' ? 2.5 : 1.62) * k}px "Barlow Condensed", "Arial Narrow", sans-serif`, color, .06 * k);
+    }
+    ctx.restore();
+  }
+  return feltDone(c, into);
 }
 // Letters sit on the arc with their tops toward the dealer, reading left to right from the seat.
 function arcText(ctx, text, cx, cy, r, font, spacing, color) {

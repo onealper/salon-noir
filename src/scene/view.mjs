@@ -76,7 +76,7 @@ export const SEAT_SPOTS = { p: { x: -10.5, z: 43, r: 3 }, t: { x: 10.5, z: 43, r
 export class TableView {
   constructor(world, motion, audio) {
     Object.assign(this, { world, motion, audio }); this.T = world.table;
-    this.front = null; this.waiting = null; this.cards = []; this.stacks = new Map(); this.handCount = 1; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Map();
+    this.front = null; this.waiting = null; this.cards = []; this.stacks = new Map(); this.handCount = 1; this.cutOnFelt = null; this.dealer = DEALERS.james; this.seatSplits = new Map(); this.deck = undefined;   // deck: how this table's cards are made (pieces.mjs, createCard): the usual ones here
   }
   get split() { return this.handCount > 1; }
   seatHands(k) { return this.seatSplits.get(k) ?? 1; }   // how many hands that seat is playing
@@ -183,7 +183,7 @@ export class TableView {
     if (this.front?.userData.card === card) return;
     if (this.front) this.world.shoe.group.remove(this.front);
     this.front = null; if (!card) return;
-    const m = createCard(card), p = this.world.shoe.frontPose(); m.quaternion.copy(p.quat); m.position.copy(p.pos); this.world.shoe.group.add(m); this.front = m;
+    const m = createCard(card, this.deck), p = this.world.shoe.frontPose(); m.quaternion.copy(p.quat); m.position.copy(p.pos); this.world.shoe.group.add(m); this.front = m;
     if (how === 'behind') m.position.add(V(Math.sin(SHOE.slope), -Math.cos(SHOE.slope), 0).multiplyScalar(.035));
     else if (how === 'settle' && !this.motion.reduced) {
       const up = V(Math.cos(SHOE.slope), Math.sin(SHOE.slope), 0).multiplyScalar(1.4), from = p.pos.clone().add(up);
@@ -365,15 +365,15 @@ export class TableView {
     if (!this.cards.length) return;
     // every player's hand, taken up from the dealer's right (your left) to the dealer's left
     const owners = [...new Set(this.cards.map(c => c.owner))].filter(o => o !== 'dealer');
-    const hands = owners.map(o => this.handCards(o)).filter(h => h.length).sort((a, b) => a[0].mesh.position.x - b[0].mesh.position.x), dealer = this.handCards('dealer');
+    const hands = owners.map(o => this.handCards(o)).filter(h => h.length).sort((a, b) => a[0].mesh.position.x - b[0].mesh.position.x), dealer = this.handCards('dealer'), piles = dealer.length ? [...hands, dealer] : hands;   // (a table whose dealer holds no hand: baccarat)
     this.audio?.play('square', { x: 0 });
     // square each hand up (stays on the cloth)
-    await Promise.all([...hands, dealer].map(h => { const b = h[0].mesh.position.clone();
+    await Promise.all(piles.map(h => { const b = h[0].mesh.position.clone();
       return Promise.all(h.map((c, k) => { const from = c.mesh.position.clone(), q0 = c.mesh.quaternion.clone(), q1 = cardQuat((c.yaw ?? 0) + (c.flipFace ? Math.PI : 0), 1), to = V(b.x, .05 + k * CARD_T, b.z);
         return this.motion.tween(TIMING.square * this.dealer.speed, t => { c.mesh.position.lerpVectors(from, to, t); c.mesh.quaternion.slerpQuaternions(q0, q1, t); }, ease.inOut); })); }));
     const G = V(LAYOUT.dealer.x + 10, .05, LAYOUT.dealer.z + 8), order = [...hands.flat(), ...dealer];
     let height = 0;
-    for (const h of [...hands, dealer]) {       // one pile after another slides in and lands on the packet
+    for (const h of piles) {       // one pile after another slides in and lands on the packet
       const y0 = height; height += h.length * CARD_T; this.audio?.play('gather', { x: h[0].mesh.position.x });
       await Promise.all(h.map((c, k) => { const from = c.mesh.position.clone(), to = V(G.x, .05 + y0 + k * CARD_T, G.z), q0 = c.mesh.quaternion.clone(), q1 = cardQuat(c.flipFace ? Math.PI : 0, 1);
         return this.motion.tween(TIMING.gather * this.dealer.speed, t => { c.mesh.position.lerpVectors(from, to, t); c.mesh.position.y += Math.sin(Math.PI * t) * .25; if (c.yaw) c.mesh.quaternion.slerpQuaternions(q0, q1, t); }, ease.inOut); }));

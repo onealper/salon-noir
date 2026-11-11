@@ -33,7 +33,7 @@ for Spader, the game's earlier name). The game adds a small generated room rever
 random pitch and level variation, and stereo placement by table position at play time.
 
 
-The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (150 files)
+The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (200 files)
 ===================================================================
 
 Changes, every kit file: cut to length, levels matched and encoded as MP3 with ffmpeg
@@ -89,7 +89,7 @@ Chip-select thock
 
 Made for Salon Noir with ElevenLabs (https://elevenlabs.io): the owner's own sounds, used
 under ElevenLabs' terms; not openly licensed
-  voice/james-*.mp3 (59 files), voice/sofia-*.mp3 (16 files)
+  voice/james-*.mp3 (84 files), voice/sofia-*.mp3 (41 files)
                       The dealers' voices, James and Sofia (text to speech), recorded
                       again on 2026-10-27 with Eleven v4 in two ElevenLabs library
                       voices: James is "Jerry B. - British RP | Posh & Refined", Sofia
@@ -110,6 +110,14 @@ under ElevenLabs' terms; not openly licensed
                       everyone." "The winning number is…" "[warmly] Congratulations!"
                       and each number with its colour: "Zero, green.", "Seventeen,
                       black." ([warmly] and [excited] are Eleven v4 directions, not said.)
+                      Baccarat calls, both voices, recorded on 2026-11-10 in the same two
+                      voices with Eleven v4 and cut the same way (a take whose P or B
+                      would pass -1 dBFS at that level has only those peaks held, by at
+                      most 4 dB): bc-player-0..9, bc-banker-0..9, bc-player-wins,
+                      bc-banker-wins, bc-tie, bc-card-player, bc-card-banker.
+                      The words, as recorded: "Player has zero." (to nine) "Banker has
+                      zero." (to nine) "Player wins." "Banker wins." "It's a tie."
+                      "Card for Player." "Card for Banker."
   crowd-cheer-1.mp3, crowd-cheer-2.mp3                  The table cheering a big win.
   win-small-1/2, win-side-1/2, win-blackjack-1/2, win-big-1/2, win-bling, reveal-sting
                       Win stings.

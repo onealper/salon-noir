@@ -905,7 +905,7 @@ export function createBlackjack(ctx) {
     show() {
       if (visible) return; visible = true; world.pause(false);
       if (!busy && table.phase === 'betting') { table.balance = wallet.balance; if (table.cost > table.balance) { table.clear(); serial(syncAllStacks); hint('Your bets were cleared: your balance changed at the wheel.'); } }
-      applyMode(table.mode, { announce: false }); renderBalance(); renderBets(); refreshControls();   // (applyMode frames the seat)
+      applyMode(table.mode, { announce: false }); renderBalance(); renderBets(); refreshControls(); dealerNote();   // (applyMode frames the seat; the note may have been another card table's)
       lightning.badge();   // the Lightning show sees the room is in sight (applyMode stands aside mid-hand): its storm starts
       renderPeek();
     },

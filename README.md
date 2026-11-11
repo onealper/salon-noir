@@ -5,7 +5,7 @@
 # Salon Noir
 
 **A private casino in the browser.**<br>
-First-person 3D blackjack and roulette (European, Lightning and Mega Lightning), dealt at real pace by croupiers with voices of their own.<br>
+First-person 3D blackjack, roulette (European, Lightning and Mega Lightning) and baccarat, dealt at real pace by croupiers with voices of their own.<br>
 Made for a few friends around one screen. Play chips only.
 
 ![three.js](https://img.shields.io/badge/3D-three.js-c9a45c?style=flat-square&labelColor=141416)
@@ -51,10 +51,15 @@ Single zero with la partage, the full racetrack with neighbours and the call bet
 </td>
 </tr>
 <tr>
-<td colspan="2" valign="top">
+<td width="50%" valign="top">
 <img src="docs/screenshots/lightning-roulette.jpg" alt="Mega Lightning roulette: multipliers stamped on the struck numbers as a bolt hits 31 at 1000×">
 <h3>⚡&nbsp; Lightning &amp; Mega Lightning Roulette</h3>
 In a black-and-gold studio of its own. After "No more bets", while the ball makes its last rounds, lightning strikes up to five numbers and stamps a multiplier on each, 50× to 500×: a straight up on a struck number is paid its multiplier. At Mega Lightning chain lightning leaps on to more numbers and a double strike can lift one to 2,000×.
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/baccarat.jpg" alt="The baccarat table at the call: Player wins, nine to six">
+<h3>♦&nbsp; Baccarat</h3>
+Punto banco from an eight-deck shoe: Player, Banker, the Tie at 8:1 and the two pairs at 11:1. The Classic table pays Banker 19 to 20; the No commission table pays it even money, and half when it wins with a six. The side your bigger bet is on is yours to squeeze, and the shoe's coups are kept on a bead road and a big road.
 </td>
 </tr>
 </table>
@@ -78,6 +83,14 @@ From the call, the numbers you cover light up on the wheel. The croupier rakes i
 </td>
 <td width="44%"><img src="docs/screenshots/roulette-win.jpg" alt="The wheel from above mid-spin: the chrome French-cross turret, your numbers framed on the ring"></td>
 </tr>
+<tr>
+<td width="56%"><img src="docs/screenshots/squeeze.jpg" alt="The squeeze: a four of hearts turned, and the other card drawn up by its near edge, two spades showing"></td>
+<td valign="middle">
+<h3>The squeeze</h3>
+At baccarat your cards come to you face down and the camera leans in over them. Put a finger on a card and draw it across: the edge comes up behind your finger, round a tight fold and over, a row of pips at a time. The cards carry no corner index, so the pips are all you have to go on.<br><br>
+Let go and it falls back; draw it half over, or flick it, and it turns. A tap lifts the edge to show the way, and <i>Turn over</i> (or Space) turns it at once.
+</td>
+</tr>
 </table>
 
 <table>
@@ -89,7 +102,7 @@ From the call, the numbers you cover light up on the wheel. The croupier rakes i
 <tr>
 <td valign="top"><b>Sound you can place</b><br>Cards and chips heard left or right where they land, music that ducks under the calls, a room that murmurs.</td>
 <td valign="top"><b>Last hands and a hall of fame</b><br>Every round at every table, with its cards, side bets and net, and this visit's running total; your biggest win, best run and milestones are kept for good.</td>
-<td valign="top"><b>Rules from real filings</b><br>Blackjack and side bets after Nevada and New Jersey, roulette after New Jersey, Singapore and Monte-Carlo.</td>
+<td valign="top"><b>Rules from real tables</b><br>Blackjack and side bets after Nevada and New Jersey, roulette after New Jersey, Singapore and Monte-Carlo, baccarat by the standard tableau with its odds counted card by card.</td>
 </tr>
 </table>
 
@@ -134,7 +147,7 @@ Then go to **http://localhost:8000**. (Opening `index.html` straight from the di
 ## Keys
 
 <details>
-<summary><b>Keyboard shortcuts</b> for every table, blackjack, roulette and the lobby</summary>
+<summary><b>Keyboard shortcuts</b> for every table, blackjack, roulette, baccarat and the lobby</summary>
 <br>
 
 **At every table**
@@ -161,6 +174,14 @@ Then go to **http://localhost:8000**. (Opening `index.html` straight from the di
 | <kbd>S</kbd> | Statistics (at blackjack, <kbd>S</kbd> is Stand) |
 | <kbd>Esc</kbd> | Closes the racetrack or the statistics |
 | <kbd>Space</kbd> or <kbd>Enter</kbd> | While the ball runs: hurry it (hold to keep hurrying) |
+
+**At baccarat**
+
+| Key | Action |
+|---|---|
+| <kbd>P</kbd> · <kbd>B</kbd> · <kbd>T</kbd> | The chip in hand on Player · Banker · the Tie (with <kbd>Shift</kbd>, <kbd>P</kbd> and <kbd>B</kbd> bet that side's pair) |
+| <kbd>Space</kbd> or <kbd>Enter</kbd> | At the squeeze: turn your next card over. While the cards are shown: hurry them |
+| <kbd>Esc</kbd> | Closes the roads |
 
 **In the lobby**, <kbd>←</kbd> <kbd>→</kbd> move along the tables and <kbd>Enter</kbd> or <kbd>Space</kbd> takes the seat. <kbd>Esc</kbd> closes Settings, and a button you reach with <kbd>Tab</kbd> takes <kbd>Space</kbd> and <kbd>Enter</kbd> as its own press.
 
@@ -190,8 +211,9 @@ src/              All code, styles, fonts, sounds and vendored libraries
   engine.mjs      Blackjack rules engine; sidebets.mjs and players.mjs beside it
   blackjack/      The blackjack room: controller, the Lightning board and its storm, hand history
   core/           Lobby, wallet, hand history, table modes, brand, haptics, chips and bet controls
-  scene/          The shared 3D stage, the blackjack table, the glass, the lightning
+  scene/          The shared 3D stage, the card table blackjack and baccarat are played at, the glass, the lightning
   roulette/       The roulette room: rules, Lightning strikes, physics, replay camera, wheel and table
+  baccarat/       The baccarat room: rules and roads, the table, the squeeze and its fold
 test/             node --test suite over the rules and money code
 assets/           Card art, cloth, wood and leather, the salons round each table
 docs/             The logo and these screenshots

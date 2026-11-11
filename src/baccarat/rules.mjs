@@ -50,11 +50,11 @@ export function coup(draw) {
 export const TABLES = {
   classic: {
     id: 'classic', name: 'Classic', title: 'BACCARAT', banker: '19 to 20',
-    felt: ['PLAYER PAYS 1 TO 1 · BANKER PAYS 19 TO 20', 'TIE PAYS 8 TO 1 · PAIRS PAY 11 TO 1'],
+    felt: ['PLAYER PAYS 1 TO 1 · BANKER PAYS 19 TO 20', 'TIE PAYS 8 TO 1 · PAIRS PAY 11 TO 1'], word: 'BACCARAT',
   },
   nocomm: {
     id: 'nocomm', name: 'No commission', title: 'NO COMMISSION BACCARAT', banker: '1 to 1',
-    felt: ['PLAYER AND BANKER PAY 1 TO 1 · BANKER WINNING ON 6 PAYS 1 TO 2', 'TIE PAYS 8 TO 1 · PAIRS PAY 11 TO 1'],
+    felt: ['BANKER WINNING WITH 6 PAYS 1 TO 2', 'PLAYER AND BANKER PAY 1 TO 1 · TIE PAYS 8 TO 1 · PAIRS PAY 11 TO 1'], word: 'NO COMMISSION',
   },
 };
 // spot → its name, what it pays (to 1) and the most one player may stake on it
