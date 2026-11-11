@@ -34,11 +34,12 @@ File by file, with links and changes: [`src/sounds/CREDITS.txt`](src/sounds/CRED
 - **Cards and chips:** [Casino Audio](https://kenney.nl/assets/casino-audio) by [Kenney](https://kenney.nl) and ["Card Game sounds"](https://opengameart.org/content/card-game-sounds) by haeldb, CC0
 - **The room:** recordings by felix.blume, SholeColtis and xkeril (freesound.org), CC0, mixed into one loop (`room-casino-1.mp3`)
 - **Chip-select thock:** a [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds) wood knock with a Kenney clay-chip click, CC0
-- **Dealer voices (James and Sofia: the blackjack, roulette and baccarat calls), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs (the dealers in the library voices "Jerry B." and "Claire", Eleven v4)
+- **Dealer voices (James and Sofia: the blackjack, roulette and baccarat calls, and James as the money wheel's host), cheers, stings and menu sounds:** made for Salon Noir with ElevenLabs (the dealers in the library voices "Jerry B." and "Claire", Eleven v4)
 - **The roulette croupier's sounds** (his hand on the wheelhead, the ball's launch, the rake, the dolly): generated for Salon Noir with ElevenLabs Sound Effects v3
 - **The rain in the Lightning table's storm** (`rain-window.mp3`): generated for Salon Noir with ElevenLabs Sound Effects v2
 - **The Lightning roulette tables' lightning** (`lr-*.mp3`: the charge, the strikes, chain lightning, the double strike, the fizzle, the payoff): generated for Salon Noir with ElevenLabs Sound Effects v2
 - **The portal between the rooms** (`portal-open.mp3`, `portal-drop.mp3`, `portal-land.mp3`: the ring opening, the table drawn down into it, the table landing): generated for Salon Noir with ElevenLabs Sound Effects v2
+- **The money wheel's clacks** (`wheel-clack-1.mp3` to `wheel-clack-5.mp3`: its leather flapper off a brass peg): generated for Salon Noir with ElevenLabs Sound Effects v2
 
 ## Images
 

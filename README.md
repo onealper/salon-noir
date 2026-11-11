@@ -5,7 +5,7 @@
 # Salon Noir
 
 **A private casino in the browser.**<br>
-First-person 3D blackjack, roulette (European, Lightning and Mega Lightning) and baccarat, dealt at real pace by croupiers with voices of their own.<br>
+First-person 3D blackjack, roulette (European, Lightning and Mega Lightning), baccarat and a money wheel, dealt at real pace by croupiers with voices of their own.<br>
 Made for a few friends around one screen. Play chips only.
 
 ![three.js](https://img.shields.io/badge/3D-three.js-c9a45c?style=flat-square&labelColor=141416)
@@ -62,6 +62,16 @@ In a black-and-gold studio of its own. After "No more bets", while the ball make
 Punto banco from an eight-deck shoe: Player, Banker, the Tie at 8:1 and the two pairs at 11:1. The Classic table pays Banker 19 to 20; the No commission table pays it even money, and half when it wins with a six. The side your bigger bet is on is yours to squeeze, and the shoe's coups are kept on a bead road and a big road.
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/money-wheel.jpg" alt="The money wheel standing over its counter, chips down on all six numbers">
+</td>
+<td width="50%" valign="middle">
+<h3>◔&nbsp; Money Wheel</h3>
+An upright wheel of 55 segments under a leather flapper. Bet on any of six numbers, and the one it stops on pays that number to one: 1 pays 1 to 1, 40 pays 40 to 1.<br><br>
+Three segments are multipliers, ×2, ×3 and ×6. Stop on one and every bet stays where it lies, the wheel is spun again, and the number it then stops on pays multiplied.
+</td>
+</tr>
 </table>
 
 ## Inside the salon
@@ -91,6 +101,14 @@ At baccarat your cards come to you face down and the camera leans in over them. 
 Let go and it falls back; draw it half over, or flick it, and it turns. A tap lifts the edge to show the way, and <i>Turn over</i> (or Space) turns it at once.
 </td>
 </tr>
+<tr>
+<td valign="middle">
+<h3>The flapper decides</h3>
+The money wheel is simulated too: a heavy wheel on a bearing, a brass peg at every segment's edge and a leather flapper that each peg has to bend aside to pass. The pegs are what stop it. The clacks draw apart until a peg comes that it cannot quite push past, and the wheel rocks to rest between two; every clack you hear is a peg the simulation had pass.<br><br>
+Stop on a multiplier and the camera is already at the wheel's top: the figure lands on the picture, the host calls <i>"Times three!"</i>, every bet stays, and he pulls again.
+</td>
+<td width="56%"><img src="docs/screenshots/wheel-multiplier.jpg" alt="The top of the money wheel at rest on its ×3 segment, the flapper between two pegs, and ×3 on every bet"></td>
+</tr>
 </table>
 
 <table>
@@ -102,7 +120,7 @@ Let go and it falls back; draw it half over, or flick it, and it turns. A tap li
 <tr>
 <td valign="top"><b>Sound you can place</b><br>Cards and chips heard left or right where they land, music that ducks under the calls, a room that murmurs.</td>
 <td valign="top"><b>Last hands and a hall of fame</b><br>Every round at every table, with its cards, side bets and net, and this visit's running total; your biggest win, best run and milestones are kept for good.</td>
-<td valign="top"><b>Rules from real tables</b><br>Blackjack and side bets after Nevada and New Jersey, roulette after New Jersey, Singapore and Monte-Carlo, baccarat by the standard tableau with its odds counted card by card.</td>
+<td valign="top"><b>Rules from real tables</b><br>Blackjack and side bets after Nevada and New Jersey, roulette after New Jersey, Singapore and Monte-Carlo, baccarat by the standard tableau with its odds counted card by card, and a money wheel whose returns are worked out exactly.</td>
 </tr>
 </table>
 
@@ -147,7 +165,7 @@ Then go to **http://localhost:8000**. (Opening `index.html` straight from the di
 ## Keys
 
 <details>
-<summary><b>Keyboard shortcuts</b> for every table, blackjack, roulette, baccarat and the lobby</summary>
+<summary><b>Keyboard shortcuts</b> for every table, blackjack, roulette, baccarat, the money wheel and the lobby</summary>
 <br>
 
 **At every table**
@@ -183,6 +201,13 @@ Then go to **http://localhost:8000**. (Opening `index.html` straight from the di
 | <kbd>Space</kbd> or <kbd>Enter</kbd> | At the squeeze: turn your next card over. While the cards are shown: hurry them |
 | <kbd>Esc</kbd> | Closes the roads |
 
+**At the money wheel**
+
+| Key | Action |
+|---|---|
+| <kbd>A</kbd> · <kbd>S</kbd> · <kbd>D</kbd> · <kbd>F</kbd> · <kbd>G</kbd> · <kbd>H</kbd> | The chip in hand on 1 · 2 · 5 · 10 · 20 · 40 |
+| <kbd>Space</kbd> or <kbd>Enter</kbd> | While the wheel turns: hurry it on its way (its last pegs run at their own pace) |
+
 **In the lobby**, <kbd>←</kbd> <kbd>→</kbd> move along the tables and <kbd>Enter</kbd> or <kbd>Space</kbd> takes the seat. <kbd>Esc</kbd> closes Settings, and a button you reach with <kbd>Tab</kbd> takes <kbd>Space</kbd> and <kbd>Enter</kbd> as its own press.
 
 </details>
@@ -197,7 +222,7 @@ Plain HTML and ES modules: **no build step, no npm, no framework**. The game ask
 | **Sound** | Web Audio, five buses (table, dealer, room, music, interface); the hum, ticks and ball roll are synthesised |
 | **Motion** | anime.js, Torph, canvas-confetti, web-haptics and cuelume |
 | **Offline** | A service worker (`sw.js`) and `manifest.webmanifest` make it a home-screen app |
-| **Tests** | `node --test` from the repo root (Node 22+, nothing to install): every payout, the house edges, money conservation, saved hands played out, the ball landing where it was drawn |
+| **Tests** | `node --test` from the repo root (Node 22+, nothing to install): every payout, the house edges, money conservation, saved hands played out, the ball landing where it was drawn, the money wheel stopping in the segment drawn |
 
 <details>
 <summary><b>Project layout</b></summary>
@@ -214,6 +239,7 @@ src/              All code, styles, fonts, sounds and vendored libraries
   scene/          The shared 3D stage, the card table blackjack and baccarat are played at, the glass, the lightning
   roulette/       The roulette room: rules, Lightning strikes, physics, replay camera, wheel and table
   baccarat/       The baccarat room: rules and roads, the table, the squeeze and its fold
+  wheel/          The money wheel: rules and returns, the wheel's physics, the room and its scene
 test/             node --test suite over the rules and money code
 assets/           Card art, cloth, wood and leather, the salons round each table
 docs/             The logo and these screenshots
@@ -225,7 +251,7 @@ To work on it, start with **[PROJECT.md](PROJECT.md)**: the full brief (architec
 
 ## Credits
 
-Built on open-source libraries and openly licensed sounds and fonts; the dealers' voices, the roulette croupier's sounds and the roulette music were made with ElevenLabs. **[CREDITS.md](CREDITS.md)** lists every library, font, sound and image, [src/sounds/CREDITS.txt](src/sounds/CREDITS.txt) each sound file, and [src/vendor/README.md](src/vendor/README.md) the library versions and local changes.
+Built on open-source libraries and openly licensed sounds and fonts; the dealers' voices, the roulette croupier's sounds, the money wheel's clacks and the roulette music were made with ElevenLabs. **[CREDITS.md](CREDITS.md)** lists every library, font, sound and image, [src/sounds/CREDITS.txt](src/sounds/CREDITS.txt) each sound file, and [src/vendor/README.md](src/vendor/README.md) the library versions and local changes.
 
 ## Licence
 

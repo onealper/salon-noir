@@ -6,7 +6,7 @@
 const KEY = 'salonnoir.fame';
 
 // The games open in the salon: a milestone or a table of one still being built is not asked for yet.
-export const GAMES = ['blackjack', 'roulette', 'baccarat'];
+export const GAMES = ['blackjack', 'roulette', 'baccarat', 'wheel'];
 // The milestones, in the order shown (`game`: of that game alone).
 export const MARKS = [
   { id: 'rounds100', name: 'A hundred rounds', hint: 'Play 100 rounds' },

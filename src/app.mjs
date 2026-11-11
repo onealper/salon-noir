@@ -48,7 +48,7 @@ const settings = {
   squeeze: store.get('squeeze', true),   // baccarat: you turn your side's cards yourself
   mix: (m => ({ table: level(m?.table, 1), voice: level(m?.voice, 1), music: level(m?.music, .7) }))(store.get('mix', {})),
 };
-const rooms = { blackjack: null, roulette: null, baccarat: null };   // each built the first time you go there (see the rooms section)
+const rooms = { blackjack: null, roulette: null, baccarat: null, wheel: null };   // each built the first time you go there (see the rooms section)
 let room = null;   // which room of the salon you are in
 const gfxProfile = g => g === 'auto' ? detectQuality() : QUALITY[g] ?? detectQuality();
 
@@ -187,13 +187,16 @@ for (const d of $$('.sheet details')) kit.accordion(d);
 // yours ended (up to four after resplits), every side bet with what it saw, the Lightning fee and bonus, and the net.
 const TABLE_NAME = { classic: 'Classic', freebet: 'Free Bet', lightning: 'Lightning' }, WHEEL_NAME = { lightning: 'Lightning roulette', mega: 'Mega Lightning roulette' };
 const BACCARAT_NAME = { classic: 'Classic baccarat', nocomm: 'No commission baccarat' }, BET_NAME = { player: 'Player', banker: 'Banker', tie: 'Tie', ppair: 'Player pair', bpair: 'Banker pair' };
-const titleOf = e => e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : e.game === 'baccarat' ? BACCARAT_NAME[e.table] ?? 'Baccarat' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`;
+const titleOf = e => e.game === 'roulette' ? WHEEL_NAME[e.table] ?? 'Roulette' : e.game === 'baccarat' ? BACCARAT_NAME[e.table] ?? 'Baccarat' : e.game === 'wheel' ? 'Money wheel' : `${TABLE_NAME[e.table] ?? 'Blackjack'} blackjack`;
 const ENDED = h => h.even ? 'Even money' : h.kind === 'blackjack' ? 'Blackjack' : h.kind === 'win' ? 'Win' : h.kind === 'push' ? 'Push' : h.total > 21 ? 'Bust' : 'Lose';
 function entryHTML(e) {
   const tone = e.net > 0 ? 'up' : e.net < 0 ? 'down' : 'even', when = new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), line = (a, b, cls = '') => `<li class="${cls}"><span>${esc(a)}</span>${b == null ? '' : `<em>${esc(b)}</em>`}</li>`;
   let rows = '';
   if (e.game === 'roulette') {
     rows = line(`${e.n} ${e.color ?? ''} · ${e.back ? `returned ${fmt(e.back)} of ${fmt(e.staked)}` : `staked ${fmt(e.staked)}`}`, null) + (e.partage ? line('La partage: half of each even-money bet back', `+${fmt(e.partage)}`, 'side') : '') + (e.x ? line(`Lightning ${fmt(e.x)}× on your straight up`, null, 'side bolt') : '');
+  } else if (e.game === 'wheel') {
+    rows = line(`The wheel: ${(e.segs ?? [e.n]).map(s => String(s).startsWith('x') ? `×${String(s).slice(1)}, spun again` : s).join(' · ')}`, null)
+      + (e.wins ?? []).map(w => line(`On ${String(w.id).slice(1)}: ${fmt(w.stake)} · won${e.x > 1 ? ` ${e.n} to 1 × ${e.x}` : ''}`, signed(w.pay), 'side')).join('') + (e.losses ?? []).map(w => line(`On ${String(w.id).slice(1)}: ${fmt(w.stake)} · lost`, signed(-w.stake), 'side')).join('');
   } else if (e.game === 'baccarat') {
     rows = line(`Player ${(e.player ?? []).join(' ')} · ${e.p}${e.winner === 'player' ? ' · wins' : ''}`, null) + line(`Banker ${(e.banker ?? []).join(' ')} · ${e.b}${e.winner === 'banker' ? ' · wins' : ''}${e.winner === 'tie' ? ' · a tie' : ''}`, null)
       + (e.wins ?? []).map(w => line(`${BET_NAME[w.id] ?? w.id} ${fmt(w.stake)} · won`, signed(w.pay), 'side')).join('') + (e.pushes ?? []).map(w => line(`${BET_NAME[w.id] ?? w.id} ${fmt(w.stake)} · push`, '±0', 'side')).join('')
@@ -219,7 +222,7 @@ function renderBook() {
 ledger.subscribe(renderBook); renderBook();
 
 // ---- the hall of fame (core/fame.mjs): what you have done at the tables, kept for good; in the settings, under Last hands ----
-const AT_TABLE = { blackjack: t => `${TABLE_NAME[t] ?? 'Classic'} blackjack`, roulette: t => WHEEL_NAME[t] ?? 'European roulette', baccarat: t => BACCARAT_NAME[t] ?? 'Baccarat' };
+const AT_TABLE = { blackjack: t => `${TABLE_NAME[t] ?? 'Classic'} blackjack`, roulette: t => WHEEL_NAME[t] ?? 'European roulette', baccarat: t => BACCARAT_NAME[t] ?? 'Baccarat', wheel: () => 'the money wheel' };
 const day = at => { if (!at) return ''; const d = new Date(at); return d.toLocaleDateString([], { day: 'numeric', month: 'short', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
 function renderFame() {
   const f = fame.state, all = marks(), got = all.filter(m => f.marks[m.id] != null);
@@ -239,6 +242,7 @@ function renderFame() {
       ${row('Ten-card Charlies', fmt(f.charlies))}
       ${row('Highest Lightning multiplier paid', f.bolt ? `${fmt(f.bolt.x)}×` : '–', f.bolt ? `${AT_TABLE[f.bolt.game]?.(f.bolt.table) ?? ''} · ${day(f.bolt.at)}` : '')}
       ${GAMES.includes('baccarat') ? row('Baccarat', `${fmt(f.naturals)} · ${fmt(f.ties)} · ${fmt(f.pairs)}`, 'Wins on a natural · ties won · pairs won') : ''}
+      ${GAMES.includes('wheel') ? row('Money wheel', `${fmt(f.forties)} · ${f.spun > 1 ? `${fmt(f.spun)}×` : '–'}`, 'Wins on 40 · highest multiplier paid') : ''}
       ${row('Numbers won straight up', `${f.numbers.length} of 37`)}
     </ul>
     <div class="fm-nums" role="img" aria-label="${f.numbers.length ? `Won so far: ${f.numbers.join(', ')}` : 'None won yet'}"><span${hit(0)}>0</span><ol>${[3, 2, 1].flatMap(r => Array.from({ length: 12 }, (_, c) => { const n = c * 3 + r; return `<li${hit(n)}>${n}</li>`; })).join('')}</ol></div>`
@@ -309,7 +313,7 @@ const ctx = {
   showBalance, showInPlay, title, barCover, dockCover, BLUR_RISE, openSheetAt, bindToggle,
 };
 const ROOMS = { blackjack: () => import('./blackjack/controller.mjs').then(m => m.createBlackjack(ctx)), roulette: () => import('./roulette/rgame.mjs').then(m => m.createRoulette(ctx)),
-  baccarat: () => import('./baccarat/bgame.mjs').then(m => m.createBaccarat(ctx)) };
+  baccarat: () => import('./baccarat/bgame.mjs').then(m => m.createBaccarat(ctx)), wheel: () => import('./wheel/wgame.mjs').then(m => m.createWheel(ctx)) };
 const loading = {};
 const load = r => loading[r] ??= ROOMS[r]().then(x => (rooms[r] = x));   // a failure is kept: the browser keeps a module that failed to load failed until the page reloads
 function setRoom(r) {
@@ -328,7 +332,7 @@ $('#brandMark').innerHTML = mark();
 let previewTurn = 0, previewing = Promise.resolve();
 // The lobby's cards (core/lobby.mjs), and for each its room and that room's own name for the table (rgame.mjs and
 // bgame.mjs, TABLES; a blackjack card is the mode itself).
-const TABLE_OF = { roulette: ['roulette', 'european'], 'roulette-lightning': ['roulette', 'lightning'], 'roulette-mega': ['roulette', 'mega'], baccarat: ['baccarat', 'classic'], 'baccarat-nocomm': ['baccarat', 'nocomm'] };
+const TABLE_OF = { roulette: ['roulette', 'european'], 'roulette-lightning': ['roulette', 'lightning'], 'roulette-mega': ['roulette', 'mega'], baccarat: ['baccarat', 'classic'], 'baccarat-nocomm': ['baccarat', 'nocomm'], wheel: ['wheel', 'wheel'] };
 const gameOf = m => TABLE_OF[m]?.[0] ?? 'blackjack', kindOf = m => TABLE_OF[m]?.[1] ?? m, cardOf = (game, kind) => Object.keys(TABLE_OF).find(m => TABLE_OF[m][0] === game && TABLE_OF[m][1] === kind) ?? game;
 const couldNotLoad = game => lobby.note(`The ${game} table could not be loaded. Check the connection, then reload the page.`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -426,7 +430,7 @@ addEventListener('salonnoir:gpulost', () => {
 addEventListener('salonnoir:gpurestored', () => $('#gpuLost')?.remove());
 // Test hooks for the browser checks (see the testing aids above): the salon's, and the blackjack table's once it is built.
 if (dev) {
-  const hooks = { get roulette() { return rooms.roulette; }, get blackjack() { return rooms.blackjack; }, get baccarat() { return rooms.baccarat; }, feel, settings, audio, loadRoulette: () => load('roulette'), load, setRoom: r => rooms[r] ? setRoom(r) : load(r).then(() => setRoom(r)) };
+  const hooks = { get roulette() { return rooms.roulette; }, get blackjack() { return rooms.blackjack; }, get baccarat() { return rooms.baccarat; }, get wheel() { return rooms.wheel; }, feel, settings, audio, loadRoulette: () => load('roulette'), load, setRoom: r => rooms[r] ? setRoom(r) : load(r).then(() => setRoom(r)) };
   for (const k of ['table', 'view', 'motion', 'world', 'choose', 'seating', 'lightning', 'mode', 'busy', 'rig']) Object.defineProperty(hooks, k, { get: () => rooms.blackjack?.test[k], enumerable: true });
   window.__spader = hooks;
 }

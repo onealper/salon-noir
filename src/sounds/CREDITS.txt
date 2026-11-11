@@ -33,7 +33,7 @@ for Spader, the game's earlier name). The game adds a small generated room rever
 random pitch and level variation, and stereo placement by table position at play time.
 
 
-The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (200 files)
+The sound kit: src/sounds/kit/*.mp3 and kit/voice/*.mp3 (215 files)
 ===================================================================
 
 Changes, every kit file: cut to length, levels matched and encoded as MP3 with ffmpeg
@@ -89,7 +89,7 @@ Chip-select thock
 
 Made for Salon Noir with ElevenLabs (https://elevenlabs.io): the owner's own sounds, used
 under ElevenLabs' terms; not openly licensed
-  voice/james-*.mp3 (84 files), voice/sofia-*.mp3 (41 files)
+  voice/james-*.mp3 (94 files), voice/sofia-*.mp3 (41 files)
                       The dealers' voices, James and Sofia (text to speech), recorded
                       again on 2026-10-27 with Eleven v4 in two ElevenLabs library
                       voices: James is "Jerry B. - British RP | Posh & Refined", Sofia
@@ -118,6 +118,13 @@ under ElevenLabs' terms; not openly licensed
                       The words, as recorded: "Player has zero." (to nine) "Banker has
                       zero." (to nine) "Player wins." "Banker wins." "It's a tie."
                       "Card for Player." "Card for Banker."
+                      Money wheel calls, James (the wheel's host), recorded on 2026-11-11
+                      in the same voice with Eleven v4 and cut the same way: wh-1, wh-2,
+                      wh-5, wh-10, wh-20, wh-40 (the number the wheel stops on), wh-x2,
+                      wh-x3, wh-x6 (a multiplier), wh-again (after a multiplier).
+                      The words, as recorded: "One." "Two." "Five." "Ten." "Twenty."
+                      "[excited] Forty!" "[excited] Times two!" "[excited] Times three!"
+                      "[excited] Times six!" "All bets stay. We spin again."
   crowd-cheer-1.mp3, crowd-cheer-2.mp3                  The table cheering a big win.
   win-small-1/2, win-side-1/2, win-blackjack-1/2, win-big-1/2, win-bling, reveal-sting
                       Win stings.
@@ -155,3 +162,11 @@ under ElevenLabs' terms; not openly licensed
                       it). Generated for Salon Noir with ElevenLabs Sound Effects v2 on
                       2026-10-28 (three takes each, picked from their envelopes); mono,
                       70 Hz (the landing 40 Hz) high-pass, tails faded, peaks at -1 to -3 dBFS.
+  wheel-clack-1..5    The money wheel's leather flapper off a brass peg: one is played for
+                      each peg the wheel's simulation has pass it (wheel/wgame.mjs), louder
+                      and a shade higher the faster the wheel turns. Five single clacks
+                      cut from one take, generated for Salon Noir with ElevenLabs Sound
+                      Effects v2 on 2026-11-11 (eight takes, picked from their onsets and
+                      spectra); mono, 90 Hz high-pass, each cut from 3 ms before its onset
+                      to before the next (0.10 to 0.18 s), tails faded, levelled to one
+                      loudness over their first 30 ms (peaks at -3 to -6 dBFS).

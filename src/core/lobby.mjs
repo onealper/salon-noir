@@ -14,6 +14,8 @@ const ICON = {
   roulette: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" class="ring"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v6.3M12 15.2v6.3M2.5 12h6.3M15.2 12h6.3" class="cut"/></svg>',
   // baccarat: two cards, one lying over the other's corner
   baccarat: '<svg viewBox="0 0 24 24"><rect x="3.2" y="5.2" width="10.4" height="14.6" rx="1.8" transform="rotate(-9 8.4 12.5)"/><rect x="10.6" y="4.4" width="10.4" height="14.6" rx="1.8" transform="rotate(9 15.8 11.7)" class="ring"/></svg>',
+  // the money wheel: an upright wheel, its pointer over the top
+  wheel: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13.4" r="8.4" class="ring"/><circle cx="12" cy="13.4" r="2.1"/><path d="M12 5v6.3M12 15.5v6.3M3.6 13.4h6.3M14.1 13.4h6.3M6.1 7.5l4.4 4.4M13.5 14.9l4.4 4.4M17.9 7.5l-4.4 4.4M10.5 14.9l-4.4 4.4" class="cut"/><path d="M9.9 1.4h4.2L12 6.2Z"/></svg>',
 };
 // Every table in the salon, as the rail shows them. Each line fits a desktop card; a phone's card breaks it in two, and
 // a phrase that reads as one (keep) stays together on the second line.
@@ -27,12 +29,13 @@ const TABLES = [
   { game: 'roulette', mode: 'roulette-mega', kicker: 'Roulette', name: 'Mega Lightning', line: `Chain lightning and ${keep('a double strike')} ${keep('to 2,000×')}`, stat: 'Up to 2,000×', icon: 'lightning' },
   { game: 'baccarat', mode: 'baccarat', kicker: 'Baccarat', name: 'Classic', line: `Punto banco from the shoe; ${keep('you squeeze your cards')}`, stat: 'Banker pays 19:20', icon: 'baccarat' },
   { game: 'baccarat', mode: 'baccarat-nocomm', kicker: 'Baccarat', name: 'No commission', line: `Banker pays even money; ${keep('a winning six pays half')}`, stat: 'Banker pays 1:1', icon: 'baccarat' },
+  { game: 'wheel', mode: 'wheel', kicker: 'Wheel', name: 'Money wheel', line: `Six numbers, and three multipliers that ${keep('spin it again')}`, stat: 'Pays up to 40:1', icon: 'wheel', seat: 'The money wheel' },
 ];
 
 const gameOf = mode => TABLES.find(t => t.mode === mode)?.game ?? 'blackjack';
 // The rail shows one game's tables at a time under a switch of the games (the casino lobby's game tabs), so each
 // card has the room to read: up to three across, never two rows. Each game keeps the table last picked in it.
-const GAMES = [['blackjack', 'Blackjack'], ['roulette', 'Roulette'], ['baccarat', 'Baccarat']], last = {};
+const GAMES = [['blackjack', 'Blackjack'], ['roulette', 'Roulette'], ['baccarat', 'Baccarat'], ['wheel', 'Wheel']], last = {};
 const calm = () => document.body.classList.contains('reduced') || matchMedia('(prefers-reduced-motion: reduce)').matches;
 let root, onPlay = () => {}, onChange = () => {}, onPreview = () => {}, onRefuse = () => {}, onFame = null, currentMode = () => 'classic', unsub = null, isOpen = false, picked = 'classic', noteText = '';
 // While the lobby is up, the room behind it (bar, table, dock) is inert: no focus or taps reach the
@@ -61,7 +64,7 @@ function pick(mode, { preview = true } = {}) {
   const t = TABLES.find(x => x.mode === mode && !x.soon); if (!t) return;
   picked = mode; root.dataset.mode = mode; last[t.game] = mode; setGame(t.game, preview);
   for (const c of root.querySelectorAll('.tcard[data-mode]')) { const on = c.dataset.mode === mode; c.setAttribute('aria-checked', on); if (on && preview) c.scrollIntoView({ inline: 'center', block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }
-  root.querySelector('.seat .which').textContent = `${t.name} ${t.kicker.toLowerCase()}`;
+  root.querySelector('.seat .which').textContent = t.seat ?? `${t.name} ${t.kicker.toLowerCase()}`;   // (`seat`: a table that is its game's only one says its name once)
   if (preview) onPreview(mode);
 }
 export const lobby = {

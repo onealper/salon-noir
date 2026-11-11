@@ -220,7 +220,7 @@ function feltCloth(px, into) {
 }
 const feltDone = (c, into) => { if (into?.image === c) { into.needsUpdate = true; return into; } return texture(c, { aniso: 16 }); };
 // the Salon Noir mark, a brass spade with a lit keyhole (`size` px across, its top-left at x, y)
-function feltMark(ctx, x, y, size) {
+export function feltMark(ctx, x, y, size) {
   ctx.save(); ctx.translate(x, y); ctx.scale(size / 100, size / 100);
   const g = ctx.createLinearGradient(0, 0, 0, 100); g.addColorStop(0, 'rgba(243,222,166,.95)'); g.addColorStop(.45, 'rgba(201,164,92,.95)'); g.addColorStop(1, 'rgba(141,106,48,.95)');
   ctx.fillStyle = g; ctx.fill(new Path2D(SPADE));

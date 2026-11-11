@@ -1,7 +1,7 @@
 {
   "name": "Salon Noir",
   "short_name": "Salon Noir",
-  "description": "A private casino: first-person blackjack, roulette and baccarat in 3D. Play chips only.",
+  "description": "A private casino: first-person blackjack, roulette, baccarat and a money wheel in 3D. Play chips only.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
