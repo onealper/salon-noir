@@ -1,7 +1,7 @@
-// Motion for the screen chrome (not the table): spring physics from anime.js for touch feedback
-// and entrances, and Torph for text and numbers that morph in place instead of blinking.
+// Motion for the screen chrome (not the table): spring physics from anime.js for touch feedback, the Web Animations
+// API for what comes and goes, and Torph for text and numbers that morph in place instead of blinking.
 // The 3D table keeps its own motion engine; this only moves DOM.
-import { animate, stagger, spring as createSpring, utils } from './vendor/anime.mjs';
+import { animate, spring as createSpring, utils } from './vendor/anime.mjs';
 import { TextMorph } from './vendor/torph.mjs';
 
 let reduced = false;
@@ -30,32 +30,54 @@ export function shake(el) {
   if (reduced || !el) return;
   animate(el, { translateX: [0, -6, 6, -4, 3, 0], duration: 380, ease: 'outQuad' });
 }
+// ---- things coming and going --------------------------------------------------------------------------
+// Entrances and exits run on the Web Animations API, not on script: opacity, translate and scale are then the
+// compositor's, so they stay smooth while the main thread is drawing the table (a deal, the cards swept away), and a
+// `backwards` fill has the first keyframe on the element in the very frame it is shown (set from script it came a frame
+// late: the finished state flashed first). The fade and the movement are two animations: the movement on one of the
+// stylesheet's springs (app.css: `linear()` curves, or the nearest cubic curve in an older browser), the fade on a
+// plain ease-out, as a spring is front-loaded and would have a third of the fade done in its first frame.
+const curve = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'cubic-bezier(.22, 1, .36, 1)';
+const FADE = 'cubic-bezier(.3, 0, .4, 1)';
+const running = new WeakMap();   // element → the animations of its entrance or exit, so the next one takes over from them
+const stop = el => { for (const a of running.get(el) ?? []) a.cancel(); running.delete(el); };
+function play(el, list) {
+  const made = list.map(([frames, opts]) => { try { return el.animate(frames, opts); } catch { return el.animate(frames, { ...opts, easing: 'ease-out' }); } });
+  running.set(el, [...(running.get(el) ?? []), ...made]);
+  Promise.all(made.map(a => a.finished)).then(() => { const left = (running.get(el) ?? []).filter(a => !made.includes(a)); if (left.length) running.set(el, left); else running.delete(el); }, () => {});
+  return made;
+}
 // Something appearing: grows in with a small overshoot.
 export function pop(el, { from = .6, delay = 0 } = {}) {
-  if (!el) return; if (reduced) { utils.set(el, { opacity: 1, scale: 1 }); return; }
-  animate(el, { opacity: [0, 1], scale: [from, 1], ease: S.pop, delay });
+  if (!el) return; stop(el); if (reduced) return;
+  play(el, [[[{ offset: 0, opacity: 0 }], { duration: 200, delay, easing: FADE, fill: 'backwards' }],
+    [[{ offset: 0, scale: String(from) }], { duration: 460, delay, easing: curve('--spring-pop'), fill: 'backwards' }]]);
 }
-// A group entering: each item rises into place a beat after the one before. It moves on the `translate` property and
-// lets go of its inline opacity and offset once in place, so the stylesheet rules again: a disabled control looks
-// disabled, and a transform of the item's own (the chip in hand stands lifted) is left alone.
-const release = els => { for (const e of els) { e.style.removeProperty('opacity'); e.style.removeProperty('translate'); } };
-export function enter(els, { y = 14, gap = 35, from = 'first' } = {}) {
-  els = [...els].filter(e => e && e.offsetParent !== null); if (!els.length) return;
-  if (reduced) { utils.remove(els, null, 'opacity'); utils.remove(els, null, 'translate'); release(els); return; }
-  animate(els, { opacity: [0, 1], translate: [`0px ${y}px`, '0px 0px'], ease: S.soft, delay: stagger(gap, { from }), onComplete: () => release(els) });
+// A group entering: each item rises into place a beat after the one before (an item may be a list of elements that
+// rise on the same beat). Only where it starts is given (clear, and `y` px low): where it ends is whatever the
+// stylesheet has for it at that moment, so a control that enters disabled arrives dimmed and stays so, a transform of
+// the item's own (the chip in hand stands lifted) is left alone, and nothing is left on the element afterwards.
+// (An element moved this way is, while it moves, what its absolutely placed descendants are laid out against: give
+// the parts of such a block, not the block.)
+export function enter(els, { y = 14, gap = 35, delay = 0, ms = 320 } = {}) {
+  const beats = [...els].map(item => [].concat(item).filter(e => e && e.offsetParent !== null)).filter(b => b.length); if (!beats.length) return;
+  for (const e of beats.flat()) stop(e);
+  if (reduced) return;
+  const spring = curve('--spring-press');
+  beats.forEach((beat, i) => { const d = delay + i * gap; for (const e of beat) play(e, [[[{ offset: 0, opacity: 0 }], { duration: ms * .8, delay: d, easing: FADE, fill: 'backwards' }],
+    [[{ offset: 0, translate: `0 ${y}px` }], { duration: ms, delay: d, easing: spring, fill: 'backwards' }]]); });
 }
-// Something going: it fades and softens out (dropping `y` px, or shrinking to `scale`) and is then hidden, instead of
-// vanishing in a frame (transitions.dev's panel and tooltip closes: quicker out than in). `shown` puts it back at once,
-// cancelling an exit still running.
-const settle = el => { delete el.dataset.leaving; for (const p of ['opacity', 'filter', 'translate', 'scale']) el.style.removeProperty(p); };
+// Something going: it fades and softens out (dropping `y` px, or shrinking to `scale`) from wherever it stands and is
+// then hidden, instead of vanishing in a frame (transitions.dev's panel and tooltip closes: quicker out than in).
+// `shown` puts it back at once, cancelling an exit still running.
 export function leave(el, { y = 0, scale = 1, ms = 220 } = {}) {
-  if (!el || el.hidden) return;
-  if (reduced) { el.hidden = true; settle(el); return; }
+  if (!el || el.hidden || el.dataset.leaving) return;
+  if (reduced) { el.hidden = true; return; }
   const mark = el.dataset.leaving = String(Math.random());
-  animate(el, { opacity: [1, 0], filter: ['blur(0px)', 'blur(2px)'], ...(y ? { translate: ['0px 0px', `0px ${y}px`] } : {}), ...(scale !== 1 ? { scale: [1, scale] } : {}),
-    duration: ms, ease: 'outQuad', onComplete: () => { if (el.dataset.leaving === mark) { el.hidden = true; settle(el); } } });
+  const [a] = play(el, [[[{ offset: 1, opacity: 0, filter: 'blur(2px)', ...(y ? { translate: `0 ${y}px` } : {}), ...(scale !== 1 ? { scale: String(scale) } : {}) }], { duration: ms, easing: 'cubic-bezier(.4, 0, .7, 1)', fill: 'forwards' }]]);
+  a.finished.then(() => { if (el.dataset.leaving !== mark) return; el.hidden = true; delete el.dataset.leaving; stop(el); }, () => {});
 }
-export function shown(el) { if (!el) return; if (el.dataset.leaving) { utils.remove(el); settle(el); } el.hidden = false; }
+export function shown(el) { if (!el) return; if (el.dataset.leaving) { delete el.dataset.leaving; stop(el); } el.hidden = false; }
 // A value that changed: a quick bump so the eye catches it.
 export function bump(el, k = 1.14) {
   if (reduced || !el) return;

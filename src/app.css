@@ -5,6 +5,7 @@
   --gold: #c9a45c; --gold-hi: #e2c483; --gold-lo: #8d7038;
   --win: #d8b86e; --loss: #b85a4f;
   --ease: cubic-bezier(.2, .8, .2, 1);
+  --fade: cubic-bezier(.3, 0, .4, 1);   /* for a change of light (a fade, a colour): gentle at both ends, where --ease, made for movement, has a third of it done in the first frame */
   /* Springs, solved ahead of time by springline (MIT) and written as CSS linear() curves: real spring
      motion with no script running. press .3s, a hair of overshoot; pop .5s, a 5% bounce; sheet .5s, no
      bounce; settle .6s, slow and soft. Each is meant for the duration given. */
@@ -275,9 +276,12 @@ body.reduced .peek-card .face { animation: none; }
 @media (hover: hover) and (pointer: fine) { .tile:hover:not(:disabled) { border-color: #55555c; } }
 .tile:disabled { opacity: .4; }
 .tile.refused { animation: refuse .5s var(--ease); }
-/* betting tools and decisions share the dock and cross-fade, so nothing jumps */
-.betting, .decisions { grid-area: dock; transition: opacity var(--duration-quick) var(--ease), transform var(--duration-medium) var(--spring-press), visibility 0s; }
-body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(6px); transition: opacity var(--duration-quick), transform var(--duration-quick), visibility 0s var(--duration-quick); }
+/* Betting tools and decisions share the dock, so nothing jumps: the set going out sinks a little and fades; the one
+   coming in fades up in its place (its blocks do the rising: ui.enter in blackjack/controller.mjs), from the frame it
+   is shown in. Something on its way out (ui.leave) no longer takes a tap. */
+.betting, .decisions { grid-area: dock; transition: opacity 200ms var(--fade), visibility 0s; }
+body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(6px); transition: opacity 180ms var(--fade), transform 180ms var(--fade), visibility 0s 180ms; }
+[data-leaving] { pointer-events: none; }
 
 .chips { display: flex; gap: 6px; padding: 4px 2px; }
 .chip { width: 54px; height: 54px; border-radius: 50%; position: relative; transition: filter var(--duration-quick), opacity var(--duration-quick); filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55)); }
@@ -301,10 +305,16 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 .decisions { gap: 10px; align-items: flex-start; padding-bottom: 18px; }
 /* Decision keys: filled cards, each colour-coded to its move, with a pressed-down depth edge. */
 .act { --bg: linear-gradient(#24211b, #1a1814); --bd: var(--gold-lo); --fg: var(--gold-hi); --edge: #3a2d15;
-  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  width: 96px; height: 78px; border-radius: 16px; background: var(--bg); border: 1.5px solid var(--bd); color: var(--fg);
+  position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  width: 96px; height: 78px; border-radius: 16px; background: #141416; border: 1.5px dashed #34343a; color: var(--fg);
+  transition: transform 60ms ease, color 220ms var(--fade), opacity var(--duration-quick), filter var(--duration-quick); }
+/* The lit face (the move's colour, its solid edge and its depth) lies on a layer of its own over the key's unlit
+   look, so a move going out of play fades out and one coming into play fades in: a gradient can't be transitioned,
+   nor a border from solid to dashed, and the keys used to change in a single frame. The move just made keeps its
+   light a beat longer than the others (`.chosen`, set as it is pressed). */
+.act::before { content: ''; position: absolute; inset: -1.5px; z-index: -1; border-radius: inherit; background: var(--bg); border: 1.5px solid var(--bd);
   box-shadow: 0 4px 0 var(--edge), 0 10px 20px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .08);
-  transition: transform 60ms ease, box-shadow 60ms ease, background var(--duration-quick), border-color var(--duration-quick), color var(--duration-quick), opacity var(--duration-quick), filter var(--duration-quick); }
+  transition: opacity 220ms var(--fade), box-shadow 60ms ease; }
 .act.big { width: 120px; }
 .act.hit { --bg: linear-gradient(#46683d, #2f4a29); --bd: #7fa973; --fg: #effbe8; --edge: #1b2b18; }
 .act.stand { --bg: linear-gradient(#6e3d37, #4b2824); --bd: #b87a70; --fg: #fbe9e5; --edge: #2c1714; }
@@ -313,14 +323,16 @@ body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions {
 .act .glyph { font: 800 24px/1 "Barlow Condensed", sans-serif; }
 .act .label { font: 500 14px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; }
 .act.big .label { font-size: 16px; }
-.act kbd { position: absolute; top: 6px; right: 7px; color: inherit; opacity: .55; border-color: currentColor; }
-.act .why { position: absolute; top: calc(100% + 7px); left: 50%; translate: -50% 0; width: max-content; max-width: 130px; font: 600 11px/1.15 Inter, system-ui, sans-serif; color: var(--muted); text-align: center; pointer-events: none; }
-@media (hover: hover) and (pointer: fine) { .act:hover:not(:disabled) { filter: brightness(1.12); box-shadow: 0 4px 0 var(--edge), 0 12px 24px rgba(0, 0, 0, .5), 0 0 0 3px rgba(226, 196, 131, .14); } }
-.act:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--edge), 0 4px 8px rgba(0, 0, 0, .35); }
+.act kbd { position: absolute; top: 6px; right: 7px; color: inherit; opacity: .55; border-color: currentColor; transition: opacity 220ms var(--fade); }
+/* why a move can't be made, under its key: it fades with your turn (its words are kept until the next one, so they are there to fade) */
+.act .why { position: absolute; top: calc(100% + 7px); left: 50%; translate: -50% 0; width: max-content; max-width: 130px; font: 600 11px/1.15 Inter, system-ui, sans-serif; color: var(--muted); text-align: center; pointer-events: none; transition: opacity 200ms var(--fade), visibility 0s; }
+@media (hover: hover) and (pointer: fine) { .act:hover:not(:disabled) { filter: brightness(1.12); } .act:hover:not(:disabled)::before { box-shadow: 0 4px 0 var(--edge), 0 12px 24px rgba(0, 0, 0, .5), 0 0 0 3px rgba(226, 196, 131, .14); } }
+.act:active:not(:disabled) { transform: translateY(3px); } .act:active:not(:disabled)::before { box-shadow: 0 1px 0 var(--edge), 0 4px 8px rgba(0, 0, 0, .35); }
 .act:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 3px; }
-.act:disabled { background: #141416; border: 1.5px dashed #34343a; color: #5d5953; box-shadow: none; }
+.act:disabled { color: #5d5953; } .act:disabled::before { opacity: 0; }
+.act.chosen { transition-delay: 0s, 200ms, 0s, 0s; } .act.chosen::before { transition-delay: 200ms, 0s; } .act.chosen kbd { transition-delay: 200ms; }   /* (its colour and face, not its press) */
 .act:disabled kbd { opacity: .3; }
-body:not([data-mode="player"]) .act .why { visibility: hidden; }
+body:not([data-mode="player"]) .act .why { opacity: 0; visibility: hidden; transition: opacity 200ms var(--fade), visibility 0s 200ms; }
 /* while cards move the buttons dim, but only after a moment, so quick hits do not flicker them */
 body[data-mode="busy"] .decisions, body[data-mode="insurance"] .decisions { opacity: .55; transition: opacity var(--duration-medium) var(--duration-medium); }
 
@@ -493,7 +505,7 @@ body.reduced .fame-toast.show { animation: none; opacity: 1; }
   .dock { display: flex; flex-direction: column; justify-content: safe center; }
   .dock > * { max-width: 100%; }   /* (centred items take their content's width: never more than the column's) */
   .betting, .decisions { transform: none !important; }
-  body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions, body[data-mode="result"] .decisions { display: none; }
+  body:not([data-mode="betting"]) .betting, body[data-mode="betting"] .decisions, body[data-mode="result"] .decisions, body.dock-rest .decisions { display: none; }
   .tray.open .tiles { position: static; padding: 0; background: none; border: 0; box-shadow: none; animation: none; }
   .top { grid-column: 1 / -1; padding-top: 5px; padding-bottom: 5px; gap: 12px; }
   .brand small, .shoe-words { display: none; }
@@ -634,8 +646,9 @@ body:not([data-mode="betting"]) .shimmer :is(.shimmer-spark, .shimmer-cone), bod
 /* the result: one way on, where four buttons stood greyed (the table can be tapped too, or Space pressed) */
 .result-row { grid-area: dock; display: flex; align-items: center; justify-content: center; padding: 4px 0; }
 .next-hand { min-width: 200px; justify-content: center; }
-body[data-mode="result"] .decisions { opacity: 0 !important; visibility: hidden; pointer-events: none; }
-body[data-mode="insurance"] .decisions { opacity: 0 !important; visibility: hidden; pointer-events: none; }
+/* (the decisions sink and fade for the result and for insurance, and stay away while the cards are swept up between
+   hands, `dock-rest`: the dock stands empty then, where four dead keys used to come back for a second) */
+body[data-mode="result"] .decisions, body[data-mode="insurance"] .decisions, body.dock-rest .decisions { opacity: 0 !important; visibility: hidden; pointer-events: none; transform: translateY(6px); transition: opacity 180ms var(--fade), transform 180ms var(--fade), visibility 0s 180ms; }
 .ins-copy { display: flex; align-items: center; gap: 14px; text-align: left; max-width: 380px; }
 .ins-ace { flex: none; position: relative; width: 40px; height: 56px; border-radius: 6px; background: linear-gradient(#fbf7ee, #e9e1cf); color: #1a1a1c; box-shadow: 0 0 0 2px var(--gold), 0 6px 16px rgba(0, 0, 0, .5); display: grid; place-items: center; }
 .ins-ace b { font: 800 25px/1 "Barlow Condensed", sans-serif; margin-top: -8px; }   /* (a card's index, as the cards print it) */
@@ -867,7 +880,8 @@ body.reduced .lobby-head, body.reduced .rail, body.reduced .lobby-word span, bod
 .mode-rules-title { margin: 16px 0 8px; font: 500 13px/1 Inter, system-ui, sans-serif; letter-spacing: .01em; color: var(--ivory); }
 /* a double or split the house pays for carries a small FREE tag */
 .act .free-tag { position: absolute; left: 8px; top: 7px; padding: 2px 6px 1px; border-radius: 99px; background: linear-gradient(#f3d57a, #c99a2e); color: #17130b; font: 600 11px/1.15 "Barlow Condensed", sans-serif; letter-spacing: .02em; }
-.act .free-tag[hidden] { display: none; }
+.act .free-tag { opacity: 0; visibility: hidden; transition: opacity var(--duration-quick) var(--ease), visibility 0s var(--duration-quick); }
+.act .free-tag.on { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) var(--ease), visibility 0s; }
 
 /* ---- Lightning: the marquee, the strike and your multiplier ------------------------------------------------
    The board is an Art Deco marquee in black and brass over the dealer, as in the live show. On the deal
@@ -1183,10 +1197,12 @@ body:is(.in-lobby, .flying) :is(.b-overlay, .b-road, .b-roads, .b-win) { opacity
   .tdock :is(.t-undo, .t-clear, .t-rebet, .t-x2) { width: 44px; padding: 0; justify-content: center; }
 }
 /* the squeeze: the chips make way for one button, in the same space */
-.b-turn { position: absolute; inset: 0; display: none; place-items: center; }
+/* (for the squeeze the betting tools fade out and Turn over rises in their place, and back: neither changes in a frame) */
+.b-turn { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; visibility: hidden; translate: 0 8px; transition: opacity 180ms var(--fade), translate 180ms var(--fade), visibility 0s 180ms; }
 .b-turn .pill { min-width: 200px; justify-content: center; }
-.bdock[data-mode="squeeze"] .b-turn { display: grid; }
-.bdock[data-mode="squeeze"] > :is(.chips, .bet-actions) { visibility: hidden; }
+.bdock[data-mode="squeeze"] .b-turn { opacity: 1; visibility: visible; translate: none; transition: opacity 240ms var(--fade) 120ms, translate 320ms var(--spring-press) 120ms, visibility 0s 120ms; }
+.bdock > :is(.chips, .bet-actions) { transition: opacity 220ms var(--fade) 100ms, visibility 0s 100ms; }
+.bdock[data-mode="squeeze"] > :is(.chips, .bet-actions) { opacity: 0; visibility: hidden; transition: opacity 180ms var(--fade), visibility 0s 180ms; }
 /* your spots on the cloth: the boxes are long, the circles round */
 .b-spot.b-box { border-radius: 99px; }
 @media (hover: hover) and (pointer: fine) { .bstage[data-mode="bet"] .spot:not(:disabled):hover { box-shadow: 0 0 0 2px rgba(226, 196, 131, .55); background: rgba(226, 196, 131, .05); } }

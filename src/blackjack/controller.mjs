@@ -371,7 +371,11 @@ export function createBlackjack(ctx) {
   // ---- the round ------------------------------------------------------------------------------------------------------
   let decide = null;     // resolves with the player's choice while the table waits
   const choice = () => new Promise(r => { decide = r; refreshControls(); });
-  function choose(what) { if (!decide) return; const d = decide; decide = null; d(what); }
+  function choose(what) {
+    if (!decide) return; const d = decide; decide = null;
+    const key = $(`#act-${what}`); if (key) { key.classList.add('chosen'); setTimeout(() => key.classList.remove('chosen'), 700); }   // (the key pressed keeps its light a beat longer than the others: app.css)
+    d(what);
+  }
   for (const b of $$('[data-act]')) b.addEventListener('click', () => choose(b.dataset.act));
   $('#nextHand').addEventListener('click', () => { if (mode === 'result') choose('next'); });
 
@@ -596,7 +600,7 @@ export function createBlackjack(ctx) {
     await clearUp();
   }
   async function clearUp() {
-    setMode('busy'); hint('');   // the result bar stays up as a summary until you next bet
+    resting = true; setMode('busy'); hint('');   // the result bar stays up as a summary until you next bet; the dock stands empty while the cards are swept up
     clearFeed(); for (const t of [...Object.values(totals), ...Object.values(seatEls).flatMap(e => e.totals)]) { t.hidden = true; t.classList.remove('win', 'push', 'loss', 'bust'); delete t.dataset.out; delete t.dataset.v; }
     await Promise.all([view.toPlayer(), view.collectCards()]);
     table.next(); for (const { p } of others()) p.clear();
@@ -690,15 +694,20 @@ export function createBlackjack(ctx) {
 
   // ---- control state -----------------------------------------------------------------------------------------------------
   let mode = 'betting', evenMoney = false, refocus = false;
-  let group = 'bet';
+  let group = 'bet', resting = false;   // resting: between hands, from Next hand until bets open again, the decisions stay away (`dock-rest` in app.css)
   function setMode(m, even = false) {
-    const was = mode; mode = m; evenMoney = even; document.body.dataset.mode = m; refreshControls();
+    const was = mode; mode = m; evenMoney = even; if (m !== 'busy') resting = false;
+    document.body.dataset.mode = m; document.body.classList.toggle('dock-rest', resting); refreshControls();
     if (m === 'betting' && (was !== 'betting' || !betJobs.length) && !busy) othersBet();
     if (m === 'betting' && was !== 'betting' && !lobby.isOpen) dealerSays('place-bets', { prio: 2, fresh: 4000 });
-    const g = m === 'betting' ? 'bet' : 'play';           // the dock's buttons rise in when its set changes
-    if (g !== group) { group = g; ui.enter(g === 'bet' ? [...$$('.betting .tray-toggle, .betting .tile'), ...chipRow.children, ...$$('.bet-actions .pill')] : $$('.decisions .act'), { gap: 28 }); }
-    if (m === 'insurance') ui.enter($$('#insurance .ins-copy, #insurance .ins-btn'), { y: 12, gap: 60 });
-    if (m === 'result') ui.enter($$('#resultRow .pill'), { y: 10 });
+    // The dock's sets change hands in order: the one going out sinks and fades (app.css, ui.leave), then the one coming
+    // in rises: the betting tools as three blocks a beat apart (the side bets, the chips, the buttons), each control
+    // already as it will stand (a chip you can't afford arrives dimmed), the result's and insurance's rows a moment
+    // after the decisions have gone. The decisions themselves only fade: they come in under the deal.
+    const g = m === 'betting' ? 'bet' : 'play';
+    if (g !== group) { group = g; if (g === 'bet') ui.enter([[...$('#tray').children], chipRow, $('.betting .bet-actions')], { y: 10, gap: 45 }); }   // (the tray's parts, not the tray: on a phone its tiles are laid out against the dock)
+    if (m === 'insurance') ui.enter($$('#insurance .ins-copy, #insurance .ins-btn'), { y: 12, gap: 60, delay: 100 });
+    if (m === 'result') ui.enter($$('#resultRow .pill'), { y: 10, delay: 100 });
   }
   function reasonFor(act) {
     if (table.phase !== 'player') return '';
@@ -736,11 +745,11 @@ export function createBlackjack(ctx) {
     for (const [act, free] of [['double', playing && table.canDouble && table.freeDouble], ['split', playing && table.canSplit && table.freeSplit]]) {   // FREE only on a move you can make
       const b = $(`#act-${act}`); let tag = b.querySelector('.free-tag');
       if (!tag) { tag = document.createElement('span'); tag.className = 'free-tag'; tag.textContent = 'Free'; b.append(tag); }
-      tag.hidden = !free;
+      tag.classList.toggle('on', !!free);
     }
     for (const act of ['hit', 'stand', 'double', 'split']) {
       const b = $(`#act-${act}`); b.disabled = !playing || !can[act];
-      b.querySelector('.why').textContent = playing && !can[act] ? reasonFor(act) : '';
+      if (playing) b.querySelector('.why').textContent = can[act] ? '' : reasonFor(act);   // (kept when your turn ends, so the words are there to fade out)
     }
     if (mode === 'player' && playing) {
       const h = table.activeHand, t = total(h.cards), up = table.upCard;
@@ -755,8 +764,7 @@ export function createBlackjack(ctx) {
       const go = () => { const d = $('#deal'), t = d.disabled ? chipRow.querySelector('.chip.selected') ?? d : d; t.focus({ preventScroll: true }); if (document.activeElement !== t && ++tries < 20 && mode === 'betting') setTimeout(go, 50); };
       requestAnimationFrame(go);
     }
-    row.hidden = mode !== 'result';   // (the result's one button: on to the next hand)
-    ins.hidden = mode !== 'insurance';
+    for (const [el, m] of [[row, 'result'], [ins, 'insurance']]) if (mode === m) ui.shown(el); else ui.leave(el, { y: 6, ms: 160 });   // (the result's one button, on to the next hand; insurance's two: each sinks and fades as it goes)
     if (mode === 'insurance') {
       ins.querySelector('h2').textContent = evenMoney ? 'Even money?' : 'Insurance?';
       ins.querySelector('p').textContent = evenMoney
