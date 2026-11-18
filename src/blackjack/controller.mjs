@@ -7,7 +7,7 @@ import { SIDE_BETS, PUSH22 } from '../sidebets.mjs';
 import { MODES } from '../core/modes.mjs';
 import { createWorld, LAYOUT, toSeat } from '../scene/world.mjs';
 import { createPortal } from '../scene/portal.mjs';
-import { Seating, SEAT_COUNT, YOU } from '../players.mjs';
+import { blackjackHint, Seating, SEAT_COUNT, YOU } from '../players.mjs';
 import { loadCourtArt, drawMiniFace, CARD_W, CARD_H } from '../scene/textures.mjs';
 import { wallet, inFlight } from '../core/wallet.mjs';
 import { ledger } from '../core/ledger.mjs';
@@ -693,6 +693,22 @@ export function createBlackjack(ctx) {
   }
 
   // ---- control state -----------------------------------------------------------------------------------------------------
+  const hintButton = $('#bjHint'), adviceLine = $('#bjAdvice');
+  let advice = null, adviceOpen = false;
+  function renderAdvice() {
+    hintButton.hidden = !advice;
+    hintButton.setAttribute('aria-pressed', adviceOpen);
+    const text = adviceOpen ? advice : '';
+    if (adviceLine.textContent !== text) adviceLine.textContent = text;
+  }
+  function toggleAdvice() {
+    if (!advice) return;
+    adviceOpen = !adviceOpen;
+    uiSound('toggle');
+    renderAdvice();
+  }
+  hintButton.addEventListener('click', toggleAdvice);
+
   let mode = 'betting', evenMoney = false, refocus = false;
   let group = 'bet', resting = false;   // resting: between hands, from Next hand until bets open again, the decisions stay away (`dock-rest` in app.css)
   function setMode(m, even = false) {
@@ -742,7 +758,9 @@ export function createBlackjack(ctx) {
     for (const t of $$('.tile')) t.disabled = !betting;
     const playing = mode === 'player' && !!decide;
     const can = { hit: table.canHit, stand: table.canStand, double: table.canDouble, split: table.canSplit };
-    for (const [act, free] of [['double', playing && table.canDouble && table.freeDouble], ['split', playing && table.canSplit && table.freeSplit]]) {   // FREE only on a move you can make
+    const freeDouble = playing && can.double && table.freeDouble;
+    const freeSplit = playing && can.split && table.freeSplit;
+    for (const [act, free] of [['double', freeDouble], ['split', freeSplit]]) {   // FREE only on a move you can make
       const b = $(`#act-${act}`); let tag = b.querySelector('.free-tag');
       if (!tag) { tag = document.createElement('span'); tag.className = 'free-tag'; tag.textContent = 'Free'; b.append(tag); }
       tag.classList.toggle('on', !!free);
@@ -751,10 +769,17 @@ export function createBlackjack(ctx) {
       const b = $(`#act-${act}`); b.disabled = !playing || !can[act];
       if (playing) b.querySelector('.why').textContent = can[act] ? '' : reasonFor(act);   // (kept when your turn ends, so the words are there to fade out)
     }
-    if (mode === 'player' && playing) {
-      const h = table.activeHand, t = total(h.cards), up = table.upCard;
+    advice = null;
+    if (playing) {
+      const h = table.activeHand, up = table.upCard;
       hint(`${table.isSplit ? `Hand ${table.activeIndex + 1}: ` : ''}${handLabel(h.cards, { bj: false })} against the dealer's ${up.rank === 'A' ? 'ace' : total([up]).value}.`);
+      advice = blackjackHint(h.cards, up, { mode: table.mode, can, free: h.stake === 0, freeDouble, freeSplit });
     }
+    if (!advice) {
+      adviceOpen = false;
+      if (document.activeElement === hintButton) refocus = true;
+    }
+    renderAdvice();
     // a row going out of play with the focus on it hands the focus on to the gold button once you are betting again
     // (else it would fall back to the top of the page, and Tab would start over from the bar)
     const row = $('#resultRow'), ins = $('#insurance');
@@ -789,7 +814,13 @@ export function createBlackjack(ctx) {
   function onKey(e) {
     const k = e.key.toLowerCase(), go = k === ' ' || k === 'enter';
     if (e.repeat) { if (go) e.preventDefault(); return; }   // a held key acts once: no extra cards, no hand dealt behind the result
-    if (mode === 'player') { const act = { h: 'hit', s: 'stand', d: 'double', p: 'split' }[k]; if (act || go) e.preventDefault(); if (act && !$(`#act-${act}`).disabled) choose(act); return; }
+    if (mode === 'player') {
+      if (k === 'q' && advice) { e.preventDefault(); toggleAdvice(); return; }
+      const act = { h: 'hit', s: 'stand', d: 'double', p: 'split' }[k];
+      if (act || go) e.preventDefault();
+      if (act && !$(`#act-${act}`).disabled) choose(act);
+      return;
+    }
     if (mode === 'insurance') { if (go) e.preventDefault(); if (k === 'y') choose('yes'); if (k === 'n') choose('no'); return; }
     if (mode === 'result' && go) { e.preventDefault(); choose('next'); return; }
     if (mode !== 'betting') { if (go) e.preventDefault(); return; }

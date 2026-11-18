@@ -181,6 +181,7 @@ Then go to **http://localhost:8000**. (Opening `index.html` straight from the di
 | Key | Action |
 |---|---|
 | <kbd>H</kbd> · <kbd>S</kbd> · <kbd>D</kbd> · <kbd>P</kbd> | Hit · stand · double · split |
+| <kbd>Q</kbd> | Show or hide a basic strategy hint during your turn (Classic and Free Bet) |
 | <kbd>Y</kbd> · <kbd>N</kbd> | Insurance (or even money): yes · no |
 | <kbd>Space</kbd> or <kbd>Enter</kbd> | Next hand, once the result is up |
 

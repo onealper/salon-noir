@@ -55,6 +55,31 @@ function freeBetPlay({ value: v, soft }, d, dbl, free) {
   return v >= 9 ? dbl('hit') : 'hit';
 }
 
+// The player's on-demand hint uses the same chart, narrowed to the moves on offer. Lightning's
+// multipliers change the value of reaching a particular total, so its decisions need a different chart.
+export function blackjackHint(cards, up, { mode, can, free = false, freeDouble = false, freeSplit = false }) {
+  const freebet = mode === 'freebet';
+  if ((!freebet && mode !== 'classic') || !up || cards.length < 2 || !can.stand || !(can.hit || can.split)) return null;
+  const action = basicStrategy(cards, up, { canDouble: !!can.double, canSplit: !!can.split, freebet, free });
+  if (!can[action]) return null;
+
+  const { value, soft } = total(cards);
+  if (action === 'split') return freeSplit
+    ? 'Split. You get another hand without putting down more chips.'
+    : 'Split. Each card in your pair gets a chance to build a stronger hand.';
+  if (action === 'double') return freeDouble
+    ? 'Double. The house covers the extra stake and you get one card.'
+    : 'Double. Put an extra stake on one draw when your hand has room to improve.';
+  if (action === 'stand') return value < 17
+    ? `Stand. Keep your ${value} and let the dealer take the risk of busting.`
+    : `Stand. Keep your ${soft ? 'soft ' : ''}${value} and let the dealer play out the hand.`;
+  if (soft) return 'Hit. Your ace can count as 1, so another card cannot bust you.';
+  if (value <= 11) return 'Hit. One more card can improve your total without busting.';
+  if (free && value >= 17) return 'Hit. You can try for a higher total without losing chips on this free hand if you bust.';
+  if (freebet && value === 12) return 'Hit. A dealer 22 pushes here, so try to improve your 12.';
+  return 'Hit. Your total is low against this upcard and another card could improve it.';
+}
+
 // Ways of playing. `think` is how long they take over a decision (ms), `sway` how often they
 // ignore the book and play a hunch, `bets` their usual stake range, `press` how they size the next bet.
 // `insure`: how often they take insurance; `sides`: how often they put a chip on Perfect Pairs or

@@ -2,7 +2,7 @@
 // bankrolls through splits and even money, and their hands paid exactly as the engine pays yours.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { basicStrategy, Player } from '../src/players.mjs';
+import { basicStrategy, blackjackHint, Player } from '../src/players.mjs';
 import { Table, total } from '../src/engine.mjs';
 import { H, C, DECK, seeded } from './helpers.mjs';
 
@@ -27,6 +27,30 @@ test('the Free Bet chart: free splits of every pair but fives and tens, push-22 
   assert.equal(fb('As 2h', '5d'), 'hit'); assert.equal(fb('As 7h', '5d'), 'double'); assert.equal(fb('As 7h', '3d'), 'stand');
   assert.equal(fb('9s 9h', '7d'), 'split'); assert.equal(fb('5s 5h', '6d'), 'double'); assert.equal(fb('10s 10h', '6d'), 'stand'); assert.equal(fb('2s 2h', 'Ad'), 'split');
   assert.equal(fb('10s 7h', '9d', true), 'hit'); assert.equal(fb('10s 7h', 'Kd', true), 'stand'); assert.equal(fb('10s 2h', '6d', true), 'stand');
+});
+
+const moves = { hit: true, stand: true, double: true, split: false };
+const hint = (cards, up, opts) => blackjackHint(H(cards), C(up), { mode: 'classic', can: moves, ...opts });
+
+test('blackjack hints give a reason and fall back to a legal move when a double or split is unavailable', () => {
+  assert.match(hint('6s 5h', 'Kd'), /^Double\./);
+  assert.match(hint('6s 5h', 'Kd', { can: { hit: true, stand: true } }), /^Hit\..*without busting/);
+  assert.match(hint('As 7h', '3d', { can: { ...moves, double: false } }), /^Stand\..*soft 18/);
+  assert.match(hint('As 7h', '9d'), /^Hit\..*ace/);
+  assert.match(hint('8s 8h', 'Kd', { can: { ...moves, split: true } }), /^Split\./);
+  assert.match(hint('8s 8h', 'Kd'), /^Hit\./);
+  assert.equal(hint('8s 7h', '6d', { mode: 'lightning' }), null);
+  assert.equal(hint('As 8h', '6d', { can: { stand: true } }), null);
+  assert.equal(hint('As 8h', '6d', { can: {} }), null);
+});
+
+test('Free Bet hints reflect the push on 22, covered moves and a hand with no stake at risk', () => {
+  const fb = { mode: 'freebet' };
+  assert.match(hint('10s 2h', '6d', fb), /^Hit\..*22 pushes/);
+  assert.match(hint('5s 5h', '6d', { ...fb, freeDouble: true, can: { ...moves, split: true } }), /^Double\..*house covers/);
+  assert.match(hint('As Ah', '6d', { ...fb, freeSplit: true, can: { stand: true, split: true } }), /^Split\..*without putting down more chips/);
+  assert.match(hint('10s 7h', '9d', fb), /^Stand\./);
+  assert.match(hint('10s 7h', '9d', { ...fb, free: true }), /^Hit\..*free hand/);
 });
 
 test('their bankrolls stay straight through resplits and even money', () => {
