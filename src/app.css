@@ -235,6 +235,19 @@ body.reduced .peek-card .face { animation: none; }
 .hint { position: absolute; z-index: 4; left: 50%; top: calc(var(--top-h, 0px) + 8px); translate: -50% 0; margin: 0; width: max-content; max-width: calc(100% - 32px); padding: 6px 14px; border-radius: 99px; background: rgba(12, 12, 13, .72); font-size: 14px; color: #cfc8ba; text-align: center; pointer-events: none; transition: opacity var(--duration-quick); }
 .hint:empty, .hint:has(> span:empty) { opacity: 0; }
 .hint.off { opacity: 0; }
+#hint:has(.hint-action:not([hidden])) { border-radius: 12px; }
+/* Short viewports bring the dealer closer to the bar. Keep the strategy hint below the cards. */
+@media (max-height: 650px) {
+  #hint:has(.hint-action:not([hidden])) { top: auto; bottom: 8px; }
+}
+.hint-action { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; margin-inline-start: 6px; padding: 0 9px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--ivory); font-size: 12px; vertical-align: middle; pointer-events: auto; }
+.hint-action[aria-pressed="true"] { border-color: var(--gold-lo); color: var(--gold-hi); }
+.hint-advice { max-width: 32rem; margin: 4px auto 2px; color: var(--ivory); text-wrap: pretty; }
+.hint-advice:empty { position: absolute; margin: 0; }
+body:is(.in-lobby, .flying) .hint-action { visibility: hidden; pointer-events: none; }
+@media (pointer: coarse) { .hint-action { min-height: 44px; min-width: 44px; justify-content: center; } }
+.hint-action:active { background: var(--panel-2); }
+@media (hover: hover) and (pointer: fine) { .hint-action:hover { background: var(--panel-2); } }
 .feed { position: absolute; left: 14px; top: calc(50% + var(--top-h, 0px) / 2); translate: 0 -50%; margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; width: 210px; pointer-events: none; }
 .feed li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 10px; padding: 7px 11px 6px; border-radius: 11px; background: rgba(12, 12, 13, .86); border: 1px solid var(--line-2);
   /* Kinetics: Toast Overshoot - slides past its resting place, then settles */
